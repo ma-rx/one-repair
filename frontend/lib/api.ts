@@ -41,6 +41,21 @@ export const api = {
 
   me: () => request<AuthUser>("/auth/me/"),
 
+  // Organizations
+  listOrganizations: () => request<Organization[]>("/organizations/"),
+  createOrganization: (body: Partial<Organization>) =>
+    request<Organization>("/organizations/", { method: "POST", body: JSON.stringify(body) }),
+  updateOrganization: (id: string, body: Partial<Organization>) =>
+    request<Organization>(`/organizations/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  // Stores
+  listStores: (orgId?: string) =>
+    request<Store[]>(`/stores/${orgId ? `?organization=${orgId}` : ""}`),
+  createStore: (body: Partial<Store>) =>
+    request<Store>("/stores/", { method: "POST", body: JSON.stringify(body) }),
+  updateStore: (id: string, body: Partial<Store>) =>
+    request<Store>(`/stores/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+
   // Assets
   getAsset:   (id: string)    => request<Asset>(`/assets/${id}/`),
   listAssets: (storeId?: string) =>
@@ -73,6 +88,37 @@ export const api = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface Organization {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  plan: string;
+  is_active: boolean;
+  store_count: number;
+  created_at: string;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  organization: string;
+  organization_name: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  country: string;
+  phone: string;
+  manager: number | null;
+  manager_name: string | null;
+  is_active: boolean;
+  asset_count: number;
+  created_at: string;
+}
 
 export interface AuthUser {
   id: number;

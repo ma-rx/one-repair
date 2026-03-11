@@ -12,11 +12,23 @@ import {
   Bell,
   LogOut,
   QrCode,
+  Building2,
+  MapPin,
 } from "lucide-react";
 
-const nav = [
+const orsNav = [
   { label: "New Ticket", href: "/scan", icon: QrCode },
   { label: "Dispatch", href: "/dispatch", icon: ClipboardList },
+  { label: "Organizations", href: "/organizations", icon: Building2 },
+  { label: "Stores", href: "/stores", icon: MapPin },
+  { label: "Inventory", href: "/inventory", icon: Package },
+  { label: "KPIs", href: "/kpis", icon: BarChart3 },
+];
+
+const clientNav = [
+  { label: "New Ticket", href: "/scan", icon: QrCode },
+  { label: "Dispatch", href: "/dispatch", icon: ClipboardList },
+  { label: "Stores", href: "/stores", icon: MapPin },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "KPIs", href: "/kpis", icon: BarChart3 },
 ];
@@ -24,6 +36,7 @@ const nav = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const nav = user?.role === "ORS_ADMIN" ? orsNav : clientNav;
   const initials = user
     ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || "?"
     : "?";

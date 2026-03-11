@@ -15,19 +15,51 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "first_name", "last_name", "email", "role"]
 
 
+# ── Organization ──────────────────────────────────────────────────────────────
+
 class OrganizationSerializer(serializers.ModelSerializer):
+    store_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Organization
-        fields = ["id", "name", "email", "created_at"]
+        fields = [
+            "id", "name", "email", "phone", "address",
+            "plan", "is_active", "store_count", "created_at", "updated_at",
+        ]
 
+    def get_store_count(self, obj):
+        return obj.stores.filter(is_active=True).count()
+
+
+# ── Store ─────────────────────────────────────────────────────────────────────
 
 class StoreSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(source="organization.name", read_only=True)
+    manager_name = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Store
-        fields = ["id", "name", "address", "organization", "organization_name", "created_at"]
+        fields = [
+            "id", "name",
+            "address_line1", "address_line2", "city", "state", "zip_code", "country",
+            "phone",
+            "organization", "organization_name",
+            "manager", "manager_name",
+            "is_active", "asset_count",
+            "created_at", "updated_at",
+        ]
 
+    def get_manager_name(self, obj):
+        if obj.manager:
+            return obj.manager.get_full_name() or obj.manager.username
+        return None
+
+    def get_asset_count(self, obj):
+        return obj.assets.filter(is_active=True).count()
+
+
+# ── Asset ─────────────────────────────────────────────────────────────────────
 
 class AssetSerializer(serializers.ModelSerializer):
     store_name = serializers.CharField(source="store.name", read_only=True)
@@ -36,22 +68,33 @@ class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = [
-            "id", "name", "serial_number", "model_number", "status",
-            "store", "store_name", "organization_name", "created_at",
+            "id", "name", "category", "make", "model_number", "serial_number",
+            "install_date", "warranty_expiry", "status", "is_active",
+            "store", "store_name", "organization_name",
+            "created_at", "updated_at",
         ]
 
 
+# ── Part ──────────────────────────────────────────────────────────────────────
+
 class PartSerializer(serializers.ModelSerializer):
+    is_low_stock = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = Part
-        fields = ["id", "name", "sku", "quantity_on_hand", "unit_price", "organization"]
+        fields = [
+            "id", "name", "sku", "category", "asset_category",
+            "make", "model_number",
+            "quantity_on_hand", "low_stock_threshold", "unit_price",
+            "is_low_stock", "created_at", "updated_at",
+        ]
 
+
+# ── PartUsed ──────────────────────────────────────────────────────────────────
 
 class PartUsedSerializer(serializers.ModelSerializer):
     part_name = serializers.CharField(source="part.name", read_only=True)
-    line_total = serializers.DecimalField(
-        max_digits=10, decimal_places=2, read_only=True
-    )
+    line_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = PartUsed
@@ -63,6 +106,8 @@ class PartUsedInputSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1)
 
 
+# ── ServiceReport ─────────────────────────────────────────────────────────────
+
 class ServiceReportSerializer(serializers.ModelSerializer):
     parts_used = PartUsedSerializer(many=True, read_only=True)
     parts_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
@@ -72,9 +117,12 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         model = ServiceReport
         fields = [
             "id", "ticket", "resolution_code", "labor_cost",
-            "invoice_sent", "parts_used", "parts_total", "grand_total", "created_at",
+            "invoice_sent", "invoice_email",
+            "parts_used", "parts_total", "grand_total", "created_at",
         ]
 
+
+# ── Ticket ────────────────────────────────────────────────────────────────────
 
 class TicketSerializer(serializers.ModelSerializer):
     asset_name = serializers.CharField(source="asset.name", read_only=True)
@@ -86,8 +134,9 @@ class TicketSerializer(serializers.ModelSerializer):
         model = Ticket
         fields = [
             "id", "asset", "asset_name", "store_name",
-            "symptom_code", "status",
+            "symptom_code", "priority", "status",
             "opened_by", "assigned_tech", "assigned_tech_name",
+            "sla_due_at", "closed_at",
             "service_reports", "created_at", "updated_at",
         ]
 
@@ -96,6 +145,8 @@ class TicketSerializer(serializers.ModelSerializer):
             return obj.assigned_tech.get_full_name() or obj.assigned_tech.username
         return None
 
+
+# ── Action serializers ────────────────────────────────────────────────────────
 
 class AssignTechSerializer(serializers.Serializer):
     tech_id = serializers.IntegerField()

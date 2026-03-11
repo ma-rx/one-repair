@@ -2,16 +2,24 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Asset, AssetStatus, Part, PartUsed, ServiceReport, Ticket, TicketStatus
+from .models import (
+    Asset, AssetStatus, Organization, Part, PartUsed,
+    ServiceReport, Store, Ticket, TicketStatus, UserRole,
+)
+from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    PartSerializer, ServiceReportSerializer, TicketSerializer, UserSerializer,
+    OrganizationSerializer, PartSerializer, ServiceReportSerializer,
+    StoreSerializer, TicketSerializer, UserSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
 
+
+# ── Users ─────────────────────────────────────────────────────────────────────
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UserSerializer
@@ -21,30 +29,139 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         role = self.request.query_params.get("role")
         if role:
             qs = qs.filter(profile__role=role)
+        # Non-ORS admins only see users in their org
+        user = self.request.user
+        if hasattr(user, "profile") and user.profile.role != UserRole.ORS_ADMIN:
+            qs = qs.filter(profile__organization=user.profile.organization)
         return qs
 
 
-class AssetViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Asset.objects.select_related("store__organization").all()
+# ── Organizations ─────────────────────────────────────────────────────────────
+
+class OrganizationViewSet(viewsets.ModelViewSet):
+    serializer_class = OrganizationSerializer
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsORSAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+            return Organization.objects.prefetch_related("stores").all()
+        # Other roles see only their own org
+        if hasattr(user, "profile") and user.profile.organization:
+            return Organization.objects.filter(id=user.profile.organization_id)
+        return Organization.objects.none()
+
+
+# ── Stores ────────────────────────────────────────────────────────────────────
+
+class StoreViewSet(viewsets.ModelViewSet):
+    serializer_class = StoreSerializer
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsClientAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+            qs = Store.objects.select_related("organization", "manager").prefetch_related("assets")
+        elif hasattr(user, "profile") and user.profile.organization:
+            qs = Store.objects.filter(
+                organization=user.profile.organization
+            ).select_related("organization", "manager").prefetch_related("assets")
+        else:
+            return Store.objects.none()
+
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(organization_id=org_id)
+
+        active_only = self.request.query_params.get("active")
+        if active_only == "true":
+            qs = qs.filter(is_active=True)
+
+        return qs
+
+
+# ── Assets ────────────────────────────────────────────────────────────────────
+
+class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsClientAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+            qs = Asset.objects.select_related("store__organization")
+        elif hasattr(user, "profile") and user.profile.organization:
+            qs = Asset.objects.filter(
+                store__organization=user.profile.organization
+            ).select_related("store__organization")
+        else:
+            return Asset.objects.none()
+
+        store_id = self.request.query_params.get("store")
+        if store_id:
+            qs = qs.filter(store_id=store_id)
+
+        active_only = self.request.query_params.get("active")
+        if active_only == "true":
+            qs = qs.filter(is_active=True)
+
+        return qs
+
+
+# ── Parts ─────────────────────────────────────────────────────────────────────
 
 class PartViewSet(viewsets.ModelViewSet):
-    queryset = Part.objects.all()
     serializer_class = PartSerializer
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsORSAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = Part.objects.all()
+        asset_category = self.request.query_params.get("asset_category")
+        if asset_category:
+            qs = qs.filter(asset_category=asset_category)
+        return qs
+
+
+# ── Tickets ───────────────────────────────────────────────────────────────────
 
 class TicketViewSet(viewsets.ModelViewSet):
-    queryset = Ticket.objects.select_related(
-        "asset__store__organization", "assigned_tech"
-    ).prefetch_related("service_reports__parts_used__part").all()
     serializer_class = TicketSerializer
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        user = self.request.user
+        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+            qs = Ticket.objects.select_related(
+                "asset__store__organization", "assigned_tech"
+            ).prefetch_related("service_reports__parts_used__part")
+        elif hasattr(user, "profile") and user.profile.organization:
+            qs = Ticket.objects.filter(
+                asset__store__organization=user.profile.organization
+            ).select_related(
+                "asset__store__organization", "assigned_tech"
+            ).prefetch_related("service_reports__parts_used__part")
+        else:
+            return Ticket.objects.none()
+
         status_filter = self.request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+
         return qs
 
     @action(detail=True, methods=["patch"], url_path="assign")
@@ -85,7 +202,6 @@ class TicketViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Validate stock before touching anything
         part_objects = {}
         for pu_input in data.get("parts_used", []):
             try:
@@ -108,12 +224,13 @@ class TicketViewSet(viewsets.ModelViewSet):
                 )
             part_objects[str(pu_input["part_id"])] = part
 
-        # Atomic write: service report + part deductions + status updates
         with transaction.atomic():
             service_report = ServiceReport.objects.create(
                 ticket=ticket,
+                submitted_by=request.user,
                 resolution_code=data["resolution_code"],
                 labor_cost=data["labor_cost"],
+                invoice_email=data.get("invoice_email", ""),
             )
 
             for pu_input in data.get("parts_used", []):
@@ -134,7 +251,6 @@ class TicketViewSet(viewsets.ModelViewSet):
             asset.status = AssetStatus.OPERATIONAL
             asset.save(update_fields=["status", "updated_at"])
 
-        # Generate + send invoice (outside transaction so a send failure doesn't rollback)
         service_report = (
             ServiceReport.objects
             .prefetch_related("parts_used__part")
@@ -156,11 +272,25 @@ class TicketViewSet(viewsets.ModelViewSet):
         )
 
 
+# ── Service Reports ───────────────────────────────────────────────────────────
+
 class ServiceReportViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        ServiceReport.objects
-        .prefetch_related("parts_used__part")
-        .select_related("ticket__asset__store__organization")
-        .all()
-    )
     serializer_class = ServiceReportSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+            return (
+                ServiceReport.objects
+                .prefetch_related("parts_used__part")
+                .select_related("ticket__asset__store__organization")
+                .all()
+            )
+        elif hasattr(user, "profile") and user.profile.organization:
+            return (
+                ServiceReport.objects
+                .filter(ticket__asset__store__organization=user.profile.organization)
+                .prefetch_related("parts_used__part")
+                .select_related("ticket__asset__store__organization")
+            )
+        return ServiceReport.objects.none()
