@@ -68,3 +68,45 @@ export const TicketStatus = {
   CLOSED: "CLOSED",
   CANCELLED: "CANCELLED",
 } as const;
+
+export const AssetCategory = {
+  HVAC:              "HVAC",
+  REFRIGERATION:     "REFRIGERATION",
+  COOKING_EQUIPMENT: "COOKING_EQUIPMENT",
+  ICE_MACHINE:       "ICE_MACHINE",
+  DISHWASHER:        "DISHWASHER",
+  POS_SYSTEM:        "POS_SYSTEM",
+  LIGHTING:          "LIGHTING",
+  PLUMBING:          "PLUMBING",
+  ELECTRICAL:        "ELECTRICAL",
+  ELEVATOR:          "ELEVATOR",
+  OTHER:             "OTHER",
+} as const;
+
+export const AssetCategoryLabels: Record<string, string> = {
+  HVAC:              "HVAC",
+  REFRIGERATION:     "Refrigeration",
+  COOKING_EQUIPMENT: "Cooking Equipment",
+  ICE_MACHINE:       "Ice Machine",
+  DISHWASHER:        "Dishwasher",
+  POS_SYSTEM:        "POS System",
+  LIGHTING:          "Lighting",
+  PLUMBING:          "Plumbing",
+  ELECTRICAL:        "Electrical",
+  ELEVATOR:          "Elevator",
+  OTHER:             "Other",
+};
+
+export const AssetStatus = {
+  OPERATIONAL:       "OPERATIONAL",
+  UNDER_MAINTENANCE: "UNDER_MAINTENANCE",
+  OUT_OF_SERVICE:    "OUT_OF_SERVICE",
+  DECOMMISSIONED:    "DECOMMISSIONED",
+} as const;
+
+export const AssetStatusLabels: Record<string, string> = {
+  OPERATIONAL:       "Operational",
+  UNDER_MAINTENANCE: "Under Maintenance",
+  OUT_OF_SERVICE:    "Out of Service",
+  DECOMMISSIONED:    "Decommissioned",
+};

@@ -57,9 +57,18 @@ export const api = {
     request<Store>(`/stores/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // Assets
-  getAsset:   (id: string)    => request<Asset>(`/assets/${id}/`),
-  listAssets: (storeId?: string) =>
-    request<Asset[]>(`/assets/${storeId ? `?store=${storeId}` : ""}`),
+  getAsset:   (id: string) => request<Asset>(`/assets/${id}/`),
+  listAssets: (params?: { store?: string; active?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (params?.store)  qs.set("store", params.store);
+    if (params?.active) qs.set("active", "true");
+    const q = qs.toString();
+    return request<Asset[]>(`/assets/${q ? `?${q}` : ""}`);
+  },
+  createAsset: (body: Partial<Asset>) =>
+    request<Asset>("/assets/", { method: "POST", body: JSON.stringify(body) }),
+  updateAsset: (id: string, body: Partial<Asset>) =>
+    request<Asset>(`/assets/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // Parts
   listParts: (assetCategory?: string) =>
