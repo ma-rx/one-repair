@@ -1,103 +1,399 @@
-import DashboardShell from "@/components/DashboardShell";
-import { Package, CheckCircle2, AlertCircle, XCircle, Search } from "lucide-react";
+"use client";
 
-const assets = [
-  { id: "AST-001", name: "HVAC Unit A3", serial: "HV-29301", model: "Carrier 38CKC", store: "Downtown Store", status: "UNDER_MAINTENANCE" },
-  { id: "AST-002", name: "Refrigerator B1", serial: "RF-10042", model: "True T-49", store: "Westside Store", status: "OPERATIONAL" },
-  { id: "AST-003", name: "Ice Machine 1", serial: "IM-88812", model: "Hoshizaki KM-515", store: "Downtown Store", status: "OPERATIONAL" },
-  { id: "AST-004", name: "POS Terminal 2", serial: "POS-5521", model: "Clover Station", store: "Eastside Store", status: "OUT_OF_SERVICE" },
-  { id: "AST-005", name: "Freezer C2", serial: "FZ-33901", model: "True T-23F", store: "Northside Store", status: "UNDER_MAINTENANCE" },
-  { id: "AST-006", name: "Oven Unit 1", serial: "OV-77210", model: "Rational SCC61", store: "Westside Store", status: "OPERATIONAL" },
+import { useEffect, useState } from "react";
+import DashboardShell from "@/components/DashboardShell";
+import Modal from "@/components/Modal";
+import { api, Part } from "@/lib/api";
+import { AssetCategoryLabels } from "@/types/enums";
+import {
+  Package, AlertTriangle, Plus, Pencil,
+  Loader2, Search, X,
+} from "lucide-react";
+
+const PART_CATEGORIES = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
+const ASSET_CATEGORIES = [
+  "HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE",
+  "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL", "ELEVATOR", "OTHER",
 ];
 
-const statusConfig: Record<string, { label: string; style: string; icon: React.ElementType }> = {
-  OPERATIONAL: { label: "Operational", style: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
-  UNDER_MAINTENANCE: { label: "Under Maintenance", style: "bg-amber-100 text-amber-700", icon: AlertCircle },
-  OUT_OF_SERVICE: { label: "Out of Service", style: "bg-red-100 text-red-700", icon: XCircle },
+type PartForm = {
+  name: string;
+  sku: string;
+  category: string;
+  asset_category: string;
+  make: string;
+  model_number: string;
+  quantity_on_hand: number;
+  low_stock_threshold: number;
+  unit_price: string;
 };
 
+const emptyForm = (): PartForm => ({
+  name: "",
+  sku: "",
+  category: "MECHANICAL",
+  asset_category: "OTHER",
+  make: "",
+  model_number: "",
+  quantity_on_hand: 0,
+  low_stock_threshold: 2,
+  unit_price: "0.00",
+});
+
 export default function InventoryPage() {
-  const counts = {
-    OPERATIONAL: assets.filter((a) => a.status === "OPERATIONAL").length,
-    UNDER_MAINTENANCE: assets.filter((a) => a.status === "UNDER_MAINTENANCE").length,
-    OUT_OF_SERVICE: assets.filter((a) => a.status === "OUT_OF_SERVICE").length,
-  };
+  const [parts, setParts] = useState<Part[]>([]);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Part | null>(null);
+  const [form, setForm] = useState<PartForm>(emptyForm());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  function load() {
+    setLoading(true);
+    api.listParts(categoryFilter || undefined)
+      .then(setParts)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => { load(); }, [categoryFilter]);
+
+  function openCreate() {
+    setEditing(null);
+    setForm(emptyForm());
+    setFormError("");
+    setModalOpen(true);
+  }
+
+  function openEdit(p: Part) {
+    setEditing(p);
+    setForm({
+      name: p.name,
+      sku: p.sku,
+      category: p.category,
+      asset_category: p.asset_category,
+      make: p.make,
+      model_number: p.model_number,
+      quantity_on_hand: p.quantity_on_hand,
+      low_stock_threshold: p.low_stock_threshold,
+      unit_price: p.unit_price,
+    });
+    setFormError("");
+    setModalOpen(true);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) { setFormError("Name is required."); return; }
+    setSaving(true);
+    setFormError("");
+    try {
+      if (editing) {
+        const updated = await api.updatePart(editing.id, form);
+        setParts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      } else {
+        const created = await api.createPart(form);
+        setParts((prev) => [created, ...prev]);
+      }
+      setModalOpen(false);
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const filtered = parts.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.sku.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const lowStockCount = parts.filter((p) => p.is_low_stock).length;
+  const totalValue = parts.reduce(
+    (sum, p) => sum + p.quantity_on_hand * parseFloat(p.unit_price),
+    0
+  );
 
   return (
     <DashboardShell>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Inventory</h1>
-          <p className="text-slate-500 text-sm mt-0.5">All assets across your organization</p>
+          <h1 className="text-2xl font-bold text-slate-900">Parts Inventory</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Manage ORS parts stock</p>
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
-          <Package className="w-4 h-4" />
-          Add Asset
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Part
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        {[
-          { label: "Operational", value: counts.OPERATIONAL, icon: CheckCircle2, color: "text-emerald-500 bg-emerald-50" },
-          { label: "Under Maintenance", value: counts.UNDER_MAINTENANCE, icon: AlertCircle, color: "text-amber-500 bg-amber-50" },
-          { label: "Out of Service", value: counts.OUT_OF_SERVICE, icon: XCircle, color: "text-red-500 bg-red-50" },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-xl p-5 border border-slate-200 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
-              <Icon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{value}</p>
-              <p className="text-slate-500 text-sm">{label}</p>
-            </div>
+        <div className="bg-white rounded-xl p-5 border border-slate-200 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+            <Package className="w-5 h-5 text-blue-500" />
           </div>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-800">All Assets</h2>
-          <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5">
-            <Search className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-400">Search assets...</span>
+          <div>
+            <p className="text-2xl font-bold text-slate-900">{parts.length}</p>
+            <p className="text-slate-500 text-sm">Total SKUs</p>
           </div>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="text-left px-6 py-3 text-slate-500 font-medium">Asset ID</th>
-              <th className="text-left px-6 py-3 text-slate-500 font-medium">Name</th>
-              <th className="text-left px-6 py-3 text-slate-500 font-medium">Model</th>
-              <th className="text-left px-6 py-3 text-slate-500 font-medium">Serial No.</th>
-              <th className="text-left px-6 py-3 text-slate-500 font-medium">Store</th>
-              <th className="text-left px-6 py-3 text-slate-500 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assets.map((a) => {
-              const cfg = statusConfig[a.status];
-              const Icon = cfg.icon;
-              return (
-                <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-mono text-slate-500">{a.id}</td>
-                  <td className="px-6 py-4 font-medium text-slate-800">{a.name}</td>
-                  <td className="px-6 py-4 text-slate-500">{a.model}</td>
-                  <td className="px-6 py-4 font-mono text-slate-400 text-xs">{a.serial}</td>
-                  <td className="px-6 py-4 text-slate-500">{a.store}</td>
+        <div className="bg-white rounded-xl p-5 border border-slate-200 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-900">{lowStockCount}</p>
+            <p className="text-slate-500 text-sm">Low Stock</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 border border-slate-200 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+            <Package className="w-5 h-5 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-900">${totalValue.toFixed(0)}</p>
+            <p className="text-slate-500 text-sm">Inventory Value</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search parts…"
+            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <select
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+        >
+          <option value="">All Equipment Types</option>
+          {ASSET_CATEGORIES.map((c) => (
+            <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-red-500">{error}</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center text-slate-400 text-sm">No parts found.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Part</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">SKU</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Equipment Type</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Qty on Hand</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Unit Price</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Stock</th>
+                <th className="px-6 py-3 text-right text-slate-500 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <tr key={p.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${p.is_low_stock ? "bg-amber-50/40" : ""}`}>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.style}`}>
-                      <Icon className="w-3 h-3" />
-                      {cfg.label}
-                    </span>
+                    <p className="font-medium text-slate-800">{p.name}</p>
+                    {(p.make || p.model_number) && (
+                      <p className="text-slate-400 text-xs mt-0.5">{[p.make, p.model_number].filter(Boolean).join(" · ")}</p>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 font-mono text-slate-500 text-xs">{p.sku || "—"}</td>
+                  <td className="px-6 py-4 text-slate-600">
+                    {AssetCategoryLabels[p.asset_category] ?? p.asset_category}
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-slate-800">{p.quantity_on_hand}</td>
+                  <td className="px-6 py-4 text-slate-600">${parseFloat(p.unit_price).toFixed(2)}</td>
+                  <td className="px-6 py-4">
+                    {p.is_low_stock ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        <AlertTriangle className="w-3 h-3" /> Low Stock
+                      </span>
+                    ) : (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        OK
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {/* Add/Edit Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? "Edit Part" : "Add Part"}
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          {formError && (
+            <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{formError}</p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">SKU</label>
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.sku}
+                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Part Category</label>
+              <select
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              >
+                {PART_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Equipment Type</label>
+              <select
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.asset_category}
+                onChange={(e) => setForm({ ...form, asset_category: e.target.value })}
+              >
+                {ASSET_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Make</label>
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.make}
+                onChange={(e) => setForm({ ...form, make: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Model Number</label>
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.model_number}
+                onChange={(e) => setForm({ ...form, model_number: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Qty on Hand</label>
+              <input
+                type="number"
+                min="0"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.quantity_on_hand}
+                onChange={(e) => setForm({ ...form, quantity_on_hand: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Low Stock Alert At</label>
+              <input
+                type="number"
+                min="0"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.low_stock_threshold}
+                onChange={(e) => setForm({ ...form, low_stock_threshold: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Unit Price ($)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.unit_price}
+                onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {editing ? "Save Changes" : "Add Part"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </DashboardShell>
   );
 }
