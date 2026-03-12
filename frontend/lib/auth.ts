@@ -11,6 +11,7 @@ export interface AuthUser {
   last_name: string;
   role: "ORS_ADMIN" | "CLIENT_ADMIN" | "CLIENT_MANAGER" | "TECH";
   organization: { id: string; name: string } | null;
+  store: { id: string; name: string } | null;
 }
 
 export function getAccessToken(): string | null {
@@ -43,7 +44,7 @@ export function roleDefaultRoute(role: AuthUser["role"]): string {
   switch (role) {
     case "ORS_ADMIN":      return "/dispatch";
     case "CLIENT_ADMIN":   return "/portal";
-    case "CLIENT_MANAGER": return "/portal";
+    case "CLIENT_MANAGER": return "/manager";
     case "TECH":           return "/tech";
   }
 }

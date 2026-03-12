@@ -120,6 +120,11 @@ class UserProfile(models.Model):
         Organization, null=True, blank=True,
         on_delete=models.CASCADE, related_name="members"
     )
+    # Only set for CLIENT_MANAGER — ties them to a single store (iPad)
+    store = models.ForeignKey(
+        "Store", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="managers"
+    )
     role      = models.CharField(max_length=20, choices=UserRole.choices)
     phone     = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)

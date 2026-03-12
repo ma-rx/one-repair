@@ -145,16 +145,23 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
-            qs = Ticket.objects.select_related(
-                "asset__store__organization", "assigned_tech"
-            ).prefetch_related("service_reports__parts_used__part")
-        elif hasattr(user, "profile") and user.profile.organization:
-            qs = Ticket.objects.filter(
-                asset__store__organization=user.profile.organization
-            ).select_related(
-                "asset__store__organization", "assigned_tech"
-            ).prefetch_related("service_reports__parts_used__part")
+        profile = getattr(user, "profile", None)
+
+        base = Ticket.objects.select_related(
+            "asset__store__organization", "assigned_tech"
+        ).prefetch_related("service_reports__parts_used__part")
+
+        if profile is None:
+            return Ticket.objects.none()
+
+        if profile.role == UserRole.ORS_ADMIN:
+            qs = base
+        elif profile.role == UserRole.TECH:
+            qs = base.filter(assigned_tech=user)
+        elif profile.role == UserRole.CLIENT_MANAGER and profile.store:
+            qs = base.filter(asset__store=profile.store)
+        elif profile.organization:
+            qs = base.filter(asset__store__organization=profile.organization)
         else:
             return Ticket.objects.none()
 

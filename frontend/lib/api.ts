@@ -94,6 +94,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  // Parts CRUD (ORS Admin)
+  createPart: (body: Partial<Part>) =>
+    request<Part>("/parts/", { method: "POST", body: JSON.stringify(body) }),
+  updatePart: (id: string, body: Partial<Part>) =>
+    request<Part>(`/parts/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -136,6 +142,7 @@ export interface AuthUser {
   last_name: string;
   role: "ORS_ADMIN" | "CLIENT_ADMIN" | "CLIENT_MANAGER" | "TECH";
   organization: { id: string; name: string } | null;
+  store: { id: string; name: string } | null;
 }
 
 export interface AppUser {
@@ -158,6 +165,9 @@ export interface Asset {
   store: string;
   store_name: string;
   organization_name: string;
+  install_date: string | null;
+  warranty_expiry: string | null;
+  is_active: boolean;
 }
 
 export interface Part {

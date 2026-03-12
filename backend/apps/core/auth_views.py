@@ -20,9 +20,14 @@ def _user_payload(user: User) -> dict:
             "id": str(org.id),
             "name": org.name,
         } if org else None
+        store = None
+        if profile.store:
+            s = profile.store
+            store = {"id": str(s.id), "name": s.name}
     except UserProfile.DoesNotExist:
         role = None
         organization = None
+        store = None
 
     return {
         "id": user.id,
@@ -31,6 +36,7 @@ def _user_payload(user: User) -> dict:
         "last_name": user.last_name,
         "role": role,
         "organization": organization,
+        "store": store,
     }
 
 
