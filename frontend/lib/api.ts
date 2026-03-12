@@ -101,6 +101,26 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // KPIs
+  getKPIs: () => request<KPIData>("/kpis/"),
+
+  // Invoices
+  listInvoices: () => request<ServiceReport[]>("/service-reports/"),
+  downloadInvoicePDF: async (id: string) => {
+    const token = getAccessToken();
+    const res = await fetch(`${BASE}/invoices/${id}/pdf/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Download failed.");
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `invoice-${id.slice(0, 8)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   // Parts CRUD (ORS Admin)
   createPart: (body: Partial<Part>) =>
     request<Part>("/parts/", { method: "POST", body: JSON.stringify(body) }),
@@ -243,6 +263,25 @@ export interface PartUsed {
   quantity: number;
   unit_price_at_time: string;
   line_total: string;
+}
+
+export interface KPIData {
+  tickets: {
+    total: number;
+    OPEN: number;
+    IN_PROGRESS: number;
+    PENDING_PARTS: number;
+    RESOLVED: number;
+    CLOSED: number;
+    CANCELLED: number;
+  };
+  avg_resolution_hours: number | null;
+  total_revenue: number;
+  low_stock_count: number;
+  top_symptoms:    { symptom_code: string; count: number }[];
+  top_resolutions: { resolution_code: string; count: number }[];
+  top_assets:      { asset_name: string; store_name: string; count: number }[];
+  monthly_trend:   { month: string; count: number }[];
 }
 
 export interface CreateTicketBody {

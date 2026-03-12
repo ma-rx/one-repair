@@ -8,13 +8,15 @@ import {
   ClipboardList,
   MapPin,
   Cpu,
+  FileText,
   LogOut,
 } from "lucide-react";
 
 const portalNav = [
-  { label: "Tickets",  href: "/portal/tickets", icon: ClipboardList },
-  { label: "Stores",   href: "/portal/stores",  icon: MapPin       },
-  { label: "Assets",   href: "/portal/assets",  icon: Cpu          },
+  { label: "Tickets",  href: "/portal/tickets",  icon: ClipboardList },
+  { label: "Stores",   href: "/portal/stores",   icon: MapPin        },
+  { label: "Assets",   href: "/portal/assets",   icon: Cpu           },
+  { label: "Invoices", href: "/portal/invoices", icon: FileText      },
 ];
 
 export default function PortalShell({ children }: { children: React.ReactNode }) {

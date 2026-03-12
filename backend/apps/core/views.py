@@ -1,9 +1,14 @@
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Avg, Count, F, Sum
+from django.db.models.functions import TruncMonth
+from django.utils import timezone
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import (
     Asset, AssetStatus, Organization, Part, PartUsed,
@@ -357,3 +362,131 @@ class ServiceReportViewSet(viewsets.ReadOnlyModelViewSet):
                 .select_related("ticket__asset__store__organization")
             )
         return ServiceReport.objects.none()
+
+
+# ── KPIs ──────────────────────────────────────────────────────────────────────
+
+class KPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = getattr(request.user, "profile", None)
+
+        # Base querysets scoped by role
+        if profile and profile.role == UserRole.ORS_ADMIN:
+            tickets = Ticket.objects.all()
+            reports = ServiceReport.objects.all()
+            parts   = Part.objects.all()
+        elif profile and profile.organization:
+            org = profile.organization
+            tickets = Ticket.objects.filter(asset__store__organization=org)
+            reports = ServiceReport.objects.filter(ticket__asset__store__organization=org)
+            parts   = Part.objects.all()
+        else:
+            tickets = Ticket.objects.none()
+            reports = ServiceReport.objects.none()
+            parts   = Part.objects.none()
+
+        # ── Ticket counts by status ────────────────────────────────────────────
+        status_counts = {s: 0 for s in ["OPEN", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED", "CANCELLED"]}
+        for row in tickets.values("status").annotate(n=Count("id")):
+            status_counts[row["status"]] = row["n"]
+
+        # ── Avg resolution time (hours) for closed tickets ────────────────────
+        closed_qs = tickets.filter(status=TicketStatus.CLOSED, closed_at__isnull=False)
+        avg_hours = None
+        if closed_qs.exists():
+            from django.db.models import ExpressionWrapper, DurationField
+            delta_qs = closed_qs.annotate(
+                delta=ExpressionWrapper(F("closed_at") - F("created_at"), output_field=DurationField())
+            ).aggregate(avg=Avg("delta"))
+            if delta_qs["avg"]:
+                avg_hours = round(delta_qs["avg"].total_seconds() / 3600, 1)
+
+        # ── Revenue (closed service reports) ──────────────────────────────────
+        labor_total = reports.aggregate(t=Sum("labor_cost"))["t"] or 0
+        parts_total = PartUsed.objects.filter(
+            service_report__in=reports
+        ).aggregate(t=Sum(F("quantity") * F("unit_price_at_time")))["t"] or 0
+        total_revenue = float(labor_total) + float(parts_total)
+
+        # ── Top symptom codes ──────────────────────────────────────────────────
+        top_symptoms = list(
+            tickets.values("symptom_code")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:6]
+        )
+
+        # ── Top resolution codes ───────────────────────────────────────────────
+        top_resolutions = list(
+            reports.values("resolution_code")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:6]
+        )
+
+        # ── Top assets by ticket volume ────────────────────────────────────────
+        top_assets = list(
+            tickets.values(
+                asset_name=F("asset__name"),
+                store_name=F("asset__store__name"),
+            )
+            .annotate(count=Count("id"))
+            .order_by("-count")[:5]
+        )
+
+        # ── Monthly ticket trend (last 6 months) ──────────────────────────────
+        six_months_ago = timezone.now().replace(day=1) - timezone.timedelta(days=180)
+        monthly = list(
+            tickets.filter(created_at__gte=six_months_ago)
+            .annotate(month=TruncMonth("created_at"))
+            .values("month")
+            .annotate(count=Count("id"))
+            .order_by("month")
+        )
+
+        # ── Low stock ─────────────────────────────────────────────────────────
+        low_stock_count = sum(1 for p in parts if p.is_low_stock)
+
+        return Response({
+            "tickets": {**status_counts, "total": sum(status_counts.values())},
+
+            "avg_resolution_hours": avg_hours,
+            "total_revenue": round(total_revenue, 2),
+            "low_stock_count": low_stock_count,
+            "top_symptoms":    top_symptoms,
+            "top_resolutions": top_resolutions,
+            "top_assets":      top_assets,
+            "monthly_trend":   [
+                {"month": row["month"].strftime("%b %Y"), "count": row["count"]}
+                for row in monthly
+            ],
+        })
+
+
+# ── Invoice PDF download ───────────────────────────────────────────────────────
+
+class InvoicePDFView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            report = (
+                ServiceReport.objects
+                .prefetch_related("parts_used__part")
+                .select_related("ticket__asset__store__organization", "ticket__assigned_tech")
+                .get(pk=pk)
+            )
+        except ServiceReport.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Scope check — non-ORS users can only see their org's reports
+        profile = getattr(request.user, "profile", None)
+        if profile and profile.role != UserRole.ORS_ADMIN:
+            org = getattr(profile, "organization", None)
+            if not org or report.ticket.asset.store.organization != org:
+                return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        pdf_bytes = generate_invoice_pdf(report)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="invoice-{str(report.id)[:8]}.pdf"'
+        return response
