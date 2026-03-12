@@ -12,8 +12,8 @@ from .models import (
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    OrganizationSerializer, PartSerializer, ServiceReportSerializer,
-    StoreSerializer, TicketSerializer, UserSerializer,
+    CreateUserSerializer, OrganizationSerializer, PartSerializer,
+    ServiceReportSerializer, StoreSerializer, TicketSerializer, UserSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -21,19 +21,75 @@ from .services.invoice import generate_invoice_pdf
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ["create", "partial_update", "deactivate"]:
+            return [IsClientAdmin()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
-        qs = User.objects.select_related("profile")
+        qs = User.objects.select_related("profile__organization", "profile__store")
         role = self.request.query_params.get("role")
         if role:
             qs = qs.filter(profile__role=role)
-        # Non-ORS admins only see users in their org
         user = self.request.user
         if hasattr(user, "profile") and user.profile.role != UserRole.ORS_ADMIN:
             qs = qs.filter(profile__organization=user.profile.organization)
-        return qs
+        return qs.order_by("first_name", "last_name")
+
+    def create(self, request, *args, **kwargs):
+        ser = CreateUserSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        # Resolve org — CLIENT_ADMIN can only create within their own org
+        requesting_profile = request.user.profile
+        if requesting_profile.role == UserRole.ORS_ADMIN:
+            org = None
+            if d.get("organization"):
+                from .models import Organization
+                try:
+                    org = Organization.objects.get(pk=d["organization"])
+                except Organization.DoesNotExist:
+                    return Response({"detail": "Organization not found."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            org = requesting_profile.organization
+
+        # Resolve store (optional, for CLIENT_MANAGER)
+        store = None
+        if d.get("store"):
+            try:
+                store = Store.objects.get(pk=d["store"])
+            except Store.DoesNotExist:
+                return Response({"detail": "Store not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=d["email"],
+                email=d["email"],
+                password=d["password"],
+                first_name=d["first_name"],
+                last_name=d.get("last_name", ""),
+            )
+            UserProfile.objects.create(
+                user=user,
+                role=d["role"],
+                organization=org,
+                store=store,
+            )
+
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch"], url_path="deactivate")
+    def deactivate(self, request, pk=None):
+        user = self.get_object()
+        profile = user.profile
+        profile.is_active = not profile.is_active
+        profile.save(update_fields=["is_active"])
+        return Response(UserSerializer(user).data)
 
 
 # ── Organizations ─────────────────────────────────────────────────────────────

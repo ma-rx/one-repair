@@ -76,6 +76,12 @@ export const api = {
 
   // Users
   listTechs: () => request<AppUser[]>("/users/?role=TECH"),
+  listUsers: (role?: string) =>
+    request<OrgUser[]>(`/users/${role ? `?role=${role}` : ""}`),
+  createUser: (body: CreateUserBody) =>
+    request<OrgUser>("/users/", { method: "POST", body: JSON.stringify(body) }),
+  toggleUserActive: (id: number) =>
+    request<OrgUser>(`/users/${id}/deactivate/`, { method: "PATCH" }),
 
   // Tickets
   createTicket: (body: CreateTicketBody) =>
@@ -152,6 +158,27 @@ export interface AppUser {
   last_name: string;
   email: string;
   role: string;
+}
+
+export interface OrgUser {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  is_active: boolean;
+  organization: { id: string; name: string } | null;
+  store: { id: string; name: string } | null;
+}
+
+export interface CreateUserBody {
+  email: string;
+  first_name: string;
+  last_name: string;
+  password: string;
+  role: string;
+  organization?: string;
+  store?: string;
 }
 
 export interface Asset {

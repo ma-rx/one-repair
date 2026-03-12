@@ -15,6 +15,7 @@ import {
   Building2,
   MapPin,
   Cpu,
+  Users,
 } from "lucide-react";
 
 const orsNav = [
@@ -24,6 +25,7 @@ const orsNav = [
   { label: "Stores",         href: "/stores",         icon: MapPin       },
   { label: "Assets",         href: "/assets",         icon: Cpu          },
   { label: "Inventory",      href: "/inventory",      icon: Package      },
+  { label: "Users",          href: "/users",          icon: Users        },
   { label: "KPIs",           href: "/kpis",           icon: BarChart3    },
 ];
 

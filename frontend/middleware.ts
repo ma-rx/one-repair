@@ -5,7 +5,7 @@ const PUBLIC_PATHS = ["/login"];
 
 // Routes that each role is allowed to access (prefix match)
 const ROLE_ALLOWED: Record<string, string[]> = {
-  ORS_ADMIN:      ["/dispatch", "/scan", "/organizations", "/stores", "/assets", "/inventory", "/kpis"],
+  ORS_ADMIN:      ["/dispatch", "/scan", "/organizations", "/stores", "/assets", "/inventory", "/users", "/kpis"],
   CLIENT_ADMIN:   ["/portal", "/scan"],
   CLIENT_MANAGER: ["/manager"],
   TECH:           ["/tech"],

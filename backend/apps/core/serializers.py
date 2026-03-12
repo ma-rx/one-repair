@@ -8,11 +8,43 @@ from .models import (
 
 
 class UserSerializer(serializers.ModelSerializer):
-    role = serializers.CharField(source="profile.role", read_only=True)
+    role       = serializers.CharField(source="profile.role", read_only=True)
+    is_active  = serializers.BooleanField(source="profile.is_active", read_only=True)
+    store      = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "first_name", "last_name", "email", "role"]
+        fields = ["id", "username", "first_name", "last_name", "email", "role", "is_active", "store", "organization"]
+
+    def get_store(self, obj):
+        try:
+            s = obj.profile.store
+            return {"id": str(s.id), "name": s.name} if s else None
+        except UserProfile.DoesNotExist:
+            return None
+
+    def get_organization(self, obj):
+        try:
+            org = obj.profile.organization
+            return {"id": str(org.id), "name": org.name} if org else None
+        except UserProfile.DoesNotExist:
+            return None
+
+
+class CreateUserSerializer(serializers.Serializer):
+    email        = serializers.EmailField()
+    first_name   = serializers.CharField(max_length=150)
+    last_name    = serializers.CharField(max_length=150, required=False, default="")
+    password     = serializers.CharField(min_length=8, write_only=True)
+    role         = serializers.ChoiceField(choices=["ORS_ADMIN", "CLIENT_ADMIN", "CLIENT_MANAGER", "TECH"])
+    organization = serializers.UUIDField(required=False, allow_null=True)
+    store        = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value.lower()
 
 
 # ── Organization ──────────────────────────────────────────────────────────────
