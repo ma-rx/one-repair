@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 from datetime import timedelta
 from pathlib import Path
 
@@ -63,11 +64,27 @@ TEMPLATES = [
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
+def _safe_db_url(url: str) -> str:
+    """Percent-encode the password portion of a database URL so special
+    characters (# @ $ ! etc.) don't break URL parsing."""
+    try:
+        scheme, rest = url.split("://", 1)
+        if "@" in rest:
+            userinfo, hostinfo = rest.rsplit("@", 1)
+            if ":" in userinfo:
+                user, password = userinfo.split(":", 1)
+                password = urllib.parse.quote(password, safe="")
+                return f"{scheme}://{user}:{password}@{hostinfo}"
+    except Exception:
+        pass
+    return url
+
+
 DATABASE_URL = config("DATABASE_URL", default="")
 if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.parse(
-            DATABASE_URL,
+            _safe_db_url(DATABASE_URL),
             conn_max_age=600,
             conn_health_checks=True,
             ssl_require=not DEBUG,
