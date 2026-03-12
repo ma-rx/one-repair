@@ -11,7 +11,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
   TECH:           ["/tech"],
 };
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get("ors_access")?.value;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
