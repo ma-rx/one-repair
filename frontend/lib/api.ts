@@ -1,7 +1,7 @@
 import { getAccessToken, clearAuth } from "./auth";
 
-const BASE     = "http://localhost:8000/api";
-const AUTH_BASE = "http://localhost:8000/api/auth";
+const BASE      = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+const AUTH_BASE = `${BASE}/auth`;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getAccessToken();
