@@ -463,6 +463,125 @@ class KPIView(APIView):
         })
 
 
+# ── Client KPIs ───────────────────────────────────────────────────────────────
+
+class ClientKPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import timedelta
+        from django.db.models import ExpressionWrapper, DurationField
+
+        profile = getattr(request.user, "profile", None)
+        if not profile or not profile.organization:
+            return Response({"detail": "No organization."}, status=status.HTTP_403_FORBIDDEN)
+
+        org = profile.organization
+
+        timeframe = request.query_params.get("timeframe", "month")
+        now = timezone.now()
+        if timeframe == "week":
+            since = now - timedelta(days=7)
+        elif timeframe == "quarter":
+            since = now - timedelta(days=90)
+        elif timeframe == "year":
+            since = now - timedelta(days=365)
+        else:
+            since = now - timedelta(days=30)
+
+        store_id = request.query_params.get("store")
+
+        tickets = Ticket.objects.filter(
+            asset__store__organization=org,
+            created_at__gte=since,
+        )
+        reports = ServiceReport.objects.filter(
+            ticket__asset__store__organization=org,
+            created_at__gte=since,
+        )
+
+        if store_id:
+            tickets = tickets.filter(asset__store_id=store_id)
+            reports = reports.filter(ticket__asset__store_id=store_id)
+
+        # Totals
+        labor_total = reports.aggregate(t=Sum("labor_cost"))["t"] or 0
+        parts_agg = PartUsed.objects.filter(
+            service_report__in=reports
+        ).aggregate(t=Sum(F("quantity") * F("unit_price_at_time")))
+        parts_total = parts_agg["t"] or 0
+        total_spend = round(float(labor_total) + float(parts_total), 2)
+
+        # Ticket status counts
+        status_counts = {s: 0 for s in ["OPEN", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED", "CANCELLED"]}
+        for row in tickets.values("status").annotate(n=Count("id")):
+            status_counts[row["status"]] = row["n"]
+
+        # Avg resolution time
+        closed_qs = tickets.filter(status=TicketStatus.CLOSED, closed_at__isnull=False)
+        avg_hours = None
+        if closed_qs.exists():
+            delta_qs = closed_qs.annotate(
+                delta=ExpressionWrapper(F("closed_at") - F("created_at"), output_field=DurationField())
+            ).aggregate(avg=Avg("delta"))
+            if delta_qs["avg"]:
+                avg_hours = round(delta_qs["avg"].total_seconds() / 3600, 1)
+
+        # By store
+        store_rows = list(
+            tickets.values(store_name=F("asset__store__name"), sid=F("asset__store__id"))
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        labor_by_store = {
+            str(r["sid"]): float(r["labor"] or 0)
+            for r in reports.values(sid=F("ticket__asset__store__id")).annotate(labor=Sum("labor_cost"))
+        }
+        parts_by_store = {
+            str(r["sid"]): float(r["parts"] or 0)
+            for r in PartUsed.objects.filter(service_report__in=reports)
+            .values(sid=F("service_report__ticket__asset__store__id"))
+            .annotate(parts=Sum(F("quantity") * F("unit_price_at_time")))
+        }
+        by_store = [
+            {
+                "store_id": str(r["sid"]),
+                "store_name": r["store_name"],
+                "count": r["count"],
+                "spend": round(labor_by_store.get(str(r["sid"]), 0) + parts_by_store.get(str(r["sid"]), 0), 2),
+            }
+            for r in store_rows
+        ]
+
+        # By asset category
+        by_category = list(
+            tickets.values(category=F("asset__category"))
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        # Monthly trend
+        monthly = list(
+            tickets.annotate(month=TruncMonth("created_at"))
+            .values("month")
+            .annotate(count=Count("id"))
+            .order_by("month")
+        )
+
+        return Response({
+            "total_spend": total_spend,
+            "total_repairs": sum(status_counts.values()),
+            "avg_resolution_hours": avg_hours,
+            "tickets": {**status_counts, "total": sum(status_counts.values())},
+            "by_store": by_store,
+            "by_category": by_category,
+            "monthly_trend": [
+                {"month": row["month"].strftime("%b %Y"), "count": row["count"]}
+                for row in monthly
+            ],
+        })
+
+
 # ── Invoice PDF download ───────────────────────────────────────────────────────
 
 class InvoicePDFView(APIView):

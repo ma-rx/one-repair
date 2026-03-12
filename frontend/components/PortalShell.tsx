@@ -10,13 +10,15 @@ import {
   Cpu,
   FileText,
   LogOut,
+  BarChart2,
 } from "lucide-react";
 
 const portalNav = [
-  { label: "Tickets",  href: "/portal/tickets",  icon: ClipboardList },
-  { label: "Stores",   href: "/portal/stores",   icon: MapPin        },
-  { label: "Assets",   href: "/portal/assets",   icon: Cpu           },
-  { label: "Invoices", href: "/portal/invoices", icon: FileText      },
+  { label: "Tickets",   href: "/portal/tickets",  icon: ClipboardList },
+  { label: "Stores",    href: "/portal/stores",   icon: MapPin        },
+  { label: "Assets",    href: "/portal/assets",   icon: Cpu           },
+  { label: "Invoices",  href: "/portal/invoices", icon: FileText      },
+  { label: "Analytics", href: "/portal/kpis",     icon: BarChart2     },
 ];
 
 export default function PortalShell({ children }: { children: React.ReactNode }) {

@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
-    AssetViewSet, InvoicePDFView, KPIView, OrganizationViewSet, PartViewSet,
+    AssetViewSet, ClientKPIView, InvoicePDFView, KPIView, OrganizationViewSet, PartViewSet,
     ServiceReportViewSet, StoreViewSet, TicketViewSet, UserViewSet,
 )
 
@@ -16,5 +16,6 @@ router.register("service-reports", ServiceReportViewSet, basename="service-repor
 
 urlpatterns = router.urls + [
     path("kpis/", KPIView.as_view()),
+    path("client-kpis/", ClientKPIView.as_view()),
     path("invoices/<uuid:pk>/pdf/", InvoicePDFView.as_view()),
 ]

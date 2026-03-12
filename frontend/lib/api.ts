@@ -121,6 +121,15 @@ export const api = {
     URL.revokeObjectURL(url);
   },
 
+  // Client KPIs
+  getClientKPIs: (params?: { timeframe?: string; store?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.timeframe) qs.set("timeframe", params.timeframe);
+    if (params?.store) qs.set("store", params.store);
+    const q = qs.toString();
+    return request<ClientKPIData>(`/client-kpis/${q ? `?${q}` : ""}`);
+  },
+
   // Parts CRUD (ORS Admin)
   createPart: (body: Partial<Part>) =>
     request<Part>("/parts/", { method: "POST", body: JSON.stringify(body) }),
@@ -282,6 +291,24 @@ export interface KPIData {
   top_resolutions: { resolution_code: string; count: number }[];
   top_assets:      { asset_name: string; store_name: string; count: number }[];
   monthly_trend:   { month: string; count: number }[];
+}
+
+export interface ClientKPIData {
+  total_spend: number;
+  total_repairs: number;
+  avg_resolution_hours: number | null;
+  tickets: {
+    total: number;
+    OPEN: number;
+    IN_PROGRESS: number;
+    PENDING_PARTS: number;
+    RESOLVED: number;
+    CLOSED: number;
+    CANCELLED: number;
+  };
+  by_store: { store_id: string; store_name: string; count: number; spend: number }[];
+  by_category: { category: string; count: number }[];
+  monthly_trend: { month: string; count: number }[];
 }
 
 export interface CreateTicketBody {
