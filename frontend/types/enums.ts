@@ -80,6 +80,8 @@ export const AssetCategory = {
   PLUMBING:          "PLUMBING",
   ELECTRICAL:        "ELECTRICAL",
   ELEVATOR:          "ELEVATOR",
+  COFFEE_EQUIPMENT:  "COFFEE_EQUIPMENT",
+  ESPRESSO_MACHINE:  "ESPRESSO_MACHINE",
   OTHER:             "OTHER",
 } as const;
 
@@ -94,6 +96,8 @@ export const AssetCategoryLabels: Record<string, string> = {
   PLUMBING:          "Plumbing",
   ELECTRICAL:        "Electrical",
   ELEVATOR:          "Elevator",
+  COFFEE_EQUIPMENT:  "Coffee Equipment",
+  ESPRESSO_MACHINE:  "Espresso Machine",
   OTHER:             "Other",
 };
 

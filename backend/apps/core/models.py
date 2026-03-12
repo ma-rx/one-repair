@@ -29,6 +29,8 @@ class AssetCategory(models.TextChoices):
     PLUMBING          = "PLUMBING",          "Plumbing"
     ELECTRICAL        = "ELECTRICAL",        "Electrical"
     ELEVATOR          = "ELEVATOR",          "Elevator"
+    COFFEE_EQUIPMENT  = "COFFEE_EQUIPMENT",  "Coffee Equipment"
+    ESPRESSO_MACHINE  = "ESPRESSO_MACHINE",  "Espresso Machine"
     OTHER             = "OTHER",             "Other"
 
 
