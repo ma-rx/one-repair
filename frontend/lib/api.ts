@@ -90,11 +90,13 @@ export const api = {
     request<Ticket[]>(`/tickets/${ticketStatus ? `?status=${ticketStatus}` : ""}`),
   getTicket: (id: string) =>
     request<Ticket>(`/tickets/${id}/`),
-  assignTech: (id: string, tech_id: number) =>
+  assignTech: (id: string, tech_id: number, scheduled_date?: string) =>
     request<Ticket>(`/tickets/${id}/assign/`, {
       method: "PATCH",
-      body: JSON.stringify({ tech_id }),
+      body: JSON.stringify({ tech_id, scheduled_date }),
     }),
+  listTicketsByDate: (date: string) =>
+    request<Ticket[]>(`/tickets/?date=${date}`),
   closeTicket: (id: string, body: CloseTicketBody) =>
     request<ServiceReport>(`/tickets/${id}/close/`, {
       method: "POST",
@@ -283,10 +285,12 @@ export interface Ticket {
   asset_description: string;
   store: string | null;
   store_name: string;
+  store_address: string;
   symptom_code: string;
   description: string;
   priority: string;
   status: string;
+  scheduled_date: string | null;
   assigned_tech: number | null;
   assigned_tech_name: string | null;
   service_reports: ServiceReport[];

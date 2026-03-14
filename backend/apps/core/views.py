@@ -236,6 +236,10 @@ class TicketViewSet(viewsets.ModelViewSet):
         if status_filter:
             qs = qs.filter(status=status_filter)
 
+        date_filter = self.request.query_params.get("date")
+        if date_filter:
+            qs = qs.filter(scheduled_date=date_filter)
+
         return qs
 
     def perform_create(self, serializer):
@@ -265,7 +269,9 @@ class TicketViewSet(viewsets.ModelViewSet):
 
         ticket.assigned_tech = tech
         ticket.status = TicketStatus.IN_PROGRESS
-        ticket.save(update_fields=["assigned_tech", "status", "updated_at"])
+        if serializer.validated_data.get("scheduled_date") is not None:
+            ticket.scheduled_date = serializer.validated_data["scheduled_date"]
+        ticket.save(update_fields=["assigned_tech", "status", "scheduled_date", "updated_at"])
 
         return Response(TicketSerializer(ticket).data)
 

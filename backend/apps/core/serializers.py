@@ -182,16 +182,18 @@ class ServiceReportSerializer(serializers.ModelSerializer):
 # ── Ticket ────────────────────────────────────────────────────────────────────
 
 class TicketSerializer(serializers.ModelSerializer):
-    asset_name = serializers.SerializerMethodField()
-    store_name = serializers.SerializerMethodField()
+    asset_name         = serializers.SerializerMethodField()
+    store_name         = serializers.SerializerMethodField()
+    store_address      = serializers.SerializerMethodField()
     assigned_tech_name = serializers.SerializerMethodField()
-    service_reports = ServiceReportSerializer(many=True, read_only=True)
+    service_reports    = ServiceReportSerializer(many=True, read_only=True)
 
     class Meta:
         model = Ticket
         fields = [
-            "id", "asset", "asset_name", "asset_description", "store", "store_name",
-            "symptom_code", "description", "priority", "status",
+            "id", "asset", "asset_name", "asset_description",
+            "store", "store_name", "store_address",
+            "symptom_code", "description", "priority", "status", "scheduled_date",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
             "service_reports", "created_at", "updated_at",
@@ -209,6 +211,13 @@ class TicketSerializer(serializers.ModelSerializer):
             return obj.asset.store.name
         return ""
 
+    def get_store_address(self, obj):
+        store = obj.store or (obj.asset.store if obj.asset else None)
+        if not store:
+            return ""
+        parts = [store.address_line1, store.city, store.state, store.zip_code]
+        return ", ".join(p for p in parts if p)
+
     def get_assigned_tech_name(self, obj):
         if obj.assigned_tech:
             return obj.assigned_tech.get_full_name() or obj.assigned_tech.username
@@ -218,7 +227,8 @@ class TicketSerializer(serializers.ModelSerializer):
 # ── Action serializers ────────────────────────────────────────────────────────
 
 class AssignTechSerializer(serializers.Serializer):
-    tech_id = serializers.IntegerField()
+    tech_id        = serializers.IntegerField()
+    scheduled_date = serializers.DateField(required=False, allow_null=True)
 
 
 class CloseTicketSerializer(serializers.Serializer):
