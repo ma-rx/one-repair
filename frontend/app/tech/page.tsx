@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, Ticket } from "@/lib/api";
 import { SymptomCodeLabels } from "@/types/enums";
-import { Wrench, LogOut, Loader2, FileText } from "lucide-react";
+import { Wrench, LogOut, Loader2, FileText, Plus } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
@@ -49,12 +49,20 @@ export default function TechPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={logout}
-          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm transition-colors"
-        >
-          <LogOut className="w-4 h-4" /> Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/scan"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Ticket
+          </Link>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm transition-colors"
+          >
+            <LogOut className="w-4 h-4" /> Sign out
+          </button>
+        </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-8">
@@ -82,7 +90,7 @@ export default function TechPage() {
                     </div>
                     <p className="text-slate-500 text-sm mt-0.5">{t.store_name}</p>
                     <p className="text-slate-600 text-sm mt-2">
-                      {SymptomCodeLabels[t.symptom_code] ?? t.symptom_code}
+                      {t.description || (t.symptom_code ? (SymptomCodeLabels[t.symptom_code] ?? t.symptom_code) : "No description")}
                     </p>
                     <p className="text-slate-400 text-xs mt-2">
                       Opened {new Date(t.created_at).toLocaleDateString()}

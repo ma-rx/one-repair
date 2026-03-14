@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell from "@/components/DashboardShell";
 import PortalShell from "@/components/PortalShell";
@@ -11,6 +12,7 @@ type Step = "select" | "describe" | "photos" | "success";
 
 function NewTicketForm() {
   const { user } = useAuth();
+  const router = useRouter();
   const [step, setStep] = useState<Step>("select");
 
   const [stores, setStores] = useState<Store[]>([]);
@@ -382,12 +384,22 @@ function NewTicketForm() {
               </p>
               <p className="text-slate-400 text-xs mt-1">An admin will assign a technician shortly.</p>
             </div>
-            <button
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-              onClick={reset}
-            >
-              Open Another Ticket
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+                onClick={reset}
+              >
+                Open Another Ticket
+              </button>
+              {user?.role === "TECH" && (
+                <button
+                  className="border border-slate-300 text-slate-600 px-6 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
+                  onClick={() => router.push("/tech")}
+                >
+                  Back to My Tickets
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -400,6 +412,13 @@ export default function NewTicketPage() {
 
   if (user?.role === "CLIENT_ADMIN") {
     return <PortalShell><NewTicketForm /></PortalShell>;
+  }
+  if (user?.role === "TECH") {
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-8">
+        <NewTicketForm />
+      </div>
+    );
   }
   return <DashboardShell><NewTicketForm /></DashboardShell>;
 }
