@@ -53,10 +53,9 @@ function buildMapsUrl(address: string) {
 function buildRouteUrl(addresses: string[]) {
   if (addresses.length === 0) return "";
   if (addresses.length === 1) return buildMapsUrl(addresses[0]);
-  const origin = encodeURIComponent(addresses[0]);
   const destination = encodeURIComponent(addresses[addresses.length - 1]);
-  const waypoints = addresses.slice(1, -1).map(encodeURIComponent).join("|");
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+  const waypoints = addresses.slice(0, -1).map(encodeURIComponent).join("|");
+  let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
   if (waypoints) url += `&waypoints=${waypoints}`;
   return url;
 }
