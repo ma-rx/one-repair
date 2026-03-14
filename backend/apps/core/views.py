@@ -240,6 +240,14 @@ class TicketViewSet(viewsets.ModelViewSet):
         if date_filter:
             qs = qs.filter(scheduled_date=date_filter)
 
+        month_filter = self.request.query_params.get("month")  # format: YYYY-MM
+        if month_filter:
+            try:
+                year, month = month_filter.split("-")
+                qs = qs.filter(scheduled_date__year=int(year), scheduled_date__month=int(month))
+            except (ValueError, AttributeError):
+                pass
+
         return qs
 
     def perform_create(self, serializer):
@@ -273,6 +281,16 @@ class TicketViewSet(viewsets.ModelViewSet):
             ticket.scheduled_date = serializer.validated_data["scheduled_date"]
         ticket.save(update_fields=["assigned_tech", "status", "scheduled_date", "updated_at"])
 
+        return Response(TicketSerializer(ticket).data)
+
+    @action(detail=True, methods=["patch"], url_path="reschedule")
+    def reschedule(self, request, pk=None):
+        ticket = self.get_object()
+        scheduled_date = request.data.get("scheduled_date")
+        if not scheduled_date:
+            return Response({"detail": "scheduled_date is required."}, status=status.HTTP_400_BAD_REQUEST)
+        ticket.scheduled_date = scheduled_date
+        ticket.save(update_fields=["scheduled_date", "updated_at"])
         return Response(TicketSerializer(ticket).data)
 
     @action(detail=True, methods=["post"], url_path="close")

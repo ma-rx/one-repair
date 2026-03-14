@@ -97,6 +97,13 @@ export const api = {
     }),
   listTicketsByDate: (date: string) =>
     request<Ticket[]>(`/tickets/?date=${date}`),
+  listTicketsByMonth: (month: string) =>
+    request<Ticket[]>(`/tickets/?month=${month}`),
+  rescheduleTicket: (id: string, scheduled_date: string) =>
+    request<Ticket>(`/tickets/${id}/reschedule/`, {
+      method: "PATCH",
+      body: JSON.stringify({ scheduled_date }),
+    }),
   closeTicket: (id: string, body: CloseTicketBody) =>
     request<ServiceReport>(`/tickets/${id}/close/`, {
       method: "POST",
