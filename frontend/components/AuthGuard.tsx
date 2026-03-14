@@ -10,7 +10,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
   ORS_ADMIN:      ["/dispatch", "/scan", "/organizations", "/stores", "/assets", "/inventory", "/users", "/kpis", "/pricing"],
   CLIENT_ADMIN:   ["/portal", "/scan"],
   CLIENT_MANAGER: ["/manager"],
-  TECH:           ["/tech"],
+  TECH:           ["/tech", "/scan"],
 };
 
 const ROLE_DEFAULTS: Record<string, string> = {

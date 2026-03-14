@@ -234,7 +234,8 @@ class Ticket(models.Model):
     assigned_tech = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_tickets"
     )
-    symptom_code = models.CharField(max_length=50, choices=SymptomCode.choices)
+    symptom_code = models.CharField(max_length=50, choices=SymptomCode.choices, blank=True, default="")
+    description  = models.TextField(blank=True, default="")
     priority     = models.CharField(max_length=20, choices=TicketPriority.choices, default=TicketPriority.MEDIUM)
     status       = models.CharField(max_length=50, choices=TicketStatus.choices, default=TicketStatus.OPEN)
     sla_due_at   = models.DateTimeField(null=True, blank=True)

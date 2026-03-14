@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 const portalNav = [
+  { label: "New Ticket", href: "/scan",            icon: Wrench        },
   { label: "Tickets",   href: "/portal/tickets",  icon: ClipboardList },
   { label: "Stores",    href: "/portal/stores",   icon: MapPin        },
   { label: "Assets",    href: "/portal/assets",   icon: Cpu           },

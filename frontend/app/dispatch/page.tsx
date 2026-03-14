@@ -129,7 +129,7 @@ export default function DispatchPage() {
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Asset</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Store</th>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Symptom</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Issue</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Priority</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Status</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Tech</th>
@@ -142,8 +142,8 @@ export default function DispatchPage() {
                 <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-800">{t.asset_name}</td>
                   <td className="px-6 py-4 text-slate-500">{t.store_name}</td>
-                  <td className="px-6 py-4 text-slate-700">
-                    {SymptomCodeLabels[t.symptom_code] ?? t.symptom_code}
+                  <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
+                    {t.description || (t.symptom_code ? (SymptomCodeLabels[t.symptom_code] ?? t.symptom_code) : "—")}
                   </td>
                   <td className="px-6 py-4">
                     <span className="flex items-center gap-1.5 text-slate-600">

@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell from "@/components/DashboardShell";
 import PortalShell from "@/components/PortalShell";
-import { api, Asset, Store } from "@/lib/api";
-import { SymptomCodeLabels } from "@/types/enums";
-import { CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { api, Asset, Store, WorkImage } from "@/lib/api";
+import { CheckCircle2, Loader2, AlertCircle, Plus, X, Camera } from "lucide-react";
 
-type Step = "select" | "symptom" | "success";
+type Step = "select" | "describe" | "photos" | "success";
 
 function NewTicketForm() {
   const { user } = useAuth();
@@ -19,13 +18,18 @@ function NewTicketForm() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assetId, setAssetId] = useState("");
   const [assetSearch, setAssetSearch] = useState("");
-  const [symptomCode, setSymptomCode] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("MEDIUM");
 
   const [loadingStores, setLoadingStores] = useState(true);
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [images, setImages] = useState<WorkImage[]>([]);
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.listStores()
@@ -53,22 +57,45 @@ function NewTicketForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!assetId || !symptomCode) return;
+    if (!assetId || !description.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
       const ticket = await api.createTicket({
         asset: assetId,
-        symptom_code: symptomCode,
+        description: description.trim(),
+        priority,
         opened_by: user?.id,
       });
       setTicketId(ticket.id);
-      setStep("success");
+      setStep("photos");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create ticket.");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !ticketId) return;
+    setUploadingImg(true);
+    try {
+      const img = await api.uploadWorkImage(ticketId, file);
+      setImages((prev) => [...prev, img]);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingImg(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDeleteImage(imgId: string) {
+    try {
+      await api.deleteWorkImage(imgId);
+      setImages((prev) => prev.filter((i) => i.id !== imgId));
+    } catch { /* ignore */ }
   }
 
   function reset() {
@@ -77,8 +104,10 @@ function NewTicketForm() {
     setAssets([]);
     setAssetId("");
     setAssetSearch("");
-    setSymptomCode("");
+    setDescription("");
+    setPriority("MEDIUM");
     setTicketId(null);
+    setImages([]);
     setError(null);
   }
 
@@ -96,7 +125,7 @@ function NewTicketForm() {
           </div>
         )}
 
-        {/* Step: Select store + asset */}
+        {/* Step 1: Select store + asset */}
         {step === "select" && (
           <div className="space-y-5">
             <div>
@@ -173,15 +202,15 @@ function NewTicketForm() {
             <button
               disabled={!storeId || !assetId}
               className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
-              onClick={() => setStep("symptom")}
+              onClick={() => setStep("describe")}
             >
               Continue
             </button>
           </div>
         )}
 
-        {/* Step: Symptom */}
-        {step === "symptom" && selectedAsset && (
+        {/* Step 2: Describe the issue */}
+        {step === "describe" && selectedAsset && (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="bg-slate-50 rounded-lg border border-slate-200 px-4 py-3">
               <p className="text-xs text-slate-400 mb-0.5">Selected Equipment</p>
@@ -194,18 +223,29 @@ function NewTicketForm() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                What is the issue? <span className="text-red-500">*</span>
+                Describe the issue <span className="text-red-500">*</span>
               </label>
+              <textarea
+                rows={4}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="e.g. machine not turning on, error code displayed, leaking from bottom…"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Priority</label>
               <select
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={symptomCode}
-                onChange={(e) => setSymptomCode(e.target.value)}
-                required
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
               >
-                <option value="">Select symptom…</option>
-                {Object.entries(SymptomCodeLabels).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="CRITICAL">Critical</option>
               </select>
             </div>
 
@@ -219,7 +259,7 @@ function NewTicketForm() {
               </button>
               <button
                 type="submit"
-                disabled={!symptomCode || submitting}
+                disabled={!description.trim() || submitting}
                 className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -229,7 +269,76 @@ function NewTicketForm() {
           </form>
         )}
 
-        {/* Step: Success */}
+        {/* Step 3: Add photos */}
+        {step === "photos" && ticketId && (
+          <div className="space-y-5">
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-3">
+                <Camera className="w-6 h-6 text-blue-600" />
+              </div>
+              <p className="font-semibold text-slate-800">Add Photos (Optional)</p>
+              <p className="text-slate-400 text-sm mt-1">
+                Ticket ID: <span className="font-mono">{ticketId.slice(0, 8).toUpperCase()}</span>
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-slate-700">Photos</p>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImg}
+                  className="flex items-center gap-1.5 text-blue-600 text-sm font-medium hover:text-blue-700 disabled:opacity-50"
+                >
+                  {uploadingImg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add Photo
+                </button>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              </div>
+
+              {images.length === 0 ? (
+                <div
+                  className="border-2 border-dashed border-slate-200 rounded-lg py-8 text-center text-slate-400 cursor-pointer hover:border-blue-300 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <p className="text-sm">Click to add photos</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {images.map((img) => (
+                    <div key={img.id} className="relative group aspect-square">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.url} alt="Issue photo" className="w-full h-full object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteImage(img.id)}
+                        className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3.5 h-3.5 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  <div
+                    className="aspect-square border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-300 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Plus className="w-5 h-5 text-slate-400" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              onClick={() => setStep("success")}
+            >
+              Done
+            </button>
+          </div>
+        )}
+
+        {/* Step 4: Success */}
         {step === "success" && (
           <div className="text-center py-6 space-y-4">
             <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">

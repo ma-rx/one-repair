@@ -191,7 +191,7 @@ class TicketSerializer(serializers.ModelSerializer):
         model = Ticket
         fields = [
             "id", "asset", "asset_name", "store_name",
-            "symptom_code", "priority", "status",
+            "symptom_code", "description", "priority", "status",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
             "service_reports", "created_at", "updated_at",

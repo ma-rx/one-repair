@@ -282,6 +282,7 @@ export interface Ticket {
   asset_name: string;
   store_name: string;
   symptom_code: string;
+  description: string;
   priority: string;
   status: string;
   assigned_tech: number | null;
@@ -381,7 +382,8 @@ export interface ClientKPIData {
 
 export interface CreateTicketBody {
   asset: string;
-  symptom_code: string;
+  description?: string;
+  symptom_code?: string;
   priority?: string;
   opened_by?: number;
 }
