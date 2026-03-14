@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 
 export interface AddressParts {
   address_line1: string;
@@ -19,18 +19,16 @@ interface Props {
   required?: boolean;
 }
 
-let loaderInstance: Loader | null = null;
 let placesLoaded = false;
+let optionsSet   = false;
 
-function getLoader() {
-  if (!loaderInstance) {
-    loaderInstance = new Loader({
-      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-      version: "weekly",
-      libraries: ["places"],
-    });
-  }
-  return loaderInstance;
+function ensureOptions() {
+  if (optionsSet) return;
+  setOptions({
+    apiKey:  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
+    version: "weekly",
+  });
+  optionsSet = true;
 }
 
 export default function AddressAutocomplete({ value, onChange, onSelect, placeholder, required }: Props) {
@@ -40,7 +38,8 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
 
   useEffect(() => {
     if (placesLoaded) { setReady(true); return; }
-    getLoader().importLibrary("places").then(() => {
+    ensureOptions();
+    importLibrary("places").then(() => {
       placesLoaded = true;
       setReady(true);
     }).catch(() => {});
