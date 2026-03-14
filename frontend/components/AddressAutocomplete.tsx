@@ -25,8 +25,8 @@ let optionsSet   = false;
 function ensureOptions() {
   if (optionsSet) return;
   setOptions({
-    apiKey:  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-    version: "weekly",
+    key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
+    v:   "weekly",
   });
   optionsSet = true;
 }
