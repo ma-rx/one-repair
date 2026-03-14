@@ -308,6 +308,8 @@ export interface ServiceReport {
   id: string;
   ticket: string;
   resolution_code: string;
+  tech_notes: string;
+  formatted_report: string;
   labor_cost: string;
   parts_total: string;
   grand_total: string;
