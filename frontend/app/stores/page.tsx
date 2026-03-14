@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { api, Organization, Store } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { MapPin, Plus, Pencil, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
@@ -227,7 +228,21 @@ export default function StoresPage() {
             />
           </div>
 
-          {f("address_line1", "Address Line 1")}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Address Line 1</label>
+            <AddressAutocomplete
+              value={form.address_line1 ?? ""}
+              onChange={(v) => setForm((prev) => ({ ...prev, address_line1: v }))}
+              onSelect={(parts) => setForm((prev) => ({
+                ...prev,
+                address_line1: parts.address_line1,
+                city:          parts.city,
+                state:         parts.state,
+                zip_code:      parts.zip_code,
+                country:       parts.country || prev.country,
+              }))}
+            />
+          </div>
           {f("address_line2", "Address Line 2 (optional)")}
 
           <div className="grid grid-cols-3 gap-3">
