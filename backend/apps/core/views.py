@@ -10,15 +10,21 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+import uuid as uuid_module
+
+import requests as http_requests
+from rest_framework.parsers import MultiPartParser
+
 from .models import (
-    Asset, AssetStatus, Organization, Part, PartUsed,
-    ServiceReport, Store, Ticket, TicketStatus, UserRole,
+    Asset, AssetStatus, Organization, Part, PartUsed, PricingConfig,
+    ServiceReport, Store, Ticket, TicketStatus, TimeEntry, UserRole, WorkImage,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
     CreateUserSerializer, OrganizationSerializer, PartSerializer,
-    ServiceReportSerializer, StoreSerializer, TicketSerializer, UserSerializer,
+    PricingConfigSerializer, ServiceReportSerializer, StoreSerializer,
+    TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -292,13 +298,25 @@ class TicketViewSet(viewsets.ModelViewSet):
                 )
             part_objects[str(pu_input["part_id"])] = part
 
+        # Auto-calculate labor cost from time entries if not provided
+        if data.get("labor_cost") is None:
+            pricing = PricingConfig.objects.first() or PricingConfig()
+            entries = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=False)
+            total_minutes = sum(e.total_minutes or 0 for e in entries)
+            hours = max(float(pricing.min_hours), total_minutes / 60.0)
+            labor_cost_val = float(pricing.trip_charge) + hours * float(pricing.hourly_rate)
+        else:
+            labor_cost_val = data["labor_cost"]
+
         with transaction.atomic():
             service_report = ServiceReport.objects.create(
                 ticket=ticket,
                 submitted_by=request.user,
                 resolution_code=data["resolution_code"],
-                labor_cost=data["labor_cost"],
+                labor_cost=labor_cost_val,
                 invoice_email=data.get("invoice_email", ""),
+                tech_notes=data.get("tech_notes", ""),
+                formatted_report=data.get("formatted_report", ""),
             )
 
             for pu_input in data.get("parts_used", []):
@@ -313,7 +331,8 @@ class TicketViewSet(viewsets.ModelViewSet):
                 part.save(update_fields=["quantity_on_hand", "updated_at"])
 
             ticket.status = TicketStatus.CLOSED
-            ticket.save(update_fields=["status", "updated_at"])
+            ticket.closed_at = timezone.now()
+            ticket.save(update_fields=["status", "closed_at", "updated_at"])
 
             asset = ticket.asset
             asset.status = AssetStatus.OPERATIONAL
@@ -461,6 +480,196 @@ class KPIView(APIView):
                 for row in monthly
             ],
         })
+
+
+# ── Pricing Config ────────────────────────────────────────────────────────────
+
+class PricingConfigView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_config(self):
+        config = PricingConfig.objects.first()
+        if config is None:
+            config = PricingConfig.objects.create()
+        return config
+
+    def get(self, request):
+        return Response(PricingConfigSerializer(self._get_config()).data)
+
+    def patch(self, request):
+        profile = getattr(request.user, "profile", None)
+        if not profile or profile.role != UserRole.ORS_ADMIN:
+            return Response({"detail": "ORS Admin only."}, status=status.HTTP_403_FORBIDDEN)
+        config = self._get_config()
+        ser = PricingConfigSerializer(config, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+
+# ── Time Tracking ─────────────────────────────────────────────────────────────
+
+class TimeEntryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ticket_id = request.query_params.get("ticket_id")
+        if not ticket_id:
+            return Response({"detail": "ticket_id required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        active = TimeEntry.objects.filter(
+            tech=request.user, ticket_id=ticket_id, clocked_out_at__isnull=True
+        ).first()
+
+        completed = TimeEntry.objects.filter(
+            tech=request.user, ticket_id=ticket_id, clocked_out_at__isnull=False
+        )
+        total_minutes = sum(e.total_minutes or 0 for e in completed)
+
+        pricing = PricingConfig.objects.first() or PricingConfig()
+        hours = max(float(pricing.min_hours), total_minutes / 60.0)
+        estimated_labor = round(float(pricing.trip_charge) + hours * float(pricing.hourly_rate), 2)
+
+        return Response({
+            "active_entry": TimeEntrySerializer(active).data if active else None,
+            "total_minutes": total_minutes,
+            "is_clocked_in": active is not None,
+            "estimated_labor": estimated_labor,
+            "pricing": PricingConfigSerializer(pricing).data,
+        })
+
+    def post(self, request):
+        action_type = request.data.get("action")
+        ticket_id   = request.data.get("ticket_id")
+
+        if not ticket_id:
+            return Response({"detail": "ticket_id required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ticket = Ticket.objects.get(pk=ticket_id)
+        except Ticket.DoesNotExist:
+            return Response({"detail": "Ticket not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if action_type == "clock_in":
+            if TimeEntry.objects.filter(tech=request.user, ticket=ticket, clocked_out_at__isnull=True).exists():
+                return Response({"detail": "Already clocked in."}, status=status.HTTP_400_BAD_REQUEST)
+            entry = TimeEntry.objects.create(
+                tech=request.user, ticket=ticket, clocked_in_at=timezone.now()
+            )
+            return Response(TimeEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+
+        if action_type == "clock_out":
+            entry = TimeEntry.objects.filter(
+                tech=request.user, ticket=ticket, clocked_out_at__isnull=True
+            ).first()
+            if not entry:
+                return Response({"detail": "Not clocked in."}, status=status.HTTP_400_BAD_REQUEST)
+            now = timezone.now()
+            entry.clocked_out_at = now
+            entry.total_minutes  = max(1, int((now - entry.clocked_in_at).total_seconds() / 60))
+            entry.save(update_fields=["clocked_out_at", "total_minutes"])
+            return Response(TimeEntrySerializer(entry).data)
+
+        return Response({"detail": "action must be clock_in or clock_out."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ── Work Images ───────────────────────────────────────────────────────────────
+
+class WorkImageView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser]
+
+    def get(self, request):
+        ticket_id = request.query_params.get("ticket_id")
+        if not ticket_id:
+            return Response([])
+        images = WorkImage.objects.filter(ticket_id=ticket_id)
+        return Response(WorkImageSerializer(images, many=True).data)
+
+    def post(self, request):
+        from decouple import config as env
+        ticket_id   = request.data.get("ticket_id")
+        image_file  = request.FILES.get("image")
+
+        if not ticket_id or not image_file:
+            return Response({"detail": "ticket_id and image are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ticket = Ticket.objects.get(pk=ticket_id)
+        except Ticket.DoesNotExist:
+            return Response({"detail": "Ticket not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        supabase_url = env("SUPABASE_URL", default="")
+        service_key  = env("SUPABASE_SERVICE_KEY", default="")
+
+        if not supabase_url or not service_key:
+            return Response({"detail": "Image storage not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        ext  = image_file.name.rsplit(".", 1)[-1].lower() if "." in image_file.name else "jpg"
+        path = f"{ticket_id}/{uuid_module.uuid4()}.{ext}"
+
+        upload_resp = http_requests.post(
+            f"{supabase_url}/storage/v1/object/work-images/{path}",
+            data=image_file.read(),
+            headers={
+                "Authorization": f"Bearer {service_key}",
+                "Content-Type": image_file.content_type or "image/jpeg",
+            },
+        )
+
+        if upload_resp.status_code not in (200, 201):
+            return Response({"detail": "Upload failed. Check Supabase storage config."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        public_url = f"{supabase_url}/storage/v1/object/public/work-images/{path}"
+        image = WorkImage.objects.create(ticket=ticket, uploaded_by=request.user, url=public_url)
+        return Response(WorkImageSerializer(image).data, status=status.HTTP_201_CREATED)
+
+    def delete(self, request, pk=None):
+        try:
+            image = WorkImage.objects.get(pk=pk, uploaded_by=request.user)
+        except WorkImage.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        image.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── AI Report Formatter ───────────────────────────────────────────────────────
+
+class FormatReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from decouple import config as env
+        notes = request.data.get("notes", "").strip()
+        if not notes:
+            return Response({"detail": "notes required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_key = env("ANTHROPIC_API_KEY", default="")
+        if not api_key:
+            return Response({"detail": "AI formatting not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            message = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        "You are a professional field service report editor. "
+                        "A technician has provided rough notes about repair work they performed. "
+                        "Edit these notes for clarity, grammar, and professional structure while "
+                        "preserving ALL technical details and facts. Do not add any information "
+                        "that is not already present in the notes. "
+                        "Return only the formatted report text, no preamble.\n\n"
+                        f"Technician notes:\n{notes}"
+                    ),
+                }],
+            )
+            return Response({"formatted_report": message.content[0].text})
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ── Client KPIs ───────────────────────────────────────────────────────────────

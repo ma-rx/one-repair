@@ -121,6 +121,42 @@ export const api = {
     URL.revokeObjectURL(url);
   },
 
+  // Pricing config
+  getPricing: () => request<PricingConfig>("/pricing/"),
+  updatePricing: (body: Partial<PricingConfig>) =>
+    request<PricingConfig>("/pricing/", { method: "PATCH", body: JSON.stringify(body) }),
+
+  // Time tracking
+  getTimeEntry: (ticketId: string) =>
+    request<TimeEntryStatus>(`/time-entries/?ticket_id=${ticketId}`),
+  clockIn: (ticketId: string) =>
+    request<TimeEntry>("/time-entries/", { method: "POST", body: JSON.stringify({ action: "clock_in", ticket_id: ticketId }) }),
+  clockOut: (ticketId: string) =>
+    request<TimeEntry>("/time-entries/", { method: "POST", body: JSON.stringify({ action: "clock_out", ticket_id: ticketId }) }),
+
+  // Work images
+  getWorkImages: (ticketId: string) =>
+    request<WorkImage[]>(`/work-images/?ticket_id=${ticketId}`),
+  uploadWorkImage: async (ticketId: string, file: File): Promise<WorkImage> => {
+    const token = getAccessToken();
+    const form = new FormData();
+    form.append("ticket_id", ticketId);
+    form.append("image", file);
+    const res = await fetch(`${BASE}/work-images/`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || "Upload failed"); }
+    return res.json();
+  },
+  deleteWorkImage: (id: string) =>
+    request<void>(`/work-images/${id}/`, { method: "DELETE" }),
+
+  // AI report formatting
+  formatReport: (notes: string) =>
+    request<{ formatted_report: string }>("/format-report/", { method: "POST", body: JSON.stringify({ notes }) }),
+
   // Client KPIs
   getClientKPIs: (params?: { timeframe?: string; store?: string }) => {
     const qs = new URLSearchParams();
@@ -293,6 +329,38 @@ export interface KPIData {
   monthly_trend:   { month: string; count: number }[];
 }
 
+export interface PricingConfig {
+  id: string;
+  trip_charge: string;
+  hourly_rate: string;
+  min_hours: string;
+  updated_at: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  ticket: string;
+  clocked_in_at: string;
+  clocked_out_at: string | null;
+  total_minutes: number | null;
+  created_at: string;
+}
+
+export interface TimeEntryStatus {
+  active_entry: TimeEntry | null;
+  total_minutes: number;
+  is_clocked_in: boolean;
+  estimated_labor: number;
+  pricing: PricingConfig;
+}
+
+export interface WorkImage {
+  id: string;
+  ticket: string;
+  url: string;
+  created_at: string;
+}
+
 export interface ClientKPIData {
   total_spend: number;
   total_repairs: number;
@@ -320,7 +388,9 @@ export interface CreateTicketBody {
 
 export interface CloseTicketBody {
   resolution_code: string;
-  labor_cost: number;
+  labor_cost?: number | null;
   parts_used: { part_id: string; quantity: number }[];
   invoice_email?: string;
+  tech_notes?: string;
+  formatted_report?: string;
 }

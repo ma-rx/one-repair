@@ -97,6 +97,21 @@ class PartCategory(models.TextChoices):
 
 # ── Models ─────────────────────────────────────────────────────────────────────
 
+class PricingConfig(models.Model):
+    """Singleton — one row stores global pricing rates."""
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    trip_charge = models.DecimalField(max_digits=8, decimal_places=2, default=95.00)
+    hourly_rate = models.DecimalField(max_digits=8, decimal_places=2, default=125.00)
+    min_hours   = models.DecimalField(max_digits=4, decimal_places=2, default=1.00)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "Pricing Config"
+        verbose_name_plural = "Pricing Config"
+
+    def __str__(self):
+        return f"${self.trip_charge} trip + ${self.hourly_rate}/hr (min {self.min_hours}h)"
+
 class Organization(models.Model):
     id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name      = models.CharField(max_length=255)
@@ -234,18 +249,47 @@ class Ticket(models.Model):
         return f"Ticket {self.id} — {self.symptom_code} ({self.status})"
 
 
+class TimeEntry(models.Model):
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tech           = models.ForeignKey(User, on_delete=models.CASCADE, related_name="time_entries")
+    ticket         = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="time_entries")
+    clocked_in_at  = models.DateTimeField()
+    clocked_out_at = models.DateTimeField(null=True, blank=True)
+    total_minutes  = models.PositiveIntegerField(null=True, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-clocked_in_at"]
+
+    def __str__(self):
+        return f"{self.tech} on Ticket {self.ticket_id}"
+
+
+class WorkImage(models.Model):
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket      = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="work_images")
+    uploaded_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    url         = models.URLField(max_length=1000)
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
 class ServiceReport(models.Model):
     id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     ticket          = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="service_reports")
     submitted_by    = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name="service_reports"
     )
-    resolution_code = models.CharField(max_length=50, choices=ResolutionCode.choices)
-    labor_cost      = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    invoice_sent    = models.BooleanField(default=False)
-    invoice_email   = models.EmailField(blank=True)
-    created_at      = models.DateTimeField(auto_now_add=True)
-    updated_at      = models.DateTimeField(auto_now=True)
+    resolution_code  = models.CharField(max_length=50, choices=ResolutionCode.choices)
+    labor_cost       = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    invoice_sent     = models.BooleanField(default=False)
+    invoice_email    = models.EmailField(blank=True)
+    tech_notes       = models.TextField(blank=True)
+    formatted_report = models.TextField(blank=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]

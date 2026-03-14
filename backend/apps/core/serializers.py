@@ -2,8 +2,8 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from .models import (
-    Asset, Organization, Part, PartUsed,
-    ServiceReport, Store, Ticket, UserProfile,
+    Asset, Organization, Part, PartUsed, PricingConfig,
+    ServiceReport, Store, Ticket, TimeEntry, UserProfile, WorkImage,
 )
 
 
@@ -138,6 +138,30 @@ class PartUsedInputSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1)
 
 
+# ── PricingConfig ─────────────────────────────────────────────────────────────
+
+class PricingConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PricingConfig
+        fields = ["id", "trip_charge", "hourly_rate", "min_hours", "updated_at"]
+
+
+# ── TimeEntry ─────────────────────────────────────────────────────────────────
+
+class TimeEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeEntry
+        fields = ["id", "ticket", "clocked_in_at", "clocked_out_at", "total_minutes", "created_at"]
+
+
+# ── WorkImage ─────────────────────────────────────────────────────────────────
+
+class WorkImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkImage
+        fields = ["id", "ticket", "url", "created_at"]
+
+
 # ── ServiceReport ─────────────────────────────────────────────────────────────
 
 class ServiceReportSerializer(serializers.ModelSerializer):
@@ -150,6 +174,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         fields = [
             "id", "ticket", "resolution_code", "labor_cost",
             "invoice_sent", "invoice_email",
+            "tech_notes", "formatted_report",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
 
@@ -185,9 +210,11 @@ class AssignTechSerializer(serializers.Serializer):
 
 
 class CloseTicketSerializer(serializers.Serializer):
-    resolution_code = serializers.ChoiceField(
+    resolution_code  = serializers.ChoiceField(
         choices=ServiceReport._meta.get_field("resolution_code").choices
     )
-    labor_cost = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
-    parts_used = PartUsedInputSerializer(many=True, required=False, default=list)
-    invoice_email = serializers.EmailField(required=False, allow_blank=True)
+    labor_cost       = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
+    parts_used       = PartUsedInputSerializer(many=True, required=False, default=list)
+    invoice_email    = serializers.EmailField(required=False, allow_blank=True)
+    tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
+    formatted_report = serializers.CharField(required=False, allow_blank=True, default="")

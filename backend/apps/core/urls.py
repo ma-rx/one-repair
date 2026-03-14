@@ -1,8 +1,9 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
-    AssetViewSet, ClientKPIView, InvoicePDFView, KPIView, OrganizationViewSet, PartViewSet,
-    ServiceReportViewSet, StoreViewSet, TicketViewSet, UserViewSet,
+    AssetViewSet, ClientKPIView, FormatReportView, InvoicePDFView, KPIView,
+    OrganizationViewSet, PartViewSet, PricingConfigView, ServiceReportViewSet,
+    StoreViewSet, TicketViewSet, TimeEntryView, UserViewSet, WorkImageView,
 )
 
 router = DefaultRouter()
@@ -18,4 +19,9 @@ urlpatterns = router.urls + [
     path("kpis/", KPIView.as_view()),
     path("client-kpis/", ClientKPIView.as_view()),
     path("invoices/<uuid:pk>/pdf/", InvoicePDFView.as_view()),
+    path("pricing/", PricingConfigView.as_view()),
+    path("time-entries/", TimeEntryView.as_view()),
+    path("work-images/", WorkImageView.as_view()),
+    path("work-images/<uuid:pk>/", WorkImageView.as_view()),
+    path("format-report/", FormatReportView.as_view()),
 ]
