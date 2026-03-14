@@ -12,6 +12,7 @@ import {
 
 const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
+  DISPATCHED:    "bg-purple-100 text-purple-700",
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
   RESOLVED:      "bg-green-100 text-green-700",
@@ -26,7 +27,7 @@ const priorityDot: Record<string, string> = {
   CRITICAL: "bg-red-500",
 };
 
-const STATUS_TABS = ["ALL", "OPEN", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED"];
+const STATUS_TABS = ["ALL", "OPEN", "DISPATCHED", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED"];
 
 export default function DispatchPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -139,7 +140,11 @@ export default function DispatchPage() {
             </thead>
             <tbody>
               {tickets.map((t) => (
-                <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                <tr
+                  key={t.id}
+                  className="border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
+                  onClick={() => window.location.href = `/dispatch/${t.id}`}
+                >
                   <td className="px-6 py-4 font-medium text-slate-800">{t.asset_name}</td>
                   <td className="px-6 py-4 text-slate-500">{t.store_name}</td>
                   <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
@@ -162,9 +167,9 @@ export default function DispatchPage() {
                   <td className="px-6 py-4 text-slate-400 text-xs">
                     {new Date(t.created_at).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      {t.status === "OPEN" && (
+                      {(t.status === "OPEN" || t.status === "DISPATCHED") && (
                         <Link
                           href={`/dispatch/${t.id}/assign`}
                           className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
@@ -172,12 +177,12 @@ export default function DispatchPage() {
                           <UserCheck className="w-3.5 h-3.5" /> Assign
                         </Link>
                       )}
-                      {(t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS") && (
+                      {(t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS" || t.status === "DISPATCHED") && (
                         <Link
                           href={`/dispatch/${t.id}/close`}
                           className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
-                          <FileText className="w-3.5 h-3.5" /> Close
+                          <FileText className="w-3.5 h-3.5" /> Report
                         </Link>
                       )}
                     </div>

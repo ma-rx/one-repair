@@ -7,6 +7,7 @@ import { LogOut, Plus, Loader2, X, Wrench, Camera, CheckCircle2 } from "lucide-r
 
 const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
+  DISPATCHED:    "bg-purple-100 text-purple-700",
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
   RESOLVED:      "bg-green-100 text-green-700",
@@ -288,7 +289,7 @@ export default function ManagerPage() {
         ) : (
           <div className="space-y-3">
             {tickets.map((t) => (
-              <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4">
+              <a key={t.id} href={`/manager/tickets/${t.id}`} className="block bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-medium text-slate-800">{t.asset_name}</p>
@@ -304,7 +305,7 @@ export default function ManagerPage() {
                   </span>
                 </div>
                 <p className="text-slate-400 text-xs mt-3">{new Date(t.created_at).toLocaleDateString()}</p>
-              </div>
+              </a>
             ))}
           </div>
         )}

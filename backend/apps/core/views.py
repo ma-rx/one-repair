@@ -276,9 +276,9 @@ class TicketViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Technician not found."}, status=status.HTTP_404_NOT_FOUND)
 
         ticket.assigned_tech = tech
-        ticket.status = TicketStatus.IN_PROGRESS
         if serializer.validated_data.get("scheduled_date") is not None:
             ticket.scheduled_date = serializer.validated_data["scheduled_date"]
+        ticket.status = TicketStatus.DISPATCHED
         ticket.save(update_fields=["assigned_tech", "status", "scheduled_date", "updated_at"])
 
         return Response(TicketSerializer(ticket).data)
@@ -587,6 +587,9 @@ class TimeEntryView(APIView):
             entry = TimeEntry.objects.create(
                 tech=request.user, ticket=ticket, clocked_in_at=timezone.now()
             )
+            if ticket.status == TicketStatus.DISPATCHED:
+                ticket.status = TicketStatus.IN_PROGRESS
+                ticket.save(update_fields=["status", "updated_at"])
             return Response(TimeEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
         if action_type == "clock_out":

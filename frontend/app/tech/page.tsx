@@ -12,6 +12,7 @@ import {
 
 const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
+  DISPATCHED:    "bg-purple-100 text-purple-700",
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
   RESOLVED:      "bg-green-100 text-green-700",
@@ -196,83 +197,91 @@ export default function TechPage() {
               <p className="text-xs text-slate-400 text-center">Drag to reorder stops, then open route</p>
             )}
             <div className="space-y-3">
-              {ordered.map((t, idx) => (
-                <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4">
-                  <div className="flex items-start gap-3">
-                    {/* Stop number + reorder */}
-                    {ordered.length > 1 && (
-                      <div className="flex flex-col items-center gap-0.5 pt-0.5 shrink-0">
-                        <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
-                          {idx + 1}
-                        </div>
-                        <button
-                          onClick={() => move(t.id, -1)}
-                          disabled={idx === 0}
-                          className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20"
-                        >
-                          <ArrowUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => move(t.id, 1)}
-                          disabled={idx === ordered.length - 1}
-                          className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
+              {ordered.map((t, idx) => {
+                const isDispatched = t.status === "DISPATCHED";
+                const displayStatus = isDispatched
+                  ? (t.scheduled_date && t.scheduled_date > date ? "Scheduled" : "Dispatched")
+                  : t.status.replace(/_/g, " ");
+                const canService = t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS" || t.status === "DISPATCHED";
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-slate-800">{t.asset_name}</p>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityBadge[t.priority] ?? ""}`}>
-                              {t.priority}
-                            </span>
+                return (
+                  <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4">
+                    <div className="flex items-start gap-3">
+                      {/* Stop number + reorder */}
+                      {ordered.length > 1 && (
+                        <div className="flex flex-col items-center gap-0.5 pt-0.5 shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
+                            {idx + 1}
                           </div>
-                          <p className="text-slate-500 text-sm mt-0.5">{t.store_name}</p>
-                          {t.description && (
-                            <p className="text-slate-600 text-sm mt-1">{t.description}</p>
-                          )}
+                          <button
+                            onClick={() => move(t.id, -1)}
+                            disabled={idx === 0}
+                            className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => move(t.id, 1)}
+                            disabled={idx === ordered.length - 1}
+                            className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
-                          {t.status.replace(/_/g, " ")}
-                        </span>
-                      </div>
-
-                      {/* Address + maps link */}
-                      {t.store_address ? (
-                        <a
-                          href={buildMapsUrl(t.store_address)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 mt-2 text-blue-600 hover:text-blue-800 text-xs font-medium"
-                        >
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          {t.store_address}
-                        </a>
-                      ) : (
-                        <p className="flex items-center gap-1.5 mt-2 text-slate-400 text-xs">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" /> No address on file
-                        </p>
                       )}
 
-                      {/* Actions */}
-                      <div className="flex gap-2 mt-3">
-                        {(t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS") && (
-                          <Link
-                            href={`/tech/${t.id}/close`}
-                            className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            <FileText className="w-3.5 h-3.5" /> Close Ticket
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <Link href={`/tech/${t.id}`} className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-slate-800">{t.asset_name}</p>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityBadge[t.priority] ?? ""}`}>
+                                {t.priority}
+                              </span>
+                            </div>
+                            <p className="text-slate-500 text-sm mt-0.5">{t.store_name}</p>
+                            {t.description && (
+                              <p className="text-slate-600 text-sm mt-1 line-clamp-2">{t.description}</p>
+                            )}
                           </Link>
+                          <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
+                            {displayStatus}
+                          </span>
+                        </div>
+
+                        {/* Address + maps link */}
+                        {t.store_address ? (
+                          <a
+                            href={buildMapsUrl(t.store_address)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 mt-2 text-blue-600 hover:text-blue-800 text-xs font-medium"
+                          >
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                            {t.store_address}
+                          </a>
+                        ) : (
+                          <p className="flex items-center gap-1.5 mt-2 text-slate-400 text-xs">
+                            <MapPin className="w-3.5 h-3.5 shrink-0" /> No address on file
+                          </p>
+                        )}
+
+                        {/* Actions */}
+                        {canService && (
+                          <div className="flex justify-end mt-3">
+                            <Link
+                              href={`/tech/${t.id}/close`}
+                              className="flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> Service Report
+                            </Link>
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
