@@ -40,7 +40,7 @@ export default function AddressAutocomplete({ value, onChange, onSelect, placeho
 
   useEffect(() => {
     if (placesLoaded) { setReady(true); return; }
-    getLoader().load().then(() => {
+    getLoader().importLibrary("places").then(() => {
       placesLoaded = true;
       setReady(true);
     }).catch(() => {});
