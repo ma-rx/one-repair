@@ -88,6 +88,21 @@ class ResolutionCode(models.TextChoices):
     OTHER                = "OTHER",                "Other"
 
 
+class PartRequestUrgency(models.TextChoices):
+    ASAP       = "ASAP",       "ASAP"
+    NEXT_VISIT = "NEXT_VISIT", "Next Visit"
+
+
+class PartRequestStatus(models.TextChoices):
+    PENDING         = "PENDING",         "Pending ORS Review"
+    APPROVED_ORS    = "APPROVED_ORS",    "Approved by ORS"
+    SENT_TO_CLIENT  = "SENT_TO_CLIENT",  "Sent to Client"
+    APPROVED_CLIENT = "APPROVED_CLIENT", "Approved by Client"
+    DENIED          = "DENIED",          "Denied"
+    ORDERED         = "ORDERED",         "Ordered"
+    DELIVERED       = "DELIVERED",       "Delivered"
+
+
 class PartCategory(models.TextChoices):
     MECHANICAL  = "MECHANICAL",  "Mechanical"
     ELECTRICAL  = "ELECTRICAL",  "Electrical"
@@ -212,6 +227,8 @@ class Part(models.Model):
     quantity_on_hand    = models.PositiveIntegerField(default=0)
     low_stock_threshold = models.PositiveIntegerField(default=2)
     unit_price          = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    selling_price       = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    vendor              = models.CharField(max_length=255, blank=True)
     created_at          = models.DateTimeField(auto_now_add=True)
     updated_at          = models.DateTimeField(auto_now=True)
 
@@ -252,6 +269,22 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"Ticket {self.id} — {self.symptom_code} ({self.status})"
+
+
+class TicketAsset(models.Model):
+    id                = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket            = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="ticket_assets")
+    asset             = models.ForeignKey("Asset", null=True, blank=True, on_delete=models.SET_NULL)
+    asset_description = models.CharField(max_length=200, blank=True, default="")
+    symptom_code      = models.CharField(max_length=50, choices=SymptomCode.choices, blank=True, default="")
+    resolution_code   = models.CharField(max_length=50, choices=ResolutionCode.choices, blank=True, default="")
+    created_at        = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"TicketAsset {self.asset or self.asset_description} on {self.ticket_id}"
 
 
 class TimeEntry(models.Model):
@@ -325,3 +358,35 @@ class PartUsed(models.Model):
 
     def __str__(self):
         return f"{self.quantity}x {self.part.name} on {self.service_report.id}"
+
+
+class PartRequest(models.Model):
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket         = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="part_requests")
+    part           = models.ForeignKey(Part, null=True, blank=True, on_delete=models.SET_NULL, related_name="requests")
+    part_name      = models.CharField(max_length=255, blank=True)
+    sku            = models.CharField(max_length=100, blank=True)
+    asset_category = models.CharField(max_length=50, choices=AssetCategory.choices, blank=True)
+    make           = models.CharField(max_length=255, blank=True)
+    model_number   = models.CharField(max_length=255, blank=True)
+    vendor         = models.CharField(max_length=255, blank=True)
+    cost_price     = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    selling_price  = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    quantity_needed = models.PositiveIntegerField(default=1)
+    urgency         = models.CharField(max_length=20, choices=PartRequestUrgency.choices, default=PartRequestUrgency.NEXT_VISIT)
+    notes           = models.TextField(blank=True)
+    status          = models.CharField(max_length=30, choices=PartRequestStatus.choices, default=PartRequestStatus.PENDING)
+    tracking_number = models.CharField(max_length=200, blank=True)
+    approved_by_ors_at    = models.DateTimeField(null=True, blank=True)
+    approved_by_client_at = models.DateTimeField(null=True, blank=True)
+    ordered_at            = models.DateTimeField(null=True, blank=True)
+    delivered_at          = models.DateTimeField(null=True, blank=True)
+    created_at            = models.DateTimeField(auto_now_add=True)
+    updated_at            = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        name = self.part.name if self.part else self.part_name
+        return f"PartRequest: {name} x{self.quantity_needed} ({self.status})"

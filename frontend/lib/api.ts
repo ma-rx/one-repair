@@ -180,6 +180,38 @@ export const api = {
     request<Part>("/parts/", { method: "POST", body: JSON.stringify(body) }),
   updatePart: (id: string, body: Partial<Part>) =>
     request<Part>(`/parts/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  // TicketAsset management
+  addTicketAsset: (ticketId: string, data: { asset_id?: string; asset_description?: string }) =>
+    request<TicketAsset>(`/tickets/${ticketId}/add-asset/`, { method: "POST", body: JSON.stringify(data) }),
+  removeTicketAsset: (ticketId: string, taId: string) =>
+    request<void>(`/tickets/${ticketId}/remove-asset/${taId}/`, { method: "DELETE" }),
+  updateAssetCodes: (ticketId: string, taId: string, data: { symptom_code?: string; resolution_code?: string }) =>
+    request<TicketAsset>(`/tickets/${ticketId}/update-asset/${taId}/`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // PartRequest
+  listPartRequests: (params?: { ticket?: string; status?: string }) => {
+    const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v) as string[][]).toString() : "";
+    return request<PartRequest[]>(`/part-requests/${qs}`);
+  },
+  createPartRequest: (data: Partial<PartRequest>) =>
+    request<PartRequest>("/part-requests/", { method: "POST", body: JSON.stringify(data) }),
+  approvePartRequestORS: (id: string) =>
+    request<PartRequest>(`/part-requests/${id}/approve-ors/`, { method: "POST" }),
+  sendPartRequestToClient: (id: string) =>
+    request<PartRequest>(`/part-requests/${id}/send-to-client/`, { method: "POST" }),
+  approvePartRequestClient: (id: string) =>
+    request<PartRequest>(`/part-requests/${id}/approve-client/`, { method: "POST" }),
+  denyPartRequest: (id: string) =>
+    request<PartRequest>(`/part-requests/${id}/deny/`, { method: "POST" }),
+  markPartRequestOrdered: (id: string, tracking_number: string) =>
+    request<PartRequest>(`/part-requests/${id}/mark-ordered/`, { method: "POST", body: JSON.stringify({ tracking_number }) }),
+  markPartRequestDelivered: (id: string) =>
+    request<PartRequest>(`/part-requests/${id}/mark-delivered/`, { method: "POST" }),
+  generateFollowupTicket: (id: string) =>
+    request<Ticket>(`/part-requests/${id}/generate-followup/`, { method: "POST" }),
+  updatePartRequestDetails: (id: string, data: Record<string, unknown>) =>
+    request<PartRequest>(`/part-requests/${id}/update-part-details/`, { method: "PATCH", body: JSON.stringify(data) }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -282,7 +314,66 @@ export interface Part {
   quantity_on_hand: number;
   low_stock_threshold: number;
   unit_price: string;
+  selling_price: string;
+  vendor: string;
   is_low_stock: boolean;
+}
+
+export interface TicketAsset {
+  id: string;
+  asset: string | null;
+  asset_name: string;
+  asset_description: string;
+  symptom_code: string;
+  resolution_code: string;
+  created_at: string;
+}
+
+export interface PartRequest {
+  id: string;
+  ticket: string;
+  ticket_summary: {
+    id: string;
+    store_name: string;
+    asset_name: string;
+    status: string;
+  };
+  part: string | null;
+  part_name_display: string;
+  part_name: string;
+  sku: string;
+  asset_category: string;
+  make: string;
+  model_number: string;
+  vendor: string;
+  cost_price: string | null;
+  selling_price: string | null;
+  quantity_needed: number;
+  urgency: string;
+  notes: string;
+  status: string;
+  tracking_number: string;
+  approved_by_ors_at: string | null;
+  approved_by_client_at: string | null;
+  ordered_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartRequestInput {
+  part_id?: string;
+  part_name?: string;
+  sku?: string;
+  asset_category?: string;
+  make?: string;
+  model_number?: string;
+  vendor?: string;
+  cost_price?: string;
+  selling_price?: string;
+  quantity_needed: number;
+  urgency: string;
+  notes?: string;
 }
 
 export interface Ticket {
@@ -300,6 +391,7 @@ export interface Ticket {
   scheduled_date: string | null;
   assigned_tech: number | null;
   assigned_tech_name: string | null;
+  assets: TicketAsset[];
   service_reports: ServiceReport[];
   created_at: string;
 }
@@ -409,6 +501,7 @@ export interface CloseTicketBody {
   resolution_code: string;
   labor_cost?: number | null;
   parts_used: { part_id: string; quantity: number }[];
+  parts_needed?: PartRequestInput[];
   invoice_email?: string;
   tech_notes?: string;
   formatted_report?: string;

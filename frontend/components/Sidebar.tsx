@@ -20,15 +20,16 @@ import {
 } from "lucide-react";
 
 const orsNav = [
-  { label: "New Ticket",     href: "/scan",          icon: QrCode       },
-  { label: "Dispatch",       href: "/dispatch",       icon: ClipboardList },
-  { label: "Calendar",       href: "/calendar",       icon: CalendarDays },
-  { label: "Organizations",  href: "/organizations",  icon: Building2    },
-  { label: "Stores",         href: "/stores",         icon: MapPin       },
-  { label: "Assets",         href: "/assets",         icon: Cpu          },
-  { label: "Inventory",      href: "/inventory",      icon: Package      },
-  { label: "Users",          href: "/users",          icon: Users        },
-  { label: "KPIs",           href: "/kpis",           icon: BarChart3    },
+  { label: "New Ticket",     href: "/scan",             icon: QrCode       },
+  { label: "Dispatch",       href: "/dispatch",         icon: ClipboardList },
+  { label: "Calendar",       href: "/calendar",         icon: CalendarDays },
+  { label: "Parts",          href: "/dispatch/parts",   icon: Package      },
+  { label: "Organizations",  href: "/organizations",    icon: Building2    },
+  { label: "Stores",         href: "/stores",           icon: MapPin       },
+  { label: "Assets",         href: "/assets",           icon: Cpu          },
+  { label: "Inventory",      href: "/inventory",        icon: Package      },
+  { label: "Users",          href: "/users",            icon: Users        },
+  { label: "KPIs",           href: "/kpis",             icon: BarChart3    },
 ];
 
 const clientNav = [

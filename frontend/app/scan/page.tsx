@@ -6,9 +6,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import DashboardShell from "@/components/DashboardShell";
 import PortalShell from "@/components/PortalShell";
 import { api, Asset, Store, WorkImage } from "@/lib/api";
-import { CheckCircle2, Loader2, AlertCircle, Plus, X, Camera } from "lucide-react";
+import { CheckCircle2, Loader2, AlertCircle, Plus, X, Camera, Trash2 } from "lucide-react";
 
 type Step = "select" | "describe" | "photos" | "success";
+
+interface AssetRow {
+  assetId: string;
+  customAsset: string;
+}
+
+const OTHER_ASSET = "__other__";
 
 function NewTicketForm() {
   const { user } = useAuth();
@@ -18,13 +25,12 @@ function NewTicketForm() {
   const [stores, setStores] = useState<Store[]>([]);
   const [storeId, setStoreId] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [assetId, setAssetId] = useState("");
   const [assetSearch, setAssetSearch] = useState("");
-  const [customAsset, setCustomAsset] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
 
-  const OTHER_ASSET = "__other__";
+  // Multi-asset rows
+  const [assetRows, setAssetRows] = useState<AssetRow[]>([{ assetId: "", customAsset: "" }]);
 
   const [loadingStores, setLoadingStores] = useState(true);
   const [loadingAssets, setLoadingAssets] = useState(false);
@@ -44,7 +50,7 @@ function NewTicketForm() {
   }, []);
 
   useEffect(() => {
-    if (!storeId) { setAssets([]); setAssetId(""); return; }
+    if (!storeId) { setAssets([]); setAssetRows([{ assetId: "", customAsset: "" }]); return; }
     setLoadingAssets(true);
     api.listAssets({ store: storeId, active: true })
       .then(setAssets)
@@ -57,23 +63,51 @@ function NewTicketForm() {
     a.serial_number.toLowerCase().includes(assetSearch.toLowerCase())
   );
 
-  const selectedAsset = assets.find((a) => a.id === assetId);
   const selectedStore = stores.find((s) => s.id === storeId);
+  const firstRow = assetRows[0];
+  const firstAsset = assets.find((a) => a.id === firstRow?.assetId);
+
+  function updateRow(i: number, patch: Partial<AssetRow>) {
+    setAssetRows((prev) => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  }
+
+  function addRow() {
+    setAssetRows((prev) => [...prev, { assetId: "", customAsset: "" }]);
+  }
+
+  function removeRow(i: number) {
+    setAssetRows((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  const canContinue = storeId &&
+    assetRows.length > 0 &&
+    assetRows.every((r) => r.assetId && (r.assetId !== OTHER_ASSET || r.customAsset.trim()));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!storeId || !assetId || !description.trim()) return;
-    if (assetId === OTHER_ASSET && !customAsset.trim()) return;
+    if (!storeId || assetRows.length === 0 || !description.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
+      const firstRow = assetRows[0];
       const ticket = await api.createTicket({
-        ...(assetId !== OTHER_ASSET ? { asset: assetId } : {}),
-        ...(assetId === OTHER_ASSET ? { asset_description: customAsset.trim(), store: storeId } : {}),
+        ...(firstRow.assetId !== OTHER_ASSET ? { asset: firstRow.assetId } : {}),
+        ...(firstRow.assetId === OTHER_ASSET ? { asset_description: firstRow.customAsset.trim(), store: storeId } : {}),
         description: description.trim(),
         priority,
         opened_by: user?.id,
       });
+
+      // Add additional assets
+      for (let i = 1; i < assetRows.length; i++) {
+        const row = assetRows[i];
+        if (!row.assetId) continue;
+        await api.addTicketAsset(ticket.id, {
+          ...(row.assetId !== OTHER_ASSET ? { asset_id: row.assetId } : {}),
+          ...(row.assetId === OTHER_ASSET ? { asset_description: row.customAsset.trim() } : {}),
+        });
+      }
+
       setTicketId(ticket.id);
       setStep("photos");
     } catch (err: unknown) {
@@ -109,9 +143,8 @@ function NewTicketForm() {
     setStep("select");
     setStoreId("");
     setAssets([]);
-    setAssetId("");
+    setAssetRows([{ assetId: "", customAsset: "" }]);
     setAssetSearch("");
-    setCustomAsset("");
     setDescription("");
     setPriority("MEDIUM");
     setTicketId(null);
@@ -133,7 +166,7 @@ function NewTicketForm() {
           </div>
         )}
 
-        {/* Step 1: Select store + asset */}
+        {/* Step 1: Select store + assets */}
         {step === "select" && (
           <div className="space-y-5">
             <div>
@@ -148,7 +181,7 @@ function NewTicketForm() {
                 <select
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={storeId}
-                  onChange={(e) => { setStoreId(e.target.value); setAssetId(""); setAssetSearch(""); }}
+                  onChange={(e) => { setStoreId(e.target.value); setAssetSearch(""); }}
                 >
                   <option value="">Select your store…</option>
                   {stores.map((s) => (
@@ -159,16 +192,23 @@ function NewTicketForm() {
             </div>
 
             {storeId && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Equipment <span className="text-red-500">*</span>
-                </label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Equipment <span className="text-red-500">*</span>
+                  </label>
+                  <button type="button" onClick={addRow}
+                    className="flex items-center gap-1 text-blue-600 text-xs font-medium hover:text-blue-700">
+                    <Plus className="w-3.5 h-3.5" /> Add another asset
+                  </button>
+                </div>
+
                 {loadingAssets ? (
                   <div className="flex items-center gap-2 text-slate-400 text-sm py-2">
                     <Loader2 className="w-4 h-4 animate-spin" /> Loading equipment…
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <>
                     <input
                       type="text"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -176,61 +216,76 @@ function NewTicketForm() {
                       value={assetSearch}
                       onChange={(e) => setAssetSearch(e.target.value)}
                     />
-                    <div className="border border-slate-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
-                      {filteredAssets.length === 0 && assetSearch && (
-                        <p className="text-slate-400 text-sm text-center py-4">No results.</p>
-                      )}
-                      {filteredAssets.map((a) => (
-                        <button
-                          key={a.id}
-                          type="button"
-                          className={`w-full text-left px-4 py-3 text-sm border-b border-slate-100 transition-colors ${
-                            assetId === a.id
-                              ? "bg-blue-50 text-blue-700"
-                              : "hover:bg-slate-50 text-slate-800"
-                          }`}
-                          onClick={() => setAssetId(a.id)}
-                        >
-                          <p className="font-medium">{a.name}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {a.model_number && `Model: ${a.model_number}`}
-                            {a.serial_number && ` · S/N: ${a.serial_number}`}
+
+                    {assetRows.map((row, i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-400 w-5 shrink-0">{i + 1}.</span>
+                          <div className="flex-1 border border-slate-200 rounded-lg overflow-hidden max-h-44 overflow-y-auto">
+                            {(assetSearch ? filteredAssets : assets).map((a) => (
+                              <button
+                                key={a.id}
+                                type="button"
+                                className={`w-full text-left px-4 py-2.5 text-sm border-b border-slate-100 transition-colors ${
+                                  row.assetId === a.id
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "hover:bg-slate-50 text-slate-800"
+                                }`}
+                                onClick={() => updateRow(i, { assetId: a.id, customAsset: "" })}
+                              >
+                                <p className="font-medium">{a.name}</p>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                  {a.model_number && `Model: ${a.model_number}`}
+                                  {a.serial_number && ` · S/N: ${a.serial_number}`}
+                                </p>
+                              </button>
+                            ))}
+                            {assets.length === 0 && !assetSearch && (
+                              <p className="text-slate-400 text-sm text-center py-4">No equipment found for this store.</p>
+                            )}
+                            <button
+                              type="button"
+                              className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-t border-slate-100 ${
+                                row.assetId === OTHER_ASSET
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "hover:bg-slate-50 text-slate-500 italic"
+                              }`}
+                              onClick={() => updateRow(i, { assetId: OTHER_ASSET })}
+                            >
+                              Other / Not listed
+                            </button>
+                          </div>
+                          {i > 0 && (
+                            <button type="button" onClick={() => removeRow(i)} className="text-slate-400 hover:text-red-500 shrink-0">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        {row.assetId === OTHER_ASSET && (
+                          <input
+                            type="text"
+                            autoFocus={i === assetRows.length - 1}
+                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 ml-7"
+                            placeholder="Describe the equipment (e.g. Walk-in cooler, POS terminal…)"
+                            value={row.customAsset}
+                            onChange={(e) => updateRow(i, { customAsset: e.target.value })}
+                            required
+                          />
+                        )}
+                        {row.assetId && row.assetId !== OTHER_ASSET && (
+                          <p className="text-xs text-blue-600 ml-7">
+                            Selected: {assets.find((a) => a.id === row.assetId)?.name}
                           </p>
-                        </button>
-                      ))}
-                      {assets.length === 0 && !assetSearch && (
-                        <p className="text-slate-400 text-sm text-center py-4">No equipment found for this store.</p>
-                      )}
-                      <button
-                        type="button"
-                        className={`w-full text-left px-4 py-3 text-sm transition-colors border-t border-slate-100 ${
-                          assetId === OTHER_ASSET
-                            ? "bg-amber-50 text-amber-700"
-                            : "hover:bg-slate-50 text-slate-500 italic"
-                        }`}
-                        onClick={() => setAssetId(OTHER_ASSET)}
-                      >
-                        Other / Not listed
-                      </button>
-                    </div>
-                    {assetId === OTHER_ASSET && (
-                      <input
-                        type="text"
-                        autoFocus
-                        className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 mt-1"
-                        placeholder="Describe the equipment (e.g. Walk-in cooler, POS terminal…)"
-                        value={customAsset}
-                        onChange={(e) => setCustomAsset(e.target.value)}
-                        required
-                      />
-                    )}
-                  </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
             )}
 
             <button
-              disabled={!storeId || !assetId || (assetId === OTHER_ASSET && !customAsset.trim())}
+              disabled={!canContinue}
               className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
               onClick={() => setStep("describe")}
             >
@@ -240,18 +295,23 @@ function NewTicketForm() {
         )}
 
         {/* Step 2: Describe the issue */}
-        {step === "describe" && (assetId === OTHER_ASSET || selectedAsset) && (
+        {step === "describe" && (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="bg-slate-50 rounded-lg border border-slate-200 px-4 py-3">
               <p className="text-xs text-slate-400 mb-0.5">Selected Equipment</p>
-              <p className="font-semibold text-slate-800">
-                {assetId === OTHER_ASSET ? customAsset : selectedAsset?.name}
-              </p>
-              <p className="text-slate-500 text-xs mt-0.5">
-                {selectedStore?.name}
-                {assetId !== OTHER_ASSET && selectedAsset?.serial_number && ` · S/N: ${selectedAsset.serial_number}`}
-                {assetId === OTHER_ASSET && <span className="text-amber-600"> · Not in asset registry</span>}
-              </p>
+              <div className="flex flex-wrap gap-1">
+                {assetRows.map((row, i) => {
+                  const name = row.assetId === OTHER_ASSET
+                    ? row.customAsset
+                    : assets.find((a) => a.id === row.assetId)?.name ?? "";
+                  return (
+                    <span key={i} className="inline-block bg-blue-50 text-blue-700 text-xs font-medium px-2 py-0.5 rounded">
+                      {name}
+                    </span>
+                  );
+                })}
+              </div>
+              <p className="text-slate-500 text-xs mt-1">{selectedStore?.name}</p>
             </div>
 
             <div>

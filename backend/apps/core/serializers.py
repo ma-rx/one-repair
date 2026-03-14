@@ -2,8 +2,9 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from .models import (
-    Asset, Organization, Part, PartUsed, PricingConfig,
-    ServiceReport, Store, Ticket, TimeEntry, UserProfile, WorkImage,
+    Asset, Organization, Part, PartRequest, PartRequestStatus, PartRequestUrgency,
+    PartUsed, PricingConfig, ServiceReport, Store, Ticket, TicketAsset,
+    TimeEntry, UserProfile, WorkImage,
 )
 
 
@@ -118,6 +119,7 @@ class PartSerializer(serializers.ModelSerializer):
             "id", "name", "sku", "category", "asset_category",
             "make", "model_number",
             "quantity_on_hand", "low_stock_threshold", "unit_price",
+            "selling_price", "vendor",
             "is_low_stock", "created_at", "updated_at",
         ]
 
@@ -179,6 +181,21 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         ]
 
 
+# ── TicketAsset ───────────────────────────────────────────────────────────────
+
+class TicketAssetSerializer(serializers.ModelSerializer):
+    asset_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TicketAsset
+        fields = ["id", "asset", "asset_name", "asset_description", "symptom_code", "resolution_code", "created_at"]
+
+    def get_asset_name(self, obj):
+        if obj.asset:
+            return obj.asset.name
+        return obj.asset_description or "Unlisted Equipment"
+
+
 # ── Ticket ────────────────────────────────────────────────────────────────────
 
 class TicketSerializer(serializers.ModelSerializer):
@@ -187,6 +204,7 @@ class TicketSerializer(serializers.ModelSerializer):
     store_address      = serializers.SerializerMethodField()
     assigned_tech_name = serializers.SerializerMethodField()
     service_reports    = ServiceReportSerializer(many=True, read_only=True)
+    assets             = TicketAssetSerializer(source="ticket_assets", many=True, read_only=True)
 
     class Meta:
         model = Ticket
@@ -196,10 +214,13 @@ class TicketSerializer(serializers.ModelSerializer):
             "symptom_code", "description", "priority", "status", "scheduled_date",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
-            "service_reports", "created_at", "updated_at",
+            "assets", "service_reports", "created_at", "updated_at",
         ]
 
     def get_asset_name(self, obj):
+        first = obj.ticket_assets.select_related("asset").first()
+        if first:
+            return first.asset.name if first.asset else (first.asset_description or "Unlisted Equipment")
         if obj.asset:
             return obj.asset.name
         return obj.asset_description or "Unlisted Equipment"
@@ -224,11 +245,64 @@ class TicketSerializer(serializers.ModelSerializer):
         return None
 
 
+# ── PartRequest ───────────────────────────────────────────────────────────────
+
+class PartRequestSerializer(serializers.ModelSerializer):
+    part_name_display = serializers.SerializerMethodField()
+    ticket_summary    = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PartRequest
+        fields = [
+            "id", "ticket", "ticket_summary",
+            "part", "part_name_display",
+            "part_name", "sku", "asset_category", "make", "model_number",
+            "vendor", "cost_price", "selling_price",
+            "quantity_needed", "urgency", "notes",
+            "status", "tracking_number",
+            "approved_by_ors_at", "approved_by_client_at", "ordered_at", "delivered_at",
+            "created_at", "updated_at",
+        ]
+
+    def get_part_name_display(self, obj):
+        return obj.part.name if obj.part else obj.part_name
+
+    def get_ticket_summary(self, obj):
+        t = obj.ticket
+        first_ta = t.ticket_assets.filter(asset__isnull=False).first()
+        if first_ta:
+            asset_name = first_ta.asset.name
+        else:
+            any_ta = t.ticket_assets.first()
+            asset_name = any_ta.asset_description if any_ta else ""
+        return {
+            "id": str(t.id),
+            "store_name": t.store.name if t.store else "",
+            "asset_name": asset_name,
+            "status": t.status,
+        }
+
+
 # ── Action serializers ────────────────────────────────────────────────────────
 
 class AssignTechSerializer(serializers.Serializer):
     tech_id        = serializers.IntegerField()
     scheduled_date = serializers.DateField(required=False, allow_null=True)
+
+
+class PartRequestInputSerializer(serializers.Serializer):
+    part_id        = serializers.UUIDField(required=False, allow_null=True)
+    part_name      = serializers.CharField(required=False, allow_blank=True, default="")
+    sku            = serializers.CharField(required=False, allow_blank=True, default="")
+    asset_category = serializers.CharField(required=False, allow_blank=True, default="")
+    make           = serializers.CharField(required=False, allow_blank=True, default="")
+    model_number   = serializers.CharField(required=False, allow_blank=True, default="")
+    vendor         = serializers.CharField(required=False, allow_blank=True, default="")
+    cost_price     = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    selling_price  = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    quantity_needed = serializers.IntegerField(min_value=1, default=1)
+    urgency        = serializers.ChoiceField(choices=["ASAP", "NEXT_VISIT"], default="NEXT_VISIT")
+    notes          = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class CloseTicketSerializer(serializers.Serializer):
@@ -237,6 +311,7 @@ class CloseTicketSerializer(serializers.Serializer):
     )
     labor_cost       = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
     parts_used       = PartUsedInputSerializer(many=True, required=False, default=list)
+    parts_needed     = PartRequestInputSerializer(many=True, required=False, default=list)
     invoice_email    = serializers.EmailField(required=False, allow_blank=True)
     tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
     formatted_report = serializers.CharField(required=False, allow_blank=True, default="")

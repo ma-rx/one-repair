@@ -53,7 +53,17 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">{ticket.asset_name}</h1>
+          {ticket.assets && ticket.assets.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              {ticket.assets.map((ta) => (
+                <span key={ta.id} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                  {ta.asset_name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <h1 className="text-xl font-bold text-slate-900">{ticket.asset_name}</h1>
+          )}
           <p className="text-slate-500 text-sm mt-0.5">{ticket.store_name}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

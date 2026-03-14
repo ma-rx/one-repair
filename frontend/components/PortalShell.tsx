@@ -11,6 +11,7 @@ import {
   FileText,
   LogOut,
   BarChart2,
+  Package,
 } from "lucide-react";
 
 const portalNav = [
@@ -18,6 +19,7 @@ const portalNav = [
   { label: "Tickets",   href: "/portal/tickets",  icon: ClipboardList },
   { label: "Stores",    href: "/portal/stores",   icon: MapPin        },
   { label: "Assets",    href: "/portal/assets",   icon: Cpu           },
+  { label: "Parts",     href: "/portal/parts",    icon: Package       },
   { label: "Invoices",  href: "/portal/invoices", icon: FileText      },
   { label: "Analytics", href: "/portal/kpis",     icon: BarChart2     },
 ];

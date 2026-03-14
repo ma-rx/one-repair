@@ -114,3 +114,33 @@ export const AssetStatusLabels: Record<string, string> = {
   OUT_OF_SERVICE:    "Out of Service",
   DECOMMISSIONED:    "Decommissioned",
 };
+
+export const PartRequestUrgency = {
+  ASAP:       "ASAP",
+  NEXT_VISIT: "NEXT_VISIT",
+} as const;
+
+export const PartRequestUrgencyLabels: Record<string, string> = {
+  ASAP:       "ASAP",
+  NEXT_VISIT: "Next Visit",
+};
+
+export const PartRequestStatus = {
+  PENDING:         "PENDING",
+  APPROVED_ORS:    "APPROVED_ORS",
+  SENT_TO_CLIENT:  "SENT_TO_CLIENT",
+  APPROVED_CLIENT: "APPROVED_CLIENT",
+  DENIED:          "DENIED",
+  ORDERED:         "ORDERED",
+  DELIVERED:       "DELIVERED",
+} as const;
+
+export const PartRequestStatusLabels: Record<string, string> = {
+  PENDING:         "Pending ORS Review",
+  APPROVED_ORS:    "Approved by ORS",
+  SENT_TO_CLIENT:  "Sent to Client",
+  APPROVED_CLIENT: "Approved by Client",
+  DENIED:          "Denied",
+  ORDERED:         "Ordered",
+  DELIVERED:       "Delivered",
+};

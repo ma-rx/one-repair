@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, Ticket, Asset, WorkImage } from "@/lib/api";
-import { LogOut, Plus, Loader2, X, Wrench, Camera, CheckCircle2 } from "lucide-react";
+import { LogOut, Plus, Loader2, X, Wrench, Camera, CheckCircle2, Trash2 } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
@@ -15,6 +15,13 @@ const statusStyle: Record<string, string> = {
 
 type FormStep = "form" | "photos" | "success";
 
+const OTHER_ASSET = "__other__";
+
+interface AssetRow {
+  assetId: string;
+  customAsset: string;
+}
+
 export default function ManagerPage() {
   const { user, logout } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -23,11 +30,8 @@ export default function ManagerPage() {
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState<FormStep>("form");
 
-  const OTHER_ASSET = "__other__";
-
-  // Form state
-  const [assetId, setAssetId] = useState("");
-  const [customAsset, setCustomAsset] = useState("");
+  // Multi-asset rows
+  const [assetRows, setAssetRows] = useState<AssetRow[]>([{ assetId: "", customAsset: "" }]);
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [submitting, setSubmitting] = useState(false);
@@ -54,20 +58,48 @@ export default function ManagerPage() {
       .finally(() => setLoading(false));
   }, [storeId]);
 
+  function updateRow(i: number, patch: Partial<AssetRow>) {
+    setAssetRows((prev) => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  }
+
+  function addRow() {
+    setAssetRows((prev) => [...prev, { assetId: "", customAsset: "" }]);
+  }
+
+  function removeRow(i: number) {
+    setAssetRows((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!assetId || !description.trim()) { setFormError("Select equipment and describe the issue."); return; }
-    if (assetId === OTHER_ASSET && !customAsset.trim()) { setFormError("Describe the equipment."); return; }
+    const validRows = assetRows.filter((r) => r.assetId);
+    if (validRows.length === 0 || !description.trim()) {
+      setFormError("Select at least one piece of equipment and describe the issue.");
+      return;
+    }
+    const badOther = validRows.filter((r) => r.assetId === OTHER_ASSET && !r.customAsset.trim());
+    if (badOther.length > 0) { setFormError("Describe the unlisted equipment."); return; }
     setFormError("");
     setSubmitting(true);
     try {
+      const firstRow = validRows[0];
       const ticket = await api.createTicket({
-        ...(assetId !== OTHER_ASSET ? { asset: assetId } : {}),
-        ...(assetId === OTHER_ASSET ? { asset_description: customAsset.trim(), store: storeId ?? undefined } : {}),
+        ...(firstRow.assetId !== OTHER_ASSET ? { asset: firstRow.assetId } : {}),
+        ...(firstRow.assetId === OTHER_ASSET ? { asset_description: firstRow.customAsset.trim(), store: storeId ?? undefined } : {}),
         description: description.trim(),
         priority,
         opened_by: user?.id,
       });
+
+      // Add additional assets
+      for (let i = 1; i < validRows.length; i++) {
+        const row = validRows[i];
+        await api.addTicketAsset(ticket.id, {
+          ...(row.assetId !== OTHER_ASSET ? { asset_id: row.assetId } : {}),
+          ...(row.assetId === OTHER_ASSET ? { asset_description: row.customAsset.trim() } : {}),
+        });
+      }
+
       setTicketId(ticket.id);
       setTickets((prev) => [ticket, ...prev]);
       setFormStep("photos");
@@ -101,8 +133,7 @@ export default function ManagerPage() {
   function closeForm() {
     setShowForm(false);
     setFormStep("form");
-    setAssetId("");
-    setCustomAsset("");
+    setAssetRows([{ assetId: "", customAsset: "" }]);
     setDescription("");
     setPriority("MEDIUM");
     setTicketId(null);
@@ -154,27 +185,46 @@ export default function ManagerPage() {
             {formStep === "form" && (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Equipment</label>
-                  <select
-                    value={assetId}
-                    onChange={(e) => setAssetId(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select equipment…</option>
-                    {assets.map((a) => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-slate-700">Equipment</label>
+                    <button type="button" onClick={addRow}
+                      className="flex items-center gap-1 text-blue-600 text-xs font-medium hover:text-blue-700">
+                      <Plus className="w-3.5 h-3.5" /> Add another
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {assetRows.map((row, i) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={row.assetId}
+                            onChange={(e) => updateRow(i, { assetId: e.target.value, customAsset: "" })}
+                            className="flex-1 border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Select equipment…</option>
+                            {assets.map((a) => (
+                              <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                            <option value={OTHER_ASSET}>Other / Not listed</option>
+                          </select>
+                          {i > 0 && (
+                            <button type="button" onClick={() => removeRow(i)} className="text-slate-400 hover:text-red-500">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        {row.assetId === OTHER_ASSET && (
+                          <input
+                            type="text"
+                            className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            placeholder="Describe the equipment (e.g. Walk-in cooler, POS terminal…)"
+                            value={row.customAsset}
+                            onChange={(e) => updateRow(i, { customAsset: e.target.value })}
+                          />
+                        )}
+                      </div>
                     ))}
-                    <option value={OTHER_ASSET}>Other / Not listed</option>
-                  </select>
-                  {assetId === OTHER_ASSET && (
-                    <input
-                      type="text"
-                      className="w-full mt-2 border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                      placeholder="Describe the equipment (e.g. Walk-in cooler, POS terminal…)"
-                      value={customAsset}
-                      onChange={(e) => setCustomAsset(e.target.value)}
-                    />
-                  )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Describe the issue</label>
@@ -292,7 +342,11 @@ export default function ManagerPage() {
               <a key={t.id} href={`/manager/tickets/${t.id}`} className="block bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium text-slate-800">{t.asset_name}</p>
+                    <p className="font-medium text-slate-800">
+                      {t.assets && t.assets.length > 0
+                        ? t.assets.map((ta) => ta.asset_name).join(", ")
+                        : t.asset_name}
+                    </p>
                     <p className="text-slate-500 text-sm mt-0.5">
                       {t.description || "No description"}
                     </p>

@@ -13,6 +13,9 @@ const ROLE_ALLOWED: Record<string, string[]> = {
   TECH:           ["/tech", "/scan"],
 };
 
+// Note: /dispatch/parts is covered by /dispatch prefix for ORS_ADMIN.
+// /portal/parts is covered by /portal prefix for CLIENT_ADMIN.
+
 const ROLE_DEFAULTS: Record<string, string> = {
   ORS_ADMIN:      "/dispatch",
   CLIENT_ADMIN:   "/portal",

@@ -16,15 +16,17 @@ import requests as http_requests
 from rest_framework.parsers import MultiPartParser
 
 from .models import (
-    Asset, AssetStatus, Organization, Part, PartUsed, PricingConfig,
-    ServiceReport, Store, Ticket, TicketStatus, TimeEntry, UserRole, WorkImage,
+    Asset, AssetStatus, Organization, Part, PartRequest, PartRequestStatus,
+    PartUsed, PricingConfig, ServiceReport, Store, Ticket, TicketAsset,
+    TicketStatus, TimeEntry, UserRole, WorkImage,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    CreateUserSerializer, OrganizationSerializer, PartSerializer,
-    PricingConfigSerializer, ServiceReportSerializer, StoreSerializer,
-    TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
+    CreateUserSerializer, OrganizationSerializer, PartRequestSerializer,
+    PartSerializer, PricingConfigSerializer, ServiceReportSerializer,
+    StoreSerializer, TicketAssetSerializer, TicketSerializer,
+    TimeEntrySerializer, UserSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -216,7 +218,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
         base = Ticket.objects.select_related(
             "asset__store__organization", "store__organization", "assigned_tech"
-        ).prefetch_related("service_reports__parts_used__part")
+        ).prefetch_related("service_reports__parts_used__part", "ticket_assets__asset")
 
         if profile is None:
             return Ticket.objects.none()
@@ -293,6 +295,52 @@ class TicketViewSet(viewsets.ModelViewSet):
         ticket.save(update_fields=["scheduled_date", "updated_at"])
         return Response(TicketSerializer(ticket).data)
 
+    @action(detail=True, methods=["post"], url_path="add-asset")
+    def add_asset(self, request, pk=None):
+        ticket = self.get_object()
+        asset_id = request.data.get("asset_id")
+        asset_description = request.data.get("asset_description", "")
+
+        asset = None
+        if asset_id:
+            try:
+                asset = Asset.objects.get(pk=asset_id)
+            except Asset.DoesNotExist:
+                return Response({"detail": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        ta = TicketAsset.objects.create(
+            ticket=ticket,
+            asset=asset,
+            asset_description=asset_description,
+        )
+        return Response(TicketAssetSerializer(ta).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"remove-asset/(?P<ta_id>[^/.]+)")
+    def remove_asset(self, request, pk=None, ta_id=None):
+        ticket = self.get_object()
+        try:
+            ta = TicketAsset.objects.get(pk=ta_id, ticket=ticket)
+        except TicketAsset.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        ta.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["patch"], url_path=r"update-asset/(?P<ta_id>[^/.]+)")
+    def update_asset_codes(self, request, pk=None, ta_id=None):
+        ticket = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            ta = TicketAsset.objects.get(pk=ta_id, ticket=ticket)
+        except TicketAsset.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if "symptom_code" in request.data:
+            ta.symptom_code = request.data["symptom_code"]
+        if "resolution_code" in request.data:
+            ta.resolution_code = request.data["resolution_code"]
+        ta.save()
+        return Response(TicketAssetSerializer(ta).data)
+
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request, pk=None):
         ticket = self.get_object()
@@ -356,10 +404,36 @@ class TicketViewSet(viewsets.ModelViewSet):
                     service_report=service_report,
                     part=part,
                     quantity=pu_input["quantity"],
-                    unit_price_at_time=part.unit_price,
+                    unit_price_at_time=part.selling_price,
                 )
                 part.quantity_on_hand -= pu_input["quantity"]
                 part.save(update_fields=["quantity_on_hand", "updated_at"])
+
+            for pn_input in data.get("parts_needed", []):
+                pr_kwargs = {
+                    "ticket": ticket,
+                    "quantity_needed": pn_input.get("quantity_needed", 1),
+                    "urgency": pn_input.get("urgency", "NEXT_VISIT"),
+                    "notes": pn_input.get("notes", ""),
+                }
+                if pn_input.get("part_id"):
+                    try:
+                        part_obj = Part.objects.get(pk=pn_input["part_id"])
+                        pr_kwargs["part"] = part_obj
+                    except Part.DoesNotExist:
+                        pass
+                else:
+                    pr_kwargs.update({
+                        "part_name": pn_input.get("part_name", ""),
+                        "sku": pn_input.get("sku", ""),
+                        "asset_category": pn_input.get("asset_category", ""),
+                        "make": pn_input.get("make", ""),
+                        "model_number": pn_input.get("model_number", ""),
+                        "vendor": pn_input.get("vendor", ""),
+                        "cost_price": pn_input.get("cost_price"),
+                        "selling_price": pn_input.get("selling_price"),
+                    })
+                PartRequest.objects.create(**pr_kwargs)
 
             ticket.status = TicketStatus.CLOSED
             ticket.closed_at = timezone.now()
@@ -388,6 +462,164 @@ class TicketViewSet(viewsets.ModelViewSet):
             ServiceReportSerializer(service_report).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+# ── Part Requests ─────────────────────────────────────────────────────────────
+
+class PartRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = PartRequestSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = PartRequest.objects.select_related(
+            "ticket__store", "part", "ticket"
+        ).prefetch_related("ticket__ticket_assets__asset")
+        user = self.request.user
+        profile = getattr(user, "profile", None)
+        if profile and profile.role == UserRole.ORS_ADMIN:
+            pass
+        elif profile and profile.role == UserRole.CLIENT_ADMIN:
+            org = profile.organization
+            qs = qs.filter(
+                ticket__store__organization=org,
+                status__in=[
+                    PartRequestStatus.SENT_TO_CLIENT,
+                    PartRequestStatus.APPROVED_CLIENT,
+                    PartRequestStatus.DENIED,
+                    PartRequestStatus.ORDERED,
+                    PartRequestStatus.DELIVERED,
+                ],
+            )
+        elif profile and profile.role == UserRole.TECH:
+            qs = qs.filter(ticket__assigned_tech=user)
+        else:
+            qs = qs.none()
+
+        ticket_id = self.request.query_params.get("ticket")
+        if ticket_id:
+            qs = qs.filter(ticket_id=ticket_id)
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+
+    @action(detail=True, methods=["post"], url_path="approve-ors")
+    def approve_ors(self, request, pk=None):
+        pr = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = PartRequestStatus.APPROVED_ORS
+        pr.approved_by_ors_at = timezone.now()
+        pr.save(update_fields=["status", "approved_by_ors_at", "updated_at"])
+        return Response(PartRequestSerializer(pr).data)
+
+    @action(detail=True, methods=["post"], url_path="send-to-client")
+    def send_to_client(self, request, pk=None):
+        pr = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = PartRequestStatus.SENT_TO_CLIENT
+        pr.save(update_fields=["status", "updated_at"])
+        return Response(PartRequestSerializer(pr).data)
+
+    @action(detail=True, methods=["post"], url_path="approve-client")
+    def approve_client(self, request, pk=None):
+        pr = self.get_object()
+        role = getattr(request.user.profile, "role", None)
+        if role not in [UserRole.ORS_ADMIN, UserRole.CLIENT_ADMIN]:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = PartRequestStatus.APPROVED_CLIENT
+        pr.approved_by_client_at = timezone.now()
+        pr.save(update_fields=["status", "approved_by_client_at", "updated_at"])
+        return Response(PartRequestSerializer(pr).data)
+
+    @action(detail=True, methods=["post"], url_path="deny")
+    def deny(self, request, pk=None):
+        pr = self.get_object()
+        role = getattr(request.user.profile, "role", None)
+        if role not in [UserRole.ORS_ADMIN, UserRole.CLIENT_ADMIN]:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = PartRequestStatus.DENIED
+        pr.save(update_fields=["status", "updated_at"])
+        return Response(PartRequestSerializer(pr).data)
+
+    @action(detail=True, methods=["post"], url_path="mark-ordered")
+    def mark_ordered(self, request, pk=None):
+        pr = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = PartRequestStatus.ORDERED
+        pr.tracking_number = request.data.get("tracking_number", "")
+        pr.ordered_at = timezone.now()
+        pr.save(update_fields=["status", "tracking_number", "ordered_at", "updated_at"])
+        return Response(PartRequestSerializer(pr).data)
+
+    @action(detail=True, methods=["post"], url_path="mark-delivered")
+    def mark_delivered(self, request, pk=None):
+        pr = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = PartRequestStatus.DELIVERED
+        pr.delivered_at = timezone.now()
+        pr.save(update_fields=["status", "delivered_at", "updated_at"])
+        return Response(PartRequestSerializer(pr).data)
+
+    @action(detail=True, methods=["post"], url_path="generate-followup")
+    def generate_followup(self, request, pk=None):
+        pr = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        if pr.status != PartRequestStatus.DELIVERED:
+            return Response({"detail": "Parts must be delivered first."}, status=status.HTTP_400_BAD_REQUEST)
+        orig = pr.ticket
+        new_ticket = Ticket.objects.create(
+            store=orig.store,
+            asset=orig.asset,
+            asset_description=orig.asset_description,
+            description=f"Follow-up: parts delivered for original ticket. Part: {pr.part.name if pr.part else pr.part_name}",
+            priority=orig.priority,
+            status=TicketStatus.OPEN,
+            opened_by=request.user,
+        )
+        for ta in orig.ticket_assets.all():
+            TicketAsset.objects.create(
+                ticket=new_ticket,
+                asset=ta.asset,
+                asset_description=ta.asset_description,
+            )
+        return Response(TicketSerializer(new_ticket).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch"], url_path="update-part-details")
+    def update_part_details(self, request, pk=None):
+        pr = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        fields = ["part_name", "sku", "asset_category", "make", "model_number", "vendor", "cost_price", "selling_price"]
+        for field in fields:
+            if field in request.data:
+                setattr(pr, field, request.data[field])
+        pr.save()
+
+        if request.data.get("promote_to_inventory"):
+            new_part = Part.objects.create(
+                name=pr.part_name,
+                sku=pr.sku,
+                asset_category=pr.asset_category or "OTHER",
+                make=pr.make,
+                model_number=pr.model_number,
+                vendor=pr.vendor,
+                unit_price=pr.cost_price or 0,
+                selling_price=pr.selling_price or 0,
+                quantity_on_hand=0,
+            )
+            pr.part = new_part
+            pr.save(update_fields=["part"])
+
+        return Response(PartRequestSerializer(pr).data)
 
 
 # ── Service Reports ───────────────────────────────────────────────────────────

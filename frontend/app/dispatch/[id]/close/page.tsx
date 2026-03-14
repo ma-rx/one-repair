@@ -4,15 +4,41 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
 import {
-  api, Part, PricingConfig, Ticket, TimeEntryStatus, WorkImage,
+  api, Part, PartRequestInput, PricingConfig, Ticket, TimeEntryStatus, WorkImage,
 } from "@/lib/api";
-import { ResolutionCodeLabels, SymptomCodeLabels } from "@/types/enums";
+import { ResolutionCodeLabels, SymptomCodeLabels, AssetCategoryLabels } from "@/types/enums";
 import {
-  AlertCircle, CheckCircle2, Clock, FileText,
+  AlertCircle, CheckCircle2, ChevronDown, Clock, FileText,
   Loader2, Plus, RefreshCw, Trash2, X, Sparkles,
 } from "lucide-react";
 
 interface PartLine { part_id: string; quantity: number }
+
+interface PartNeededLine {
+  mode: "existing" | "new";
+  part_id: string;
+  part_name_display: string;
+  part_name: string;
+  sku: string;
+  asset_category: string;
+  make: string;
+  model_number: string;
+  vendor: string;
+  cost_price: string;
+  selling_price: string;
+  quantity_needed: number;
+  urgency: "ASAP" | "NEXT_VISIT";
+  notes: string;
+}
+
+function emptyNeededLine(): PartNeededLine {
+  return {
+    mode: "new", part_id: "", part_name_display: "",
+    part_name: "", sku: "", asset_category: "", make: "",
+    model_number: "", vendor: "", cost_price: "", selling_price: "",
+    quantity_needed: 1, urgency: "NEXT_VISIT", notes: "",
+  };
+}
 
 function formatMinutes(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -23,6 +49,91 @@ function formatMinutes(minutes: number) {
 function calcLabor(totalMin: number, pricing: PricingConfig) {
   const hours = Math.max(parseFloat(pricing.min_hours), totalMin / 60);
   return parseFloat(pricing.trip_charge) + hours * parseFloat(pricing.hourly_rate);
+}
+
+function PartsCombobox({
+  parts,
+  value,
+  onChange,
+  placeholder,
+}: {
+  parts: Part[];
+  value: string;
+  onChange: (id: string, name: string) => void;
+  placeholder?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = parts.find((p) => p.id === value);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = parts.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku.toLowerCase().includes(search.toLowerCase()) ||
+      p.make.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div ref={ref} className="relative flex-1">
+      <div
+        className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
+        onClick={() => setOpen(true)}
+      >
+        {selected ? (
+          <span className="flex-1 text-slate-800">{selected.name}</span>
+        ) : (
+          <input
+            className="flex-1 outline-none bg-transparent text-slate-800 placeholder-slate-400"
+            placeholder={placeholder ?? "Search parts…"}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+          />
+        )}
+        {selected ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange("", ""); setSearch(""); }}
+            className="text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+        )}
+      </div>
+      {open && !selected && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-400">No results found</p>
+          ) : (
+            filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                onClick={() => { onChange(p.id, p.name); setOpen(false); setSearch(""); }}
+              >
+                <p className="font-medium text-slate-800">{p.name}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {p.sku && `SKU: ${p.sku} · `}qty: {p.quantity_on_hand} · ${p.selling_price}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CloseTicketPage() {
@@ -52,6 +163,7 @@ export default function CloseTicketPage() {
 
   const [resolutionCode, setResolutionCode] = useState("");
   const [partLines, setPartLines]           = useState<PartLine[]>([]);
+  const [neededLines, setNeededLines]       = useState<PartNeededLine[]>([]);
   const [invoiceEmail, setInvoiceEmail]     = useState("");
   const [submitting, setSubmitting]         = useState(false);
 
@@ -131,19 +243,46 @@ export default function CloseTicketPage() {
   function calcPartsTotal() {
     return partLines.reduce((sum, line) => {
       const part = parts.find((p) => p.id === line.part_id);
-      return sum + (part ? parseFloat(part.unit_price) * line.quantity : 0);
+      return sum + (part ? parseFloat(part.selling_price || part.unit_price) * line.quantity : 0);
     }, 0);
+  }
+
+  function updateNeeded(i: number, patch: Partial<PartNeededLine>) {
+    setNeededLines((prev) => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!resolutionCode) return;
     setSubmitting(true); setError(null);
+
+    const parts_needed: PartRequestInput[] = neededLines
+      .filter((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim())
+      .map((l) => {
+        if (l.mode === "existing") {
+          return { part_id: l.part_id, quantity_needed: l.quantity_needed, urgency: l.urgency, notes: l.notes };
+        }
+        return {
+          part_name: l.part_name,
+          sku: l.sku,
+          asset_category: l.asset_category,
+          make: l.make,
+          model_number: l.model_number,
+          vendor: l.vendor,
+          cost_price: l.cost_price || undefined,
+          selling_price: l.selling_price || undefined,
+          quantity_needed: l.quantity_needed,
+          urgency: l.urgency,
+          notes: l.notes,
+        };
+      });
+
     try {
       await api.closeTicket(id, {
         resolution_code: resolutionCode,
         labor_cost: null,
         parts_used: partLines.filter((l) => l.part_id && l.quantity > 0),
+        parts_needed,
         invoice_email: invoiceEmail || undefined,
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
@@ -192,7 +331,18 @@ export default function CloseTicketPage() {
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-3">Ticket Summary</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-slate-400 text-xs">Asset</p><p className="font-medium text-slate-800">{ticket.asset_name}</p></div>
+                <div>
+                  <p className="text-slate-400 text-xs">Equipment</p>
+                  {ticket.assets && ticket.assets.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {ticket.assets.map((ta) => (
+                        <span key={ta.id} className="inline-block px-2 py-0.5 bg-slate-100 rounded text-xs font-medium text-slate-700">{ta.asset_name}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="font-medium text-slate-800">{ticket.asset_name}</p>
+                  )}
+                </div>
                 <div><p className="text-slate-400 text-xs">Store</p><p className="font-medium text-slate-800">{ticket.store_name}</p></div>
                 <div><p className="text-slate-400 text-xs">Symptom</p><p className="font-medium text-slate-800">{SymptomCodeLabels[ticket.symptom_code] ?? ticket.symptom_code}</p></div>
                 <div><p className="text-slate-400 text-xs">Assigned Tech</p><p className="font-medium text-slate-800">{ticket.assigned_tech_name ?? "Unassigned"}</p></div>
@@ -341,23 +491,111 @@ export default function CloseTicketPage() {
               {partLines.length === 0 && <p className="text-slate-400 text-sm text-center py-3">No parts added</p>}
               {partLines.map((line, i) => {
                 const sel = parts.find((p) => p.id === line.part_id);
+                const price = sel ? parseFloat(sel.selling_price || sel.unit_price) : 0;
                 return (
                   <div key={i} className="flex items-center gap-3">
-                    <select className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={line.part_id} onChange={(e) => setPartLines((prev) => prev.map((l, idx) => idx === i ? { ...l, part_id: e.target.value } : l))}>
-                      <option value="">Select part…</option>
-                      {parts.map((p) => <option key={p.id} value={p.id} disabled={p.quantity_on_hand === 0}>{p.name} (qty: {p.quantity_on_hand}) — ${p.unit_price}</option>)}
-                    </select>
+                    <PartsCombobox
+                      parts={parts}
+                      value={line.part_id}
+                      onChange={(pid) => setPartLines((prev) => prev.map((l, idx) => idx === i ? { ...l, part_id: pid } : l))}
+                      placeholder="Search parts by name, SKU, or make…"
+                    />
                     <input type="number" min="1" max={sel?.quantity_on_hand ?? 999}
                       className="w-20 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       value={line.quantity} onChange={(e) => setPartLines((prev) => prev.map((l, idx) => idx === i ? { ...l, quantity: parseInt(e.target.value) || 1 } : l))} />
-                    {sel && <span className="text-slate-500 text-sm w-20 text-right shrink-0">${(parseFloat(sel.unit_price) * line.quantity).toFixed(2)}</span>}
+                    {sel && <span className="text-slate-500 text-sm w-20 text-right shrink-0">${(price * line.quantity).toFixed(2)}</span>}
                     <button type="button" onClick={() => setPartLines((p) => p.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 );
               })}
+            </div>
+
+            {/* Parts needed */}
+            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Parts Needed</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Parts to order for a follow-up visit</p>
+                </div>
+                <button type="button" onClick={() => setNeededLines((p) => [...p, emptyNeededLine()])}
+                  className="flex items-center gap-1.5 text-amber-600 text-sm font-medium hover:text-amber-700">
+                  <Plus className="w-4 h-4" /> Add Part Needed
+                </button>
+              </div>
+              {neededLines.length === 0 && <p className="text-slate-400 text-sm text-center py-3">No parts needed</p>}
+              {neededLines.map((line, i) => (
+                <div key={i} className="border border-amber-100 rounded-lg bg-amber-50 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateNeeded(i, { mode: "existing", part_id: "", part_name_display: "" })}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${line.mode === "existing" ? "bg-amber-500 text-white" : "bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"}`}
+                      >
+                        From Inventory
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateNeeded(i, { mode: "new", part_id: "", part_name_display: "" })}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${line.mode === "new" ? "bg-amber-500 text-white" : "bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"}`}
+                      >
+                        New Part
+                      </button>
+                    </div>
+                    <button type="button" onClick={() => setNeededLines((p) => p.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {line.mode === "existing" ? (
+                    <PartsCombobox
+                      parts={parts}
+                      value={line.part_id}
+                      onChange={(pid, name) => updateNeeded(i, { part_id: pid, part_name_display: name })}
+                      placeholder="Search inventory parts…"
+                    />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <input className="col-span-2 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="Part name *" value={line.part_name} onChange={(e) => updateNeeded(i, { part_name: e.target.value })} />
+                      <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="Make" value={line.make} onChange={(e) => updateNeeded(i, { make: e.target.value })} />
+                      <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="Model number" value={line.model_number} onChange={(e) => updateNeeded(i, { model_number: e.target.value })} />
+                      <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="SKU" value={line.sku} onChange={(e) => updateNeeded(i, { sku: e.target.value })} />
+                      <input className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        placeholder="Vendor" value={line.vendor} onChange={(e) => updateNeeded(i, { vendor: e.target.value })} />
+                      <select className="col-span-2 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                        value={line.asset_category} onChange={(e) => updateNeeded(i, { asset_category: e.target.value })}>
+                        <option value="">Equipment category (optional)</option>
+                        {Object.entries(AssetCategoryLabels).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-500">Qty</label>
+                      <input type="number" min="1"
+                        className="w-16 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        value={line.quantity_needed} onChange={(e) => updateNeeded(i, { quantity_needed: parseInt(e.target.value) || 1 })} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-500">Urgency</label>
+                      <select className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                        value={line.urgency} onChange={(e) => updateNeeded(i, { urgency: e.target.value as "ASAP" | "NEXT_VISIT" })}>
+                        <option value="NEXT_VISIT">Next Visit</option>
+                        <option value="ASAP">ASAP</option>
+                      </select>
+                    </div>
+                  </div>
+                  <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="Notes (optional)" value={line.notes} onChange={(e) => updateNeeded(i, { notes: e.target.value })} />
+                </div>
+              ))}
             </div>
 
             {/* Invoice + totals */}
@@ -380,7 +618,7 @@ export default function CloseTicketPage() {
                 </>}
                 <div className="flex justify-between text-slate-500"><span>Parts subtotal</span><span>${calcPartsTotal().toFixed(2)}</span></div>
                 <div className="flex justify-between font-bold text-slate-900 text-base pt-1 border-t border-slate-200"><span>Estimated Total</span><span>${grandTotal.toFixed(2)}</span></div>
-                {totalMinutes === 0 && <p className="text-amber-600 text-xs">⚠ No time tracked — minimum 1 hour will be billed</p>}
+                {totalMinutes === 0 && <p className="text-amber-600 text-xs">No time tracked — minimum 1 hour will be billed</p>}
               </div>
             </div>
 
