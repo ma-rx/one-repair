@@ -278,8 +278,10 @@ export interface Part {
 
 export interface Ticket {
   id: string;
-  asset: string;
+  asset: string | null;
   asset_name: string;
+  asset_description: string;
+  store: string | null;
   store_name: string;
   symptom_code: string;
   description: string;
@@ -381,7 +383,9 @@ export interface ClientKPIData {
 }
 
 export interface CreateTicketBody {
-  asset: string;
+  asset?: string;
+  asset_description?: string;
+  store?: string;
   description?: string;
   symptom_code?: string;
   priority?: string;

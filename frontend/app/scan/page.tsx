@@ -18,8 +18,11 @@ function NewTicketForm() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assetId, setAssetId] = useState("");
   const [assetSearch, setAssetSearch] = useState("");
+  const [customAsset, setCustomAsset] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
+
+  const OTHER_ASSET = "__other__";
 
   const [loadingStores, setLoadingStores] = useState(true);
   const [loadingAssets, setLoadingAssets] = useState(false);
@@ -57,12 +60,14 @@ function NewTicketForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!assetId || !description.trim()) return;
+    if (!storeId || !assetId || !description.trim()) return;
+    if (assetId === OTHER_ASSET && !customAsset.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
       const ticket = await api.createTicket({
-        asset: assetId,
+        ...(assetId !== OTHER_ASSET ? { asset: assetId } : {}),
+        ...(assetId === OTHER_ASSET ? { asset_description: customAsset.trim(), store: storeId } : {}),
         description: description.trim(),
         priority,
         opened_by: user?.id,
@@ -104,6 +109,7 @@ function NewTicketForm() {
     setAssets([]);
     setAssetId("");
     setAssetSearch("");
+    setCustomAsset("");
     setDescription("");
     setPriority("MEDIUM");
     setTicketId(null);
@@ -168,31 +174,53 @@ function NewTicketForm() {
                       value={assetSearch}
                       onChange={(e) => setAssetSearch(e.target.value)}
                     />
-                    {filteredAssets.length === 0 ? (
-                      <p className="text-slate-400 text-sm text-center py-4">
-                        {assets.length === 0 ? "No equipment found for this store." : "No results."}
-                      </p>
-                    ) : (
-                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
-                        {filteredAssets.map((a) => (
-                          <button
-                            key={a.id}
-                            type="button"
-                            className={`w-full text-left px-4 py-3 text-sm border-b border-slate-100 last:border-none transition-colors ${
-                              assetId === a.id
-                                ? "bg-blue-50 text-blue-700"
-                                : "hover:bg-slate-50 text-slate-800"
-                            }`}
-                            onClick={() => setAssetId(a.id)}
-                          >
-                            <p className="font-medium">{a.name}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              {a.model_number && `Model: ${a.model_number}`}
-                              {a.serial_number && ` · S/N: ${a.serial_number}`}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+                      {filteredAssets.length === 0 && assetSearch && (
+                        <p className="text-slate-400 text-sm text-center py-4">No results.</p>
+                      )}
+                      {filteredAssets.map((a) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          className={`w-full text-left px-4 py-3 text-sm border-b border-slate-100 transition-colors ${
+                            assetId === a.id
+                              ? "bg-blue-50 text-blue-700"
+                              : "hover:bg-slate-50 text-slate-800"
+                          }`}
+                          onClick={() => setAssetId(a.id)}
+                        >
+                          <p className="font-medium">{a.name}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {a.model_number && `Model: ${a.model_number}`}
+                            {a.serial_number && ` · S/N: ${a.serial_number}`}
+                          </p>
+                        </button>
+                      ))}
+                      {assets.length === 0 && !assetSearch && (
+                        <p className="text-slate-400 text-sm text-center py-4">No equipment found for this store.</p>
+                      )}
+                      <button
+                        type="button"
+                        className={`w-full text-left px-4 py-3 text-sm transition-colors border-t border-slate-100 ${
+                          assetId === OTHER_ASSET
+                            ? "bg-amber-50 text-amber-700"
+                            : "hover:bg-slate-50 text-slate-500 italic"
+                        }`}
+                        onClick={() => setAssetId(OTHER_ASSET)}
+                      >
+                        Other / Not listed
+                      </button>
+                    </div>
+                    {assetId === OTHER_ASSET && (
+                      <input
+                        type="text"
+                        autoFocus
+                        className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 mt-1"
+                        placeholder="Describe the equipment (e.g. Walk-in cooler, POS terminal…)"
+                        value={customAsset}
+                        onChange={(e) => setCustomAsset(e.target.value)}
+                        required
+                      />
                     )}
                   </div>
                 )}
@@ -200,7 +228,7 @@ function NewTicketForm() {
             )}
 
             <button
-              disabled={!storeId || !assetId}
+              disabled={!storeId || !assetId || (assetId === OTHER_ASSET && !customAsset.trim())}
               className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
               onClick={() => setStep("describe")}
             >
@@ -210,14 +238,17 @@ function NewTicketForm() {
         )}
 
         {/* Step 2: Describe the issue */}
-        {step === "describe" && selectedAsset && (
+        {step === "describe" && (assetId === OTHER_ASSET || selectedAsset) && (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="bg-slate-50 rounded-lg border border-slate-200 px-4 py-3">
               <p className="text-xs text-slate-400 mb-0.5">Selected Equipment</p>
-              <p className="font-semibold text-slate-800">{selectedAsset.name}</p>
+              <p className="font-semibold text-slate-800">
+                {assetId === OTHER_ASSET ? customAsset : selectedAsset.name}
+              </p>
               <p className="text-slate-500 text-xs mt-0.5">
                 {selectedStore?.name}
-                {selectedAsset.serial_number && ` · S/N: ${selectedAsset.serial_number}`}
+                {assetId !== OTHER_ASSET && selectedAsset.serial_number && ` · S/N: ${selectedAsset.serial_number}`}
+                {assetId === OTHER_ASSET && <span className="text-amber-600"> · Not in asset registry</span>}
               </p>
             </div>
 

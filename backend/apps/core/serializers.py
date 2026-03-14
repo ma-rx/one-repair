@@ -182,20 +182,32 @@ class ServiceReportSerializer(serializers.ModelSerializer):
 # ── Ticket ────────────────────────────────────────────────────────────────────
 
 class TicketSerializer(serializers.ModelSerializer):
-    asset_name = serializers.CharField(source="asset.name", read_only=True)
-    store_name = serializers.CharField(source="asset.store.name", read_only=True)
+    asset_name = serializers.SerializerMethodField()
+    store_name = serializers.SerializerMethodField()
     assigned_tech_name = serializers.SerializerMethodField()
     service_reports = ServiceReportSerializer(many=True, read_only=True)
 
     class Meta:
         model = Ticket
         fields = [
-            "id", "asset", "asset_name", "store_name",
+            "id", "asset", "asset_name", "asset_description", "store", "store_name",
             "symptom_code", "description", "priority", "status",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
             "service_reports", "created_at", "updated_at",
         ]
+
+    def get_asset_name(self, obj):
+        if obj.asset:
+            return obj.asset.name
+        return obj.asset_description or "Unlisted Equipment"
+
+    def get_store_name(self, obj):
+        if obj.store:
+            return obj.store.name
+        if obj.asset and obj.asset.store:
+            return obj.asset.store.name
+        return ""
 
     def get_assigned_tech_name(self, obj):
         if obj.assigned_tech:

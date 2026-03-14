@@ -227,7 +227,9 @@ class Part(models.Model):
 
 class Ticket(models.Model):
     id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    asset         = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="tickets")
+    asset         = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL, related_name="tickets")
+    store         = models.ForeignKey("Store", null=True, blank=True, on_delete=models.SET_NULL, related_name="tickets")
+    asset_description = models.CharField(max_length=200, blank=True, default="")
     opened_by     = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name="opened_tickets"
     )

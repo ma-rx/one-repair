@@ -215,7 +215,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         profile = getattr(user, "profile", None)
 
         base = Ticket.objects.select_related(
-            "asset__store__organization", "assigned_tech"
+            "asset__store__organization", "store__organization", "assigned_tech"
         ).prefetch_related("service_reports__parts_used__part")
 
         if profile is None:
@@ -226,9 +226,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         elif profile.role == UserRole.TECH:
             qs = base.filter(assigned_tech=user)
         elif profile.role == UserRole.CLIENT_MANAGER and profile.store:
-            qs = base.filter(asset__store=profile.store)
+            qs = base.filter(store=profile.store)
         elif profile.organization:
-            qs = base.filter(asset__store__organization=profile.organization)
+            qs = base.filter(store__organization=profile.organization)
         else:
             return Ticket.objects.none()
 
@@ -237,6 +237,13 @@ class TicketViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status=status_filter)
 
         return qs
+
+    def perform_create(self, serializer):
+        asset = serializer.validated_data.get("asset")
+        store = serializer.validated_data.get("store")
+        if asset and not store:
+            store = asset.store
+        serializer.save(store=store)
 
     @action(detail=True, methods=["patch"], url_path="assign")
     def assign(self, request, pk=None):
@@ -334,9 +341,9 @@ class TicketViewSet(viewsets.ModelViewSet):
             ticket.closed_at = timezone.now()
             ticket.save(update_fields=["status", "closed_at", "updated_at"])
 
-            asset = ticket.asset
-            asset.status = AssetStatus.OPERATIONAL
-            asset.save(update_fields=["status", "updated_at"])
+            if ticket.asset:
+                ticket.asset.status = AssetStatus.OPERATIONAL
+                ticket.asset.save(update_fields=["status", "updated_at"])
 
         service_report = (
             ServiceReport.objects

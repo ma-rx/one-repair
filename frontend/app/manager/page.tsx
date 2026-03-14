@@ -22,8 +22,11 @@ export default function ManagerPage() {
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState<FormStep>("form");
 
+  const OTHER_ASSET = "__other__";
+
   // Form state
   const [assetId, setAssetId] = useState("");
+  const [customAsset, setCustomAsset] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [submitting, setSubmitting] = useState(false);
@@ -53,11 +56,13 @@ export default function ManagerPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!assetId || !description.trim()) { setFormError("Select equipment and describe the issue."); return; }
+    if (assetId === OTHER_ASSET && !customAsset.trim()) { setFormError("Describe the equipment."); return; }
     setFormError("");
     setSubmitting(true);
     try {
       const ticket = await api.createTicket({
-        asset: assetId,
+        ...(assetId !== OTHER_ASSET ? { asset: assetId } : {}),
+        ...(assetId === OTHER_ASSET ? { asset_description: customAsset.trim(), store: storeId ?? undefined } : {}),
         description: description.trim(),
         priority,
         opened_by: user?.id,
@@ -96,6 +101,7 @@ export default function ManagerPage() {
     setShowForm(false);
     setFormStep("form");
     setAssetId("");
+    setCustomAsset("");
     setDescription("");
     setPriority("MEDIUM");
     setTicketId(null);
@@ -157,7 +163,17 @@ export default function ManagerPage() {
                     {assets.map((a) => (
                       <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
+                    <option value={OTHER_ASSET}>Other / Not listed</option>
                   </select>
+                  {assetId === OTHER_ASSET && (
+                    <input
+                      type="text"
+                      className="w-full mt-2 border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      placeholder="Describe the equipment (e.g. Walk-in cooler, POS terminal…)"
+                      value={customAsset}
+                      onChange={(e) => setCustomAsset(e.target.value)}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Describe the issue</label>
