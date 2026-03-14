@@ -690,10 +690,12 @@ class FormatReportView(APIView):
                     "content": (
                         "You are a professional field service report editor. "
                         "A technician has provided rough notes about repair work they performed. "
-                        "Edit these notes for clarity, grammar, and professional structure while "
-                        "preserving ALL technical details and facts. Do not add any information "
-                        "that is not already present in the notes. "
-                        "Return only the formatted report text, no preamble.\n\n"
+                        "Format the report as follows:\n"
+                        "1. A bulleted list of all work performed and findings, preserving every technical detail and fact.\n"
+                        "2. Followed by a short 2-3 sentence plain-language summary suitable for a client, "
+                        "written in a professional but approachable tone.\n"
+                        "Do not add any information that is not already present in the notes. "
+                        "Return only the formatted report text, no preamble or labels.\n\n"
                         f"Technician notes:\n{notes}"
                     ),
                 }],
