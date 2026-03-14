@@ -243,11 +243,11 @@ function NewTicketForm() {
             <div className="bg-slate-50 rounded-lg border border-slate-200 px-4 py-3">
               <p className="text-xs text-slate-400 mb-0.5">Selected Equipment</p>
               <p className="font-semibold text-slate-800">
-                {assetId === OTHER_ASSET ? customAsset : selectedAsset.name}
+                {assetId === OTHER_ASSET ? customAsset : selectedAsset?.name}
               </p>
               <p className="text-slate-500 text-xs mt-0.5">
                 {selectedStore?.name}
-                {assetId !== OTHER_ASSET && selectedAsset.serial_number && ` · S/N: ${selectedAsset.serial_number}`}
+                {assetId !== OTHER_ASSET && selectedAsset?.serial_number && ` · S/N: ${selectedAsset.serial_number}`}
                 {assetId === OTHER_ASSET && <span className="text-amber-600"> · Not in asset registry</span>}
               </p>
             </div>
