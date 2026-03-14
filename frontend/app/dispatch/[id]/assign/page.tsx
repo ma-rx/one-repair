@@ -13,9 +13,10 @@ export default function AssignPage() {
   const [ticket, setTicket]             = useState<Ticket | null>(null);
   const [techs, setTechs]               = useState<AppUser[]>([]);
   const [selectedTech, setSelectedTech] = useState<number | "">("");
-  const [scheduledDate, setScheduledDate] = useState(
-    new Date().toISOString().split("T")[0]  // default to today
-  );
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]         = useState<string | null>(null);
