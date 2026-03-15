@@ -7,8 +7,9 @@ import { api, Part } from "@/lib/api";
 import { AssetCategoryLabels } from "@/types/enums";
 import {
   Package, AlertTriangle, Plus, Pencil,
-  Loader2, Search, X,
+  Loader2, Search, X, Upload,
 } from "lucide-react";
+import CsvImportModal from "@/components/CsvImportModal";
 
 const PART_CATEGORIES = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
 const ASSET_CATEGORIES = [
@@ -26,6 +27,8 @@ type PartForm = {
   quantity_on_hand: number;
   low_stock_threshold: number;
   unit_price: string;
+  selling_price: string;
+  vendor: string;
 };
 
 const emptyForm = (): PartForm => ({
@@ -38,6 +41,8 @@ const emptyForm = (): PartForm => ({
   quantity_on_hand: 0,
   low_stock_threshold: 2,
   unit_price: "0.00",
+  selling_price: "0.00",
+  vendor: "",
 });
 
 export default function InventoryPage() {
@@ -48,6 +53,7 @@ export default function InventoryPage() {
   const [error, setError] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Part | null>(null);
   const [form, setForm] = useState<PartForm>(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -82,6 +88,8 @@ export default function InventoryPage() {
       quantity_on_hand: p.quantity_on_hand,
       low_stock_threshold: p.low_stock_threshold,
       unit_price: p.unit_price,
+      selling_price: p.selling_price ?? "0.00",
+      vendor: p.vendor ?? "",
     });
     setFormError("");
     setModalOpen(true);
@@ -126,13 +134,20 @@ export default function InventoryPage() {
           <h1 className="text-2xl font-bold text-slate-900">Parts Inventory</h1>
           <p className="text-slate-500 text-sm mt-0.5">Manage ORS parts stock</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Part
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Part
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -212,8 +227,10 @@ export default function InventoryPage() {
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Part</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">SKU</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Equipment Type</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Vendor</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Qty on Hand</th>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Unit Price</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Cost</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Sell</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Stock</th>
                 <th className="px-6 py-3 text-right text-slate-500 font-medium">Actions</th>
               </tr>
@@ -231,8 +248,10 @@ export default function InventoryPage() {
                   <td className="px-6 py-4 text-slate-600">
                     {AssetCategoryLabels[p.asset_category] ?? p.asset_category}
                   </td>
+                  <td className="px-6 py-4 text-slate-500 text-xs">{p.vendor || "—"}</td>
                   <td className="px-6 py-4 font-semibold text-slate-800">{p.quantity_on_hand}</td>
                   <td className="px-6 py-4 text-slate-600">${parseFloat(p.unit_price).toFixed(2)}</td>
+                  <td className="px-6 py-4 text-slate-600">${parseFloat(p.selling_price ?? "0").toFixed(2)}</td>
                   <td className="px-6 py-4">
                     {p.is_low_stock ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
@@ -258,6 +277,59 @@ export default function InventoryPage() {
           </table>
         )}
       </div>
+
+      {/* CSV Import Modal */}
+      <CsvImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Parts from CSV"
+        templateFilename="parts_template.csv"
+        columns={[
+          { key: "name",              label: "name",              required: true,  hint: "Compressor - Scroll 3-Ton" },
+          { key: "sku",               label: "sku",               hint: "JC-123" },
+          { key: "category",          label: "category",          hint: "MECHANICAL" },
+          { key: "asset_category",    label: "asset_category",    hint: "REFRIGERATION" },
+          { key: "make",              label: "make",              hint: "Copeland" },
+          { key: "model_number",      label: "model_number",      hint: "ZR36K3E" },
+          { key: "quantity_on_hand",  label: "quantity_on_hand",  hint: "5" },
+          { key: "low_stock_threshold", label: "low_stock_threshold", hint: "2" },
+          { key: "unit_price",        label: "unit_price",        hint: "250.00" },
+          { key: "selling_price",     label: "selling_price",     hint: "399.00" },
+          { key: "vendor",            label: "vendor",            hint: "Johnstone Supply" },
+        ]}
+        onParseRow={(raw) => {
+          const errors: string[] = [];
+          if (!raw.name?.trim()) errors.push("name is required");
+          const qty = parseInt(raw.quantity_on_hand ?? "0");
+          if (isNaN(qty) || qty < 0) errors.push("quantity_on_hand must be a non-negative number");
+          const validCategories = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
+          if (raw.category && !validCategories.includes(raw.category.trim().toUpperCase()))
+            errors.push(`category must be one of: ${validCategories.join(", ")}`);
+          const validAssetCats = ["HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE", "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL", "ELEVATOR", "OTHER"];
+          if (raw.asset_category && !validAssetCats.includes(raw.asset_category.trim().toUpperCase()))
+            errors.push(`asset_category must be one of: ${validAssetCats.join(", ")}`);
+          return {
+            data: {
+              name:               raw.name?.trim() ?? "",
+              sku:                raw.sku?.trim() ?? "",
+              category:           raw.category?.trim().toUpperCase() || "MECHANICAL",
+              asset_category:     raw.asset_category?.trim().toUpperCase() || "OTHER",
+              make:               raw.make?.trim() ?? "",
+              model_number:       raw.model_number?.trim() ?? "",
+              quantity_on_hand:   parseInt(raw.quantity_on_hand ?? "0") || 0,
+              low_stock_threshold: parseInt(raw.low_stock_threshold ?? "2") || 2,
+              unit_price:         raw.unit_price?.trim() || "0.00",
+              selling_price:      raw.selling_price?.trim() || "0.00",
+              vendor:             raw.vendor?.trim() ?? "",
+            },
+            errors,
+          };
+        }}
+        onImportRow={(data) => api.createPart(data as Parameters<typeof api.createPart>[0])}
+        onComplete={(succeeded) => {
+          if (succeeded > 0) load();
+        }}
+      />
 
       {/* Add/Edit Modal */}
       <Modal
@@ -363,7 +435,7 @@ export default function InventoryPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Unit Price ($)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Cost Price ($)</label>
               <input
                 type="number"
                 min="0"
@@ -371,6 +443,29 @@ export default function InventoryPage() {
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={form.unit_price}
                 onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Selling Price ($)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.selling_price}
+                onChange={(e) => setForm({ ...form, selling_price: e.target.value })}
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Vendor / Supplier</label>
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.vendor}
+                onChange={(e) => setForm({ ...form, vendor: e.target.value })}
+                placeholder="e.g. Johnstone Supply"
               />
             </div>
           </div>

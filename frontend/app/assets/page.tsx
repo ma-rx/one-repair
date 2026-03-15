@@ -9,8 +9,9 @@ import {
 } from "@/types/enums";
 import {
   Cpu, Plus, Pencil, Loader2, AlertCircle,
-  CheckCircle2, AlertTriangle, XCircle, MinusCircle,
+  CheckCircle2, AlertTriangle, XCircle, MinusCircle, Upload,
 } from "lucide-react";
+import CsvImportModal from "@/components/CsvImportModal";
 
 const STATUS_CONFIG: Record<string, { label: string; style: string; icon: React.ElementType }> = {
   OPERATIONAL:       { label: "Operational",       style: "bg-emerald-100 text-emerald-700", icon: CheckCircle2  },
@@ -34,6 +35,7 @@ export default function AssetsPage() {
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStatus, setFilterStatus]     = useState("");
   const [modalOpen, setModalOpen]   = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing]       = useState<Asset | null>(null);
   const [form, setForm]             = useState<Partial<Asset>>(EMPTY);
   const [saving, setSaving]         = useState(false);
@@ -107,12 +109,20 @@ export default function AssetsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Assets</h1>
           <p className="text-slate-500 text-sm mt-0.5">All equipment across your stores</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Asset
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Asset
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -242,6 +252,62 @@ export default function AssetsPage() {
           )}
         </div>
       )}
+
+      {/* CSV Import Modal */}
+      <CsvImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Assets from CSV"
+        templateFilename="assets_template.csv"
+        columns={[
+          { key: "store_name",      label: "store_name",      required: true,  hint: "Downtown Location" },
+          { key: "name",            label: "name",            required: true,  hint: "Walk-in Freezer #2" },
+          { key: "category",        label: "category",        hint: "REFRIGERATION" },
+          { key: "status",          label: "status",          hint: "OPERATIONAL" },
+          { key: "make",            label: "make",            hint: "True" },
+          { key: "model_number",    label: "model_number",    hint: "T-49-HC" },
+          { key: "serial_number",   label: "serial_number",   hint: "SN123456" },
+          { key: "install_date",    label: "install_date",    hint: "2022-06-15" },
+          { key: "warranty_expiry", label: "warranty_expiry", hint: "2027-06-15" },
+        ]}
+        onParseRow={(raw) => {
+          const errors: string[] = [];
+          if (!raw.store_name?.trim()) errors.push("store_name is required");
+          if (!raw.name?.trim()) errors.push("name is required");
+          const storeMatch = stores.find(
+            (s) => s.name.toLowerCase() === raw.store_name?.trim().toLowerCase()
+          );
+          if (raw.store_name?.trim() && !storeMatch)
+            errors.push(`Store "${raw.store_name.trim()}" not found`);
+          const validCategories = ["HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE", "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL", "ELEVATOR", "OTHER"];
+          if (raw.category && !validCategories.includes(raw.category.trim().toUpperCase()))
+            errors.push(`category must be one of: ${validCategories.join(", ")}`);
+          const validStatuses = ["OPERATIONAL", "UNDER_MAINTENANCE", "OUT_OF_SERVICE", "DECOMMISSIONED"];
+          if (raw.status && !validStatuses.includes(raw.status.trim().toUpperCase()))
+            errors.push(`status must be one of: ${validStatuses.join(", ")}`);
+          return {
+            data: {
+              store:           storeMatch?.id ?? "",
+              name:            raw.name?.trim() ?? "",
+              category:        raw.category?.trim().toUpperCase() || "OTHER",
+              status:          raw.status?.trim().toUpperCase() || "OPERATIONAL",
+              make:            raw.make?.trim() ?? "",
+              model_number:    raw.model_number?.trim() ?? "",
+              serial_number:   raw.serial_number?.trim() ?? "",
+              install_date:    raw.install_date?.trim() || null,
+              warranty_expiry: raw.warranty_expiry?.trim() || null,
+              is_active:       true,
+            },
+            errors,
+          };
+        }}
+        onImportRow={(data) => api.createAsset(data as Partial<Asset>)}
+        onComplete={(succeeded) => {
+          if (succeeded > 0) {
+            api.listAssets().then(setAssets).catch(() => {});
+          }
+        }}
+      />
 
       {/* Create / Edit Modal */}
       <Modal
