@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.db import models
 from rest_framework import serializers
 
 from .models import (
@@ -205,6 +206,7 @@ class TicketSerializer(serializers.ModelSerializer):
     assigned_tech_name = serializers.SerializerMethodField()
     service_reports    = ServiceReportSerializer(many=True, read_only=True)
     assets             = TicketAssetSerializer(source="ticket_assets", many=True, read_only=True)
+    needs_coding       = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -214,7 +216,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "symptom_code", "description", "priority", "status", "scheduled_date",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
-            "assets", "service_reports", "created_at", "updated_at",
+            "assets", "needs_coding", "service_reports", "created_at", "updated_at",
         ]
 
     def get_asset_name(self, obj):
@@ -243,6 +245,14 @@ class TicketSerializer(serializers.ModelSerializer):
         if obj.assigned_tech:
             return obj.assigned_tech.get_full_name() or obj.assigned_tech.username
         return None
+
+    def get_needs_coding(self, obj):
+        """True if ticket is closed but any TicketAsset is missing symptom or resolution code."""
+        if obj.status != "CLOSED":
+            return False
+        return obj.ticket_assets.filter(
+            models.Q(symptom_code="") | models.Q(resolution_code="")
+        ).exists()
 
 
 # ── PartRequest ───────────────────────────────────────────────────────────────

@@ -392,6 +392,7 @@ export interface Ticket {
   assigned_tech: number | null;
   assigned_tech_name: string | null;
   assets: TicketAsset[];
+  needs_coding: boolean;
   service_reports: ServiceReport[];
   created_at: string;
 }

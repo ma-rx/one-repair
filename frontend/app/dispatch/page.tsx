@@ -7,7 +7,7 @@ import { api, Ticket } from "@/lib/api";
 import { SymptomCodeLabels } from "@/types/enums";
 import {
   ClipboardList, Clock, AlertTriangle, Plus,
-  UserCheck, FileText, Loader2, RefreshCw,
+  UserCheck, FileText, Loader2, RefreshCw, Brain,
 } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
@@ -157,9 +157,16 @@ export default function DispatchPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
-                      {t.status.replace(/_/g, " ")}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
+                        {t.status.replace(/_/g, " ")}
+                      </span>
+                      {t.needs_coding && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                          <Brain className="w-3 h-3" /> Needs coding
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-slate-500">
                     {t.assigned_tech_name ?? <span className="text-slate-300">Unassigned</span>}
