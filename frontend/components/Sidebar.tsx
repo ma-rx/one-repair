@@ -17,6 +17,7 @@ import {
   Cpu,
   Users,
   CalendarDays,
+  BookOpen,
 } from "lucide-react";
 
 const orsNav = [
@@ -29,6 +30,7 @@ const orsNav = [
   { label: "Assets",         href: "/assets",           icon: Cpu          },
   { label: "Inventory",      href: "/inventory",        icon: Package      },
   { label: "Users",          href: "/users",            icon: Users        },
+  { label: "Knowledge Base", href: "/knowledge",        icon: BookOpen     },
   { label: "KPIs",           href: "/kpis",             icon: BarChart3    },
 ];
 

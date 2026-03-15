@@ -3,7 +3,7 @@ from django.db import models
 from rest_framework import serializers
 
 from .models import (
-    Asset, Organization, Part, PartRequest, PartRequestStatus, PartRequestUrgency,
+    Asset, KnowledgeEntry, Organization, Part, PartRequest, PartRequestStatus, PartRequestUrgency,
     PartUsed, PricingConfig, ServiceReport, Store, Ticket, TicketAsset,
     TimeEntry, UserProfile, WorkImage,
 )
@@ -313,6 +313,27 @@ class PartRequestInputSerializer(serializers.Serializer):
     quantity_needed = serializers.IntegerField(min_value=1, default=1)
     urgency        = serializers.ChoiceField(choices=["ASAP", "NEXT_VISIT"], default="NEXT_VISIT")
     notes          = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+# ── KnowledgeEntry ────────────────────────────────────────────────────────────
+
+class KnowledgeEntrySerializer(serializers.ModelSerializer):
+    contributed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KnowledgeEntry
+        fields = [
+            "id", "asset_category", "make", "model_number",
+            "symptom_code", "resolution_code", "difficulty",
+            "cause_summary", "procedure", "parts_commonly_used", "pro_tips",
+            "contributed_by", "contributed_by_name", "is_verified",
+            "created_at", "updated_at",
+        ]
+
+    def get_contributed_by_name(self, obj):
+        if obj.contributed_by:
+            return obj.contributed_by.get_full_name() or obj.contributed_by.username
+        return None
 
 
 class CloseTicketSerializer(serializers.Serializer):

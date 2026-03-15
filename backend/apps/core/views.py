@@ -16,17 +16,17 @@ import requests as http_requests
 from rest_framework.parsers import MultiPartParser
 
 from .models import (
-    Asset, AssetStatus, Organization, Part, PartRequest, PartRequestStatus,
+    Asset, AssetStatus, KnowledgeEntry, Organization, Part, PartRequest, PartRequestStatus,
     PartUsed, PricingConfig, ServiceReport, Store, Ticket, TicketAsset,
     TicketStatus, TimeEntry, UserRole, WorkImage,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    CreateUserSerializer, OrganizationSerializer, PartRequestSerializer,
-    PartSerializer, PricingConfigSerializer, ServiceReportSerializer,
-    StoreSerializer, TicketAssetSerializer, TicketSerializer,
-    TimeEntrySerializer, UserSerializer, WorkImageSerializer,
+    CreateUserSerializer, KnowledgeEntrySerializer, OrganizationSerializer,
+    PartRequestSerializer, PartSerializer, PricingConfigSerializer,
+    ServiceReportSerializer, StoreSerializer, TicketAssetSerializer,
+    TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -1086,3 +1086,36 @@ class InvoicePDFView(APIView):
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="invoice-{str(report.id)[:8]}.pdf"'
         return response
+
+
+# ── KnowledgeEntry ─────────────────────────────────────────────────────────────
+
+class KnowledgeEntryViewSet(viewsets.ModelViewSet):
+    serializer_class   = KnowledgeEntrySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = KnowledgeEntry.objects.select_related("contributed_by")
+        params = self.request.query_params
+        if params.get("asset_category"):
+            qs = qs.filter(asset_category=params["asset_category"])
+        if params.get("symptom_code"):
+            qs = qs.filter(symptom_code=params["symptom_code"])
+        if params.get("resolution_code"):
+            qs = qs.filter(resolution_code=params["resolution_code"])
+        if params.get("verified") == "true":
+            qs = qs.filter(is_verified=True)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(contributed_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="verify")
+    def verify(self, request, pk=None):
+        entry = self.get_object()
+        profile = getattr(request.user, "profile", None)
+        if not profile or profile.role != UserRole.ORS_ADMIN:
+            return Response({"detail": "Only ORS Admin can verify entries."}, status=status.HTTP_403_FORBIDDEN)
+        entry.is_verified = True
+        entry.save(update_fields=["is_verified"])
+        return Response(KnowledgeEntrySerializer(entry).data)

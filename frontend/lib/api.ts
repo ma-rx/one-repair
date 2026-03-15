@@ -212,6 +212,22 @@ export const api = {
     request<Ticket>(`/part-requests/${id}/generate-followup/`, { method: "POST" }),
   updatePartRequestDetails: (id: string, data: Record<string, unknown>) =>
     request<PartRequest>(`/part-requests/${id}/update-part-details/`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Knowledge Base
+  listKnowledgeEntries: (params?: { asset_category?: string; symptom_code?: string; resolution_code?: string; verified?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.asset_category)  q.set("asset_category",  params.asset_category);
+    if (params?.symptom_code)    q.set("symptom_code",    params.symptom_code);
+    if (params?.resolution_code) q.set("resolution_code", params.resolution_code);
+    if (params?.verified)        q.set("verified",        "true");
+    return request<KnowledgeEntry[]>(`/knowledge/${q.toString() ? `?${q}` : ""}`);
+  },
+  createKnowledgeEntry: (body: Partial<KnowledgeEntry>) =>
+    request<KnowledgeEntry>("/knowledge/", { method: "POST", body: JSON.stringify(body) }),
+  updateKnowledgeEntry: (id: string, body: Partial<KnowledgeEntry>) =>
+    request<KnowledgeEntry>(`/knowledge/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  verifyKnowledgeEntry: (id: string) =>
+    request<KnowledgeEntry>(`/knowledge/${id}/verify/`, { method: "POST" }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -506,4 +522,23 @@ export interface CloseTicketBody {
   invoice_email?: string;
   tech_notes?: string;
   formatted_report?: string;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  asset_category: string;
+  make: string;
+  model_number: string;
+  symptom_code: string;
+  resolution_code: string;
+  difficulty: string;
+  cause_summary: string;
+  procedure: string;
+  parts_commonly_used: string;
+  pro_tips: string;
+  contributed_by: number | null;
+  contributed_by_name: string | null;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
 }

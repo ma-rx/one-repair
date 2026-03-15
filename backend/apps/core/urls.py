@@ -2,9 +2,9 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     AssetViewSet, ClientKPIView, FormatReportView, InvoicePDFView, KPIView,
-    OrganizationViewSet, PartRequestViewSet, PartViewSet, PricingConfigView,
-    ServiceReportViewSet, StoreViewSet, TicketViewSet, TimeEntryView,
-    UserViewSet, WorkImageView,
+    KnowledgeEntryViewSet, OrganizationViewSet, PartRequestViewSet, PartViewSet,
+    PricingConfigView, ServiceReportViewSet, StoreViewSet, TicketViewSet,
+    TimeEntryView, UserViewSet, WorkImageView,
 )
 
 router = DefaultRouter()
@@ -16,6 +16,7 @@ router.register("parts", PartViewSet, basename="part")
 router.register("tickets", TicketViewSet, basename="ticket")
 router.register("service-reports", ServiceReportViewSet, basename="service-report")
 router.register("part-requests", PartRequestViewSet, basename="part-request")
+router.register("knowledge", KnowledgeEntryViewSet, basename="knowledge")
 
 urlpatterns = router.urls + [
     path("kpis/", KPIView.as_view()),

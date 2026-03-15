@@ -167,6 +167,20 @@ export const PartRequestUrgencyLabels: Record<string, string> = {
   NEXT_VISIT: "Next Visit",
 };
 
+export const KnowledgeDifficulty = {
+  EASY:     "EASY",
+  MEDIUM:   "MEDIUM",
+  HARD:     "HARD",
+  ADVANCED: "ADVANCED",
+} as const;
+
+export const KnowledgeDifficultyLabels: Record<string, string> = {
+  EASY:     "Easy",
+  MEDIUM:   "Medium",
+  HARD:     "Hard",
+  ADVANCED: "Advanced",
+};
+
 export const PartRequestStatus = {
   PENDING:         "PENDING",
   APPROVED_ORS:    "APPROVED_ORS",

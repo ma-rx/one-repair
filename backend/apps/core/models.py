@@ -135,6 +135,13 @@ class PartCategory(models.TextChoices):
     OTHER       = "OTHER",       "Other"
 
 
+class KnowledgeDifficulty(models.TextChoices):
+    EASY     = "EASY",     "Easy"
+    MEDIUM   = "MEDIUM",   "Medium"
+    HARD     = "HARD",     "Hard"
+    ADVANCED = "ADVANCED", "Advanced"
+
+
 # ── Models ─────────────────────────────────────────────────────────────────────
 
 class PricingConfig(models.Model):
@@ -414,3 +421,29 @@ class PartRequest(models.Model):
     def __str__(self):
         name = self.part.name if self.part else self.part_name
         return f"PartRequest: {name} x{self.quantity_needed} ({self.status})"
+
+
+class KnowledgeEntry(models.Model):
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    asset_category      = models.CharField(max_length=30, choices=AssetCategory.choices)
+    make                = models.CharField(max_length=100, blank=True, default="")
+    model_number        = models.CharField(max_length=100, blank=True, default="")
+    symptom_code        = models.CharField(max_length=50, choices=SymptomCode.choices)
+    resolution_code     = models.CharField(max_length=50, choices=ResolutionCode.choices)
+    difficulty          = models.CharField(max_length=10, choices=KnowledgeDifficulty.choices, default=KnowledgeDifficulty.MEDIUM)
+    cause_summary       = models.TextField(blank=True, default="")
+    procedure           = models.TextField(blank=True, default="")
+    parts_commonly_used = models.TextField(blank=True, default="")
+    pro_tips            = models.TextField(blank=True, default="")
+    contributed_by      = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="knowledge_entries"
+    )
+    is_verified         = models.BooleanField(default=False)
+    created_at          = models.DateTimeField(auto_now_add=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"KnowledgeEntry: {self.symptom_code} → {self.resolution_code} ({self.asset_category})"
