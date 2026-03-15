@@ -317,7 +317,8 @@ class PartRequestInputSerializer(serializers.Serializer):
 
 class CloseTicketSerializer(serializers.Serializer):
     resolution_code  = serializers.ChoiceField(
-        choices=ServiceReport._meta.get_field("resolution_code").choices
+        choices=ServiceReport._meta.get_field("resolution_code").choices,
+        required=False, default="OTHER",
     )
     labor_cost       = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
     parts_used       = PartUsedInputSerializer(many=True, required=False, default=list)

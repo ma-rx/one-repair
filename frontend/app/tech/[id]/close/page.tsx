@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   api, Part, PartRequestInput, PricingConfig, Ticket, TimeEntryStatus, WorkImage,
 } from "@/lib/api";
-import { ResolutionCodeLabels, SymptomCodeLabels, AssetCategoryLabels } from "@/types/enums";
+import { SymptomCodeLabels, AssetCategoryLabels } from "@/types/enums";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Clock, FileText,
   Loader2, Plus, RefreshCw, Trash2, Wrench, X, Sparkles,
@@ -160,7 +160,6 @@ export default function TechWorkPage() {
   const [reportAccepted, setReportAccepted]   = useState(false);
   const [aiError, setAiError]                 = useState("");
 
-  const [resolutionCode, setResolutionCode] = useState("");
   const [partLines, setPartLines]           = useState<PartLine[]>([]);
   const [neededLines, setNeededLines]       = useState<PartNeededLine[]>([]);
   const [invoiceEmail, setInvoiceEmail]     = useState("");
@@ -252,7 +251,6 @@ export default function TechWorkPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!resolutionCode) return;
     setSubmitting(true); setError(null);
 
     const parts_needed: PartRequestInput[] = neededLines
@@ -278,7 +276,7 @@ export default function TechWorkPage() {
 
     try {
       await api.closeTicket(id, {
-        resolution_code: resolutionCode,
+        resolution_code: "OTHER",
         labor_cost: null,
         parts_used: partLines.filter((l) => l.part_id && l.quantity > 0),
         parts_needed,
@@ -473,18 +471,6 @@ export default function TechWorkPage() {
               )}
             </div>
 
-            {/* Resolution code */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Resolution</p>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Resolution Code <span className="text-red-500">*</span></label>
-                <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  value={resolutionCode} onChange={(e) => setResolutionCode(e.target.value)} required>
-                  <option value="">Select resolution…</option>
-                  {Object.entries(ResolutionCodeLabels).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-                </select>
-              </div>
-            </div>
 
             {/* Parts used */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
@@ -631,7 +617,7 @@ export default function TechWorkPage() {
 
             <div className="flex gap-3">
               <button type="button" className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50" onClick={() => router.back()}>Cancel</button>
-              <button type="submit" disabled={!resolutionCode || submitting}
+              <button type="submit" disabled={submitting}
                 className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                 Close & Generate Invoice
