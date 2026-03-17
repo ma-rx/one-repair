@@ -212,6 +212,11 @@ class PartViewSet(viewsets.ModelViewSet):
 class TicketViewSet(viewsets.ModelViewSet):
     serializer_class = TicketSerializer
 
+    def get_permissions(self):
+        if self.action == "destroy":
+            return [IsORSAdmin()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         user = self.request.user
         profile = getattr(user, "profile", None)

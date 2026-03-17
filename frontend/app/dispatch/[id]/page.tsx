@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, Ticket, TicketAsset, WorkImage } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
 import TicketDetail from "@/components/TicketDetail";
 import { SymptomCodeLabels, ResolutionCodeLabels } from "@/types/enums";
-import { Loader2, UserCheck, FileText, Brain, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, UserCheck, FileText, Brain, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 
 function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -28,6 +28,7 @@ interface AssetCodeState {
 export default function DispatchTicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const router = useRouter();
   const todayStr = toLocalDateStr(new Date());
   const isAdmin = user?.role === "ORS_ADMIN";
 
@@ -35,6 +36,7 @@ export default function DispatchTicketDetailPage() {
   const [images, setImages]   = useState<WorkImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   // Per-asset code state keyed by TicketAsset id
   const [codeState, setCodeState] = useState<Record<string, AssetCodeState>>({});
@@ -76,6 +78,18 @@ export default function DispatchTicketDetailPage() {
       setTimeout(() => patchCode(ta.id, { saved: false }), 2500);
     } catch (e: unknown) {
       patchCode(ta.id, { saving: false, error: e instanceof Error ? e.message : "Save failed." });
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Delete this ticket permanently? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      await api.deleteTicket(id);
+      router.replace("/dispatch");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Delete failed.");
+      setDeleting(false);
     }
   }
 
@@ -203,6 +217,18 @@ export default function DispatchTicketDetailPage() {
                   );
                 })}
               </div>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-2 text-sm font-medium text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete Ticket
+              </button>
             </div>
           )}
         </div>

@@ -213,6 +213,9 @@ export const api = {
   updatePartRequestDetails: (id: string, data: Record<string, unknown>) =>
     request<PartRequest>(`/part-requests/${id}/update-part-details/`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  deleteTicket: (id: string) =>
+    request<void>(`/tickets/${id}/`, { method: "DELETE" }),
+
   // Knowledge Base
   listKnowledgeEntries: (params?: { asset_category?: string; symptom_code?: string; resolution_code?: string; verified?: boolean }) => {
     const q = new URLSearchParams();
