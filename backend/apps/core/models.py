@@ -210,6 +210,7 @@ class Store(models.Model):
     zip_code     = models.CharField(max_length=20, blank=True)
     country      = models.CharField(max_length=100, default="US")
     phone        = models.CharField(max_length=50, blank=True)
+    email        = models.EmailField(blank=True)
     manager      = models.ForeignKey(
         User, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="managed_stores"

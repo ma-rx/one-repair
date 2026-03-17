@@ -77,7 +77,7 @@ class StoreSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name",
             "address_line1", "address_line2", "city", "state", "zip_code", "country",
-            "phone",
+            "phone", "email",
             "organization", "organization_name",
             "manager", "manager_name",
             "is_active", "asset_count",

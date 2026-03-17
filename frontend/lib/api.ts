@@ -264,6 +264,7 @@ export interface Store {
   zip_code: string;
   country: string;
   phone: string;
+  email: string;
   manager: number | null;
   manager_name: string | null;
   is_active: boolean;

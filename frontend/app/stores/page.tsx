@@ -10,7 +10,7 @@ import { MapPin, Plus, Pencil, CheckCircle2, XCircle, Loader2, AlertCircle } fro
 
 const EMPTY: Partial<Store> = {
   name: "", organization: "", address_line1: "", address_line2: "",
-  city: "", state: "", zip_code: "", country: "US", phone: "", is_active: true,
+  city: "", state: "", zip_code: "", country: "US", phone: "", email: "", is_active: true,
 };
 
 export default function StoresPage() {
@@ -55,7 +55,7 @@ export default function StoresPage() {
       name: store.name, organization: store.organization,
       address_line1: store.address_line1, address_line2: store.address_line2,
       city: store.city, state: store.state, zip_code: store.zip_code,
-      country: store.country, phone: store.phone, is_active: store.is_active,
+      country: store.country, phone: store.phone, email: store.email, is_active: store.is_active,
     });
     setFormError(null);
     setModalOpen(true);
@@ -159,6 +159,7 @@ export default function StoresPage() {
                     <td className="px-6 py-4">
                       <p className="font-medium text-slate-800">{store.name}</p>
                       {store.phone && <p className="text-xs text-slate-400 mt-0.5">{store.phone}</p>}
+                      {store.email && <p className="text-xs text-slate-400">{store.email}</p>}
                     </td>
                     {isORS && <td className="px-6 py-4 text-slate-500">{store.organization_name}</td>}
                     <td className="px-6 py-4 text-slate-500">
@@ -253,6 +254,17 @@ export default function StoresPage() {
 
           <div className="grid grid-cols-2 gap-4">
             {f("phone", "Phone")}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <input
+                type="email"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={(form.email as string) ?? ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div>
             {f("country", "Country")}
           </div>
 
