@@ -9,7 +9,7 @@ import {
 } from "@/types/enums";
 import {
   Cpu, Plus, Pencil, Loader2, AlertCircle,
-  CheckCircle2, AlertTriangle, XCircle, MinusCircle, Upload,
+  CheckCircle2, AlertTriangle, XCircle, MinusCircle, Upload, Trash2,
 } from "lucide-react";
 import CsvImportModal from "@/components/CsvImportModal";
 
@@ -36,6 +36,7 @@ export default function AssetsPage() {
   const [filterStatus, setFilterStatus]     = useState("");
   const [modalOpen, setModalOpen]   = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing]       = useState<Asset | null>(null);
   const [form, setForm]             = useState<Partial<Asset>>(EMPTY);
   const [saving, setSaving]         = useState(false);
@@ -96,6 +97,19 @@ export default function AssetsPage() {
       setFormError(err.message || "Failed to save.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete(asset: Asset) {
+    if (!confirm(`Delete "${asset.name}"? This cannot be undone.`)) return;
+    setDeletingId(asset.id);
+    try {
+      await api.deleteAsset(asset.id);
+      setAssets((prev) => prev.filter((a) => a.id !== asset.id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -240,9 +254,14 @@ export default function AssetsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button onClick={() => openEdit(a)} className="text-slate-400 hover:text-blue-600 transition-colors">
-                          <Pencil className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <button onClick={() => openEdit(a)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete(a)} disabled={deletingId === a.id} className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50">
+                            {deletingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

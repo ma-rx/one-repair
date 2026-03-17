@@ -216,6 +216,10 @@ export const api = {
 
   deleteTicket: (id: string) =>
     request<void>(`/tickets/${id}/`, { method: "DELETE" }),
+  deleteAsset: (id: string) =>
+    request<void>(`/assets/${id}/`, { method: "DELETE" }),
+  deletePart: (id: string) =>
+    request<void>(`/parts/${id}/`, { method: "DELETE" }),
 
   // Knowledge Base
   listKnowledgeEntries: (params?: { asset_category?: string; symptom_code?: string; resolution_code?: string; verified?: boolean }) => {

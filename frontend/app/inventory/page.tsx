@@ -7,7 +7,7 @@ import { api, Part } from "@/lib/api";
 import { AssetCategoryLabels } from "@/types/enums";
 import {
   Package, AlertTriangle, Plus, Pencil,
-  Loader2, Search, X, Upload,
+  Loader2, Search, X, Upload, Trash2,
 } from "lucide-react";
 import CsvImportModal from "@/components/CsvImportModal";
 
@@ -55,6 +55,7 @@ export default function InventoryPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Part | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState<PartForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -93,6 +94,19 @@ export default function InventoryPage() {
     });
     setFormError("");
     setModalOpen(true);
+  }
+
+  async function handleDelete(part: Part) {
+    if (!confirm(`Delete "${part.name}"? This cannot be undone.`)) return;
+    setDeletingId(part.id);
+    try {
+      await api.deletePart(part.id);
+      setParts((prev) => prev.filter((p) => p.id !== part.id));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -264,12 +278,21 @@ export default function InventoryPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => openEdit(p)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
-                    >
-                      <Pencil className="w-3.5 h-3.5" /> Edit
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => openEdit(p)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(p)}
+                        disabled={deletingId === p.id}
+                        className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                      >
+                        {deletingId === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

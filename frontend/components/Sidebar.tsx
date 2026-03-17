@@ -24,7 +24,7 @@ const orsNav = [
   { label: "New Ticket",     href: "/scan",             icon: QrCode       },
   { label: "Dispatch",       href: "/dispatch",         icon: ClipboardList },
   { label: "Calendar",       href: "/calendar",         icon: CalendarDays },
-  { label: "Parts",          href: "/dispatch/parts",   icon: Package      },
+  { label: "Parts Needed",   href: "/dispatch/parts",   icon: Package      },
   { label: "Organizations",  href: "/organizations",    icon: Building2    },
   { label: "Stores",         href: "/stores",           icon: MapPin       },
   { label: "Assets",         href: "/assets",           icon: Cpu          },
