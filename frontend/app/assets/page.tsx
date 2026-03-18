@@ -284,42 +284,63 @@ export default function AssetsPage() {
         title="Import Assets from CSV"
         templateFilename="assets_template.csv"
         columns={[
-          { key: "store_name",      label: "store_name",      required: true,  hint: "Downtown Location" },
-          { key: "name",            label: "name",            required: true,  hint: "Walk-in Freezer #2" },
-          { key: "category",        label: "category",        hint: "REFRIGERATION" },
-          { key: "status",          label: "status",          hint: "OPERATIONAL" },
-          { key: "make",            label: "make",            hint: "True" },
-          { key: "model_number",    label: "model_number",    hint: "T-49-HC" },
-          { key: "serial_number",   label: "serial_number",   hint: "SN123456" },
-          { key: "install_date",    label: "install_date",    hint: "2022-06-15" },
-          { key: "warranty_expiry", label: "warranty_expiry", hint: "2027-06-15" },
+          { key: "store_name",        label: "store_name",        required: true, hint: "Downtown Location" },
+          { key: "equipment_model",   label: "equipment_model",   required: true, hint: "True:T-49-HC" },
+          { key: "serial_number",     label: "serial_number",     hint: "SN123456" },
+          { key: "name",              label: "name",              hint: "Walk-in Freezer #2 (leave blank to auto-generate)" },
+          { key: "install_date",      label: "install_date",      hint: "2022-06-15" },
+          { key: "warranty_expiry",   label: "warranty_expiry",   hint: "2027-06-15" },
+          { key: "status",            label: "status",            hint: "OPERATIONAL" },
         ]}
         onParseRow={(raw) => {
           const errors: string[] = [];
+
           if (!raw.store_name?.trim()) errors.push("store_name is required");
-          if (!raw.name?.trim()) errors.push("name is required");
+          if (!raw.equipment_model?.trim()) errors.push("equipment_model is required (Make:ModelNumber)");
+
           const storeMatch = stores.find(
             (s) => s.name.toLowerCase() === raw.store_name?.trim().toLowerCase()
           );
           if (raw.store_name?.trim() && !storeMatch)
             errors.push(`Store "${raw.store_name.trim()}" not found`);
-          const validCategories = Object.keys(AssetCategoryLabels);
-          if (raw.category && !validCategories.includes(raw.category.trim().toUpperCase()))
-            errors.push(`category must be one of: ${validCategories.join(", ")}`);
+
+          // Resolve equipment model
+          let modelMatch: EquipmentModel | undefined;
+          if (raw.equipment_model?.trim()) {
+            const colonIdx = raw.equipment_model.indexOf(":");
+            if (colonIdx === -1) {
+              errors.push(`equipment_model must be in Make:ModelNumber format`);
+            } else {
+              const make = raw.equipment_model.slice(0, colonIdx).trim().toLowerCase();
+              const modelNum = raw.equipment_model.slice(colonIdx + 1).trim().toLowerCase();
+              modelMatch = equipmentModels.find(
+                (m) => m.make.toLowerCase() === make && m.model_number.toLowerCase() === modelNum
+              );
+              if (!modelMatch) errors.push(`Equipment model "${raw.equipment_model.trim()}" not found`);
+            }
+          }
+
           const validStatuses = ["OPERATIONAL", "UNDER_MAINTENANCE", "OUT_OF_SERVICE", "DECOMMISSIONED"];
           if (raw.status && !validStatuses.includes(raw.status.trim().toUpperCase()))
             errors.push(`status must be one of: ${validStatuses.join(", ")}`);
+
+          const serial = raw.serial_number?.trim() ?? "";
+          const autoName = modelMatch
+            ? `${modelMatch.make} ${modelMatch.model_number}${serial ? ` — ${serial}` : ""}`
+            : "";
+
           return {
             data: {
               store:           storeMatch?.id ?? "",
-              name:            raw.name?.trim() ?? "",
-              category:        raw.category?.trim().toUpperCase() || "OTHER",
-              status:          raw.status?.trim().toUpperCase() || "OPERATIONAL",
-              make:            raw.make?.trim() ?? "",
-              model_number:    raw.model_number?.trim() ?? "",
-              serial_number:   raw.serial_number?.trim() ?? "",
+              equipment_model: modelMatch?.id ?? null,
+              category:        modelMatch?.category ?? "OTHER",
+              make:            modelMatch?.make ?? "",
+              model_number:    modelMatch?.model_number ?? "",
+              name:            raw.name?.trim() || autoName,
+              serial_number:   serial,
               install_date:    raw.install_date?.trim() || null,
               warranty_expiry: raw.warranty_expiry?.trim() || null,
+              status:          raw.status?.trim().toUpperCase() || "OPERATIONAL",
               is_active:       true,
             },
             errors,
