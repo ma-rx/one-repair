@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AuthGuard from "@/components/AuthGuard";
@@ -9,6 +9,13 @@ const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "One Repair Solutions",
   description: "Field Service Management",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

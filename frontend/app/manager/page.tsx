@@ -281,7 +281,7 @@ export default function ManagerPage() {
                       {uploadingImg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
                       Add Photo
                     </button>
-                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
                   </div>
 
                   {images.length === 0 ? (
