@@ -7,11 +7,7 @@ import { api, EquipmentModel } from "@/lib/api";
 import { AssetCategoryLabels } from "@/types/enums";
 import { Wrench, Plus, Pencil, Trash2, Loader2, AlertCircle } from "lucide-react";
 
-const ASSET_CATEGORIES = [
-  "HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE",
-  "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL",
-  "ELEVATOR", "COFFEE_EQUIPMENT", "ESPRESSO_MACHINE", "OTHER",
-];
+const ASSET_CATEGORIES = Object.keys(AssetCategoryLabels);
 
 type ModelForm = { make: string; model_number: string; model_name: string; category: string; description: string };
 const emptyForm = (): ModelForm => ({ make: "", model_number: "", model_name: "", category: "REFRIGERATION", description: "" });

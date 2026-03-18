@@ -12,10 +12,7 @@ import {
 import CsvImportModal from "@/components/CsvImportModal";
 
 const PART_CATEGORIES = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
-const ASSET_CATEGORIES = [
-  "HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE",
-  "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL", "ELEVATOR", "OTHER",
-];
+const ASSET_CATEGORIES = Object.keys(AssetCategoryLabels);
 
 type PartForm = {
   name: string;
@@ -328,7 +325,7 @@ export default function InventoryPage() {
           const validCategories = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
           if (raw.category && !validCategories.includes(raw.category.trim().toUpperCase()))
             errors.push(`category must be one of: ${validCategories.join(", ")}`);
-          const validAssetCats = ["HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE", "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL", "ELEVATOR", "OTHER"];
+          const validAssetCats = Object.keys(AssetCategoryLabels);
           if (raw.asset_category && !validAssetCats.includes(raw.asset_category.trim().toUpperCase()))
             errors.push(`asset_category must be one of: ${validAssetCats.join(", ")}`);
           return {

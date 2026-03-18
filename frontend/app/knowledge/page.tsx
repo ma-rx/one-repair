@@ -14,11 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-const ASSET_CATEGORIES = [
-  "HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE",
-  "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL",
-  "ELEVATOR", "COFFEE_EQUIPMENT", "ESPRESSO_MACHINE", "OTHER",
-];
+const ASSET_CATEGORIES = Object.keys(AssetCategoryLabels);
 
 const SYMPTOM_CODES = [
   "NO_POWER", "WONT_START", "OVERHEATING", "TEMPERATURE_INCONSISTENT",

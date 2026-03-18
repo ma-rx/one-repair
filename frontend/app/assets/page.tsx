@@ -303,7 +303,7 @@ export default function AssetsPage() {
           );
           if (raw.store_name?.trim() && !storeMatch)
             errors.push(`Store "${raw.store_name.trim()}" not found`);
-          const validCategories = ["HVAC", "REFRIGERATION", "COOKING_EQUIPMENT", "ICE_MACHINE", "DISHWASHER", "POS_SYSTEM", "LIGHTING", "PLUMBING", "ELECTRICAL", "ELEVATOR", "OTHER"];
+          const validCategories = Object.keys(AssetCategoryLabels);
           if (raw.category && !validCategories.includes(raw.category.trim().toUpperCase()))
             errors.push(`category must be one of: ${validCategories.join(", ")}`);
           const validStatuses = ["OPERATIONAL", "UNDER_MAINTENANCE", "OUT_OF_SERVICE", "DECOMMISSIONED"];
