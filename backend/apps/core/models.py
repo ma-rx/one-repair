@@ -148,6 +148,7 @@ class EquipmentModel(models.Model):
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     make         = models.CharField(max_length=100)
     model_number = models.CharField(max_length=100)
+    model_name   = models.CharField(max_length=255, blank=True, default="")
     category     = models.CharField(max_length=30, choices=AssetCategory.choices)
     description  = models.TextField(blank=True, default="")
     created_at   = models.DateTimeField(auto_now_add=True)

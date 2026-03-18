@@ -13,8 +13,8 @@ const ASSET_CATEGORIES = [
   "ELEVATOR", "COFFEE_EQUIPMENT", "ESPRESSO_MACHINE", "OTHER",
 ];
 
-type ModelForm = { make: string; model_number: string; category: string; description: string };
-const emptyForm = (): ModelForm => ({ make: "", model_number: "", category: "REFRIGERATION", description: "" });
+type ModelForm = { make: string; model_number: string; model_name: string; category: string; description: string };
+const emptyForm = (): ModelForm => ({ make: "", model_number: "", model_name: "", category: "REFRIGERATION", description: "" });
 
 export default function EquipmentPage() {
   const [models, setModels]       = useState<EquipmentModel[]>([]);
@@ -48,7 +48,7 @@ export default function EquipmentPage() {
 
   function openEdit(m: EquipmentModel) {
     setEditing(m);
-    setForm({ make: m.make, model_number: m.model_number, category: m.category, description: m.description });
+    setForm({ make: m.make, model_number: m.model_number, model_name: m.model_name, category: m.category, description: m.description });
     setFormError("");
     setModalOpen(true);
   }
@@ -145,6 +145,7 @@ export default function EquipmentPage() {
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Make</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Model Number</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Model Name</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Category</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Instances</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Notes</th>
@@ -156,6 +157,7 @@ export default function EquipmentPage() {
                 <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-800">{m.make}</td>
                   <td className="px-6 py-4 font-mono text-slate-700">{m.model_number}</td>
+                  <td className="px-6 py-4 text-slate-500">{m.model_name || "—"}</td>
                   <td className="px-6 py-4">
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-medium">
                       {AssetCategoryLabels[m.category] ?? m.category}
@@ -201,6 +203,13 @@ export default function EquipmentPage() {
                 onChange={(e) => setForm((f) => ({ ...f, model_number: e.target.value }))}
                 placeholder="e.g. KM-1301SAJ" required />
             </div>
+          </div>
+
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Model Name (optional)</label>
+            <input type="text" className={inputClass} value={form.model_name}
+              onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
+              placeholder="e.g. Two-Door Reach-In Refrigerator" />
           </div>
 
           <div>

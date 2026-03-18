@@ -267,6 +267,7 @@ export interface EquipmentModel {
   id: string;
   make: string;
   model_number: string;
+  model_name: string;
   category: string;
   description: string;
   instance_count: number;

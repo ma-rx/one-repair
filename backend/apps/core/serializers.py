@@ -56,7 +56,7 @@ class EquipmentModelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = EquipmentModel
-        fields = ["id", "make", "model_number", "category", "description", "instance_count", "created_at", "updated_at"]
+        fields = ["id", "make", "model_number", "model_name", "category", "description", "instance_count", "created_at", "updated_at"]
 
     def get_instance_count(self, obj):
         return obj.instances.filter(is_active=True).count()
