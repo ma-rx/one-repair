@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, Part } from "@/lib/api";
+import { api, Part, EquipmentModel } from "@/lib/api";
 import { AssetCategoryLabels } from "@/types/enums";
 import {
   Package, AlertTriangle, Plus, Pencil,
@@ -11,13 +11,11 @@ import {
 } from "lucide-react";
 import CsvImportModal from "@/components/CsvImportModal";
 
-const PART_CATEGORIES = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
 const ASSET_CATEGORIES = Object.keys(AssetCategoryLabels);
 
 type PartForm = {
   name: string;
   sku: string;
-  category: string;
   asset_category: string;
   make: string;
   model_number: string;
@@ -26,12 +24,12 @@ type PartForm = {
   unit_price: string;
   selling_price: string;
   vendor: string;
+  compatible_model_ids: string[];
 };
 
 const emptyForm = (): PartForm => ({
   name: "",
   sku: "",
-  category: "MECHANICAL",
   asset_category: "OTHER",
   make: "",
   model_number: "",
@@ -40,10 +38,12 @@ const emptyForm = (): PartForm => ({
   unit_price: "0.00",
   selling_price: "0.00",
   vendor: "",
+  compatible_model_ids: [],
 });
 
 export default function InventoryPage() {
   const [parts, setParts] = useState<Part[]>([]);
+  const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -65,7 +65,13 @@ export default function InventoryPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [categoryFilter]);
+  useEffect(() => {
+    load();
+  }, [categoryFilter]);
+
+  useEffect(() => {
+    api.listEquipmentModels().then(setEquipmentModels).catch(() => {});
+  }, []);
 
   function openCreate() {
     setEditing(null);
@@ -79,7 +85,6 @@ export default function InventoryPage() {
     setForm({
       name: p.name,
       sku: p.sku,
-      category: p.category,
       asset_category: p.asset_category,
       make: p.make,
       model_number: p.model_number,
@@ -88,6 +93,7 @@ export default function InventoryPage() {
       unit_price: p.unit_price,
       selling_price: p.selling_price ?? "0.00",
       vendor: p.vendor ?? "",
+      compatible_model_ids: p.compatible_models_display.map((m) => m.id),
     });
     setFormError("");
     setModalOpen(true);
@@ -307,7 +313,6 @@ export default function InventoryPage() {
         columns={[
           { key: "name",              label: "name",              required: true,  hint: "Compressor - Scroll 3-Ton" },
           { key: "sku",               label: "sku",               hint: "JC-123" },
-          { key: "category",          label: "category",          hint: "MECHANICAL" },
           { key: "asset_category",    label: "asset_category",    hint: "REFRIGERATION" },
           { key: "make",              label: "make",              hint: "Copeland" },
           { key: "model_number",      label: "model_number",      hint: "ZR36K3E" },
@@ -316,31 +321,50 @@ export default function InventoryPage() {
           { key: "unit_price",        label: "unit_price",        hint: "250.00" },
           { key: "selling_price",     label: "selling_price",     hint: "399.00" },
           { key: "vendor",            label: "vendor",            hint: "Johnstone Supply" },
+          { key: "compatible_models", label: "compatible_models", hint: "Copeland:ZR36K3E|Copeland:ZR42K3E" },
         ]}
         onParseRow={(raw) => {
           const errors: string[] = [];
           if (!raw.name?.trim()) errors.push("name is required");
           const qty = parseInt(raw.quantity_on_hand ?? "0");
           if (isNaN(qty) || qty < 0) errors.push("quantity_on_hand must be a non-negative number");
-          const validCategories = ["MECHANICAL", "ELECTRICAL", "REFRIGERANT", "CONSUMABLE", "OTHER"];
-          if (raw.category && !validCategories.includes(raw.category.trim().toUpperCase()))
-            errors.push(`category must be one of: ${validCategories.join(", ")}`);
           const validAssetCats = Object.keys(AssetCategoryLabels);
           if (raw.asset_category && !validAssetCats.includes(raw.asset_category.trim().toUpperCase()))
             errors.push(`asset_category must be one of: ${validAssetCats.join(", ")}`);
+
+          // Resolve compatible_models: "Make:ModelNumber|Make:ModelNumber" → UUIDs
+          const compatible_model_ids: string[] = [];
+          if (raw.compatible_models?.trim()) {
+            const pairs = raw.compatible_models.split("|").map((s: string) => s.trim()).filter(Boolean);
+            for (const pair of pairs) {
+              const colonIdx = pair.indexOf(":");
+              if (colonIdx === -1) { errors.push(`compatible_models: "${pair}" must be in Make:ModelNumber format`); continue; }
+              const make = pair.slice(0, colonIdx).trim().toLowerCase();
+              const modelNum = pair.slice(colonIdx + 1).trim().toLowerCase();
+              const match = equipmentModels.find(
+                (m) => m.make.toLowerCase() === make && m.model_number.toLowerCase() === modelNum
+              );
+              if (match) {
+                compatible_model_ids.push(match.id);
+              } else {
+                errors.push(`compatible_models: no equipment model found for "${pair}"`);
+              }
+            }
+          }
+
           return {
             data: {
               name:               raw.name?.trim() ?? "",
               sku:                raw.sku?.trim() ?? "",
-              category:           raw.category?.trim().toUpperCase() || "MECHANICAL",
               asset_category:     raw.asset_category?.trim().toUpperCase() || "OTHER",
               make:               raw.make?.trim() ?? "",
               model_number:       raw.model_number?.trim() ?? "",
               quantity_on_hand:   parseInt(raw.quantity_on_hand ?? "0") || 0,
               low_stock_threshold: parseInt(raw.low_stock_threshold ?? "2") || 2,
-              unit_price:         raw.unit_price?.trim() || "0.00",
-              selling_price:      raw.selling_price?.trim() || "0.00",
+              unit_price:         raw.unit_price?.replace(/[$,]/g, "").trim() || "0.00",
+              selling_price:      raw.selling_price?.replace(/[$,]/g, "").trim() || "0.00",
               vendor:             raw.vendor?.trim() ?? "",
+              compatible_model_ids,
             },
             errors,
           };
@@ -384,19 +408,6 @@ export default function InventoryPage() {
                 value={form.sku}
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Part Category</label>
-              <select
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-              >
-                {PART_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>
-                ))}
-              </select>
             </div>
 
             <div className="col-span-2">
@@ -487,6 +498,44 @@ export default function InventoryPage() {
                 onChange={(e) => setForm({ ...form, vendor: e.target.value })}
                 placeholder="e.g. Johnstone Supply"
               />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Compatible Equipment Models</label>
+              <div className="border border-slate-300 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                {equipmentModels.length === 0 ? (
+                  <p className="text-slate-400 text-xs px-3 py-2">No equipment models loaded.</p>
+                ) : (
+                  equipmentModels.map((m) => {
+                    const checked = form.compatible_model_ids.includes(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50 ${checked ? "bg-blue-50" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-blue-600"
+                          checked={checked}
+                          onChange={() => {
+                            setForm((prev) => ({
+                              ...prev,
+                              compatible_model_ids: checked
+                                ? prev.compatible_model_ids.filter((id) => id !== m.id)
+                                : [...prev.compatible_model_ids, m.id],
+                            }));
+                          }}
+                        />
+                        <span className="font-mono text-xs text-slate-600">{m.make} {m.model_number}</span>
+                        {m.model_name && <span className="text-slate-400 text-xs">— {m.model_name}</span>}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              {form.compatible_model_ids.length > 0 && (
+                <p className="text-xs text-blue-600 mt-1">{form.compatible_model_ids.length} model{form.compatible_model_ids.length > 1 ? "s" : ""} selected</p>
+              )}
             </div>
           </div>
 

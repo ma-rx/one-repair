@@ -177,9 +177,9 @@ export const api = {
   },
 
   // Parts CRUD (ORS Admin)
-  createPart: (body: Partial<Part>) =>
+  createPart: (body: Partial<Part> & { compatible_model_ids?: string[] }) =>
     request<Part>("/parts/", { method: "POST", body: JSON.stringify(body) }),
-  updatePart: (id: string, body: Partial<Part>) =>
+  updatePart: (id: string, body: Partial<Part> & { compatible_model_ids?: string[] }) =>
     request<Part>(`/parts/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // TicketAsset management
@@ -357,7 +357,6 @@ export interface Part {
   id: string;
   name: string;
   sku: string;
-  category: string;
   asset_category: string;
   make: string;
   model_number: string;
@@ -366,6 +365,7 @@ export interface Part {
   unit_price: string;
   selling_price: string;
   vendor: string;
+  compatible_models_display: { id: string; make: string; model_number: string; model_name: string }[];
   is_low_stock: boolean;
 }
 

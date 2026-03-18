@@ -282,7 +282,6 @@ class Part(models.Model):
     id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name                = models.CharField(max_length=255)
     sku                 = models.CharField(max_length=100, blank=True)
-    category            = models.CharField(max_length=50, choices=PartCategory.choices, default=PartCategory.OTHER)
     asset_category      = models.CharField(max_length=50, choices=AssetCategory.choices, default=AssetCategory.OTHER)
     make                = models.CharField(max_length=255, blank=True)
     model_number        = models.CharField(max_length=255, blank=True)
@@ -291,6 +290,7 @@ class Part(models.Model):
     unit_price          = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     selling_price       = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     vendor              = models.CharField(max_length=255, blank=True)
+    compatible_models   = models.ManyToManyField(EquipmentModel, blank=True, related_name="compatible_parts")
     created_at          = models.DateTimeField(auto_now_add=True)
     updated_at          = models.DateTimeField(auto_now=True)
 

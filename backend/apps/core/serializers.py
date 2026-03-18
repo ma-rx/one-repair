@@ -133,16 +133,44 @@ class AssetSerializer(serializers.ModelSerializer):
 
 class PartSerializer(serializers.ModelSerializer):
     is_low_stock = serializers.BooleanField(read_only=True)
+    compatible_models_display = serializers.SerializerMethodField()
+    compatible_model_ids = serializers.ListField(
+        child=serializers.UUIDField(), write_only=True, required=False, default=list
+    )
 
     class Meta:
         model = Part
         fields = [
-            "id", "name", "sku", "category", "asset_category",
+            "id", "name", "sku", "asset_category",
             "make", "model_number",
             "quantity_on_hand", "low_stock_threshold", "unit_price",
             "selling_price", "vendor",
+            "compatible_models_display", "compatible_model_ids",
             "is_low_stock", "created_at", "updated_at",
         ]
+
+    def get_compatible_models_display(self, obj):
+        return [
+            {"id": str(m.id), "make": m.make, "model_number": m.model_number, "model_name": m.model_name}
+            for m in obj.compatible_models.all()
+        ]
+
+    def _set_compatible_models(self, instance, ids):
+        if ids is not None:
+            models_qs = EquipmentModel.objects.filter(id__in=ids)
+            instance.compatible_models.set(models_qs)
+
+    def create(self, validated_data):
+        ids = validated_data.pop("compatible_model_ids", [])
+        instance = super().create(validated_data)
+        self._set_compatible_models(instance, ids)
+        return instance
+
+    def update(self, instance, validated_data):
+        ids = validated_data.pop("compatible_model_ids", None)
+        instance = super().update(instance, validated_data)
+        self._set_compatible_models(instance, ids)
+        return instance
 
 
 # ── PartUsed ──────────────────────────────────────────────────────────────────
