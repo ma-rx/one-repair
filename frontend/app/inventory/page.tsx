@@ -18,7 +18,6 @@ type PartForm = {
   sku: string;
   asset_category: string;
   make: string;
-  model_number: string;
   quantity_on_hand: number;
   low_stock_threshold: number;
   unit_price: string;
@@ -32,7 +31,6 @@ const emptyForm = (): PartForm => ({
   sku: "",
   asset_category: "OTHER",
   make: "",
-  model_number: "",
   quantity_on_hand: 0,
   low_stock_threshold: 2,
   unit_price: "0.00",
@@ -87,7 +85,6 @@ export default function InventoryPage() {
       sku: p.sku,
       asset_category: p.asset_category,
       make: p.make,
-      model_number: p.model_number,
       quantity_on_hand: p.quantity_on_hand,
       low_stock_threshold: p.low_stock_threshold,
       unit_price: p.unit_price,
@@ -257,9 +254,7 @@ export default function InventoryPage() {
                 <tr key={p.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${p.is_low_stock ? "bg-amber-50/40" : ""}`}>
                   <td className="px-6 py-4">
                     <p className="font-medium text-slate-800">{p.name}</p>
-                    {(p.make || p.model_number) && (
-                      <p className="text-slate-400 text-xs mt-0.5">{[p.make, p.model_number].filter(Boolean).join(" · ")}</p>
-                    )}
+                    {p.make && <p className="text-slate-400 text-xs mt-0.5">{p.make}</p>}
                   </td>
                   <td className="px-6 py-4 font-mono text-slate-500 text-xs">{p.sku || "—"}</td>
                   <td className="px-6 py-4 text-slate-600">
@@ -315,7 +310,6 @@ export default function InventoryPage() {
           { key: "sku",               label: "sku",               hint: "JC-123" },
           { key: "asset_category",    label: "asset_category",    hint: "REFRIGERATION" },
           { key: "make",              label: "make",              hint: "Copeland" },
-          { key: "model_number",      label: "model_number",      hint: "ZR36K3E" },
           { key: "quantity_on_hand",  label: "quantity_on_hand",  hint: "5" },
           { key: "low_stock_threshold", label: "low_stock_threshold", hint: "2" },
           { key: "unit_price",        label: "unit_price",        hint: "250.00" },
@@ -358,7 +352,6 @@ export default function InventoryPage() {
               sku:                raw.sku?.trim() ?? "",
               asset_category:     raw.asset_category?.trim().toUpperCase() || "OTHER",
               make:               raw.make?.trim() ?? "",
-              model_number:       raw.model_number?.trim() ?? "",
               quantity_on_hand:   parseInt(raw.quantity_on_hand ?? "0") || 0,
               low_stock_threshold: parseInt(raw.low_stock_threshold ?? "2") || 2,
               unit_price:         raw.unit_price?.replace(/[$,]/g, "").trim() || "0.00",
@@ -430,16 +423,6 @@ export default function InventoryPage() {
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={form.make}
                 onChange={(e) => setForm({ ...form, make: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Model Number</label>
-              <input
-                type="text"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={form.model_number}
-                onChange={(e) => setForm({ ...form, model_number: e.target.value })}
               />
             </div>
 

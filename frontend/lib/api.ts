@@ -359,7 +359,6 @@ export interface Part {
   sku: string;
   asset_category: string;
   make: string;
-  model_number: string;
   quantity_on_hand: number;
   low_stock_threshold: number;
   unit_price: string;

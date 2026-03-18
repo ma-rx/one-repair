@@ -284,7 +284,6 @@ class Part(models.Model):
     sku                 = models.CharField(max_length=100, blank=True)
     asset_category      = models.CharField(max_length=50, choices=AssetCategory.choices, default=AssetCategory.OTHER)
     make                = models.CharField(max_length=255, blank=True)
-    model_number        = models.CharField(max_length=255, blank=True)
     quantity_on_hand    = models.PositiveIntegerField(default=0)
     low_stock_threshold = models.PositiveIntegerField(default=2)
     unit_price          = models.DecimalField(max_digits=10, decimal_places=2, default=0)

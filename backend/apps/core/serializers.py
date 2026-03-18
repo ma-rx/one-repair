@@ -142,7 +142,7 @@ class PartSerializer(serializers.ModelSerializer):
         model = Part
         fields = [
             "id", "name", "sku", "asset_category",
-            "make", "model_number",
+            "make",
             "quantity_on_hand", "low_stock_threshold", "unit_price",
             "selling_price", "vendor",
             "compatible_models_display", "compatible_model_ids",
