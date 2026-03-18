@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, KnowledgeEntry } from "@/lib/api";
+import { api, EquipmentModel, KnowledgeEntry } from "@/lib/api";
 import {
   AssetCategoryLabels, KnowledgeDifficultyLabels,
   SymptomCodeLabels, ResolutionCodeLabels,
@@ -49,6 +49,7 @@ const difficultyStyle: Record<string, string> = {
 };
 
 type EntryForm = {
+  equipment_model: string | null;
   asset_category: string;
   make: string;
   model_number: string;
@@ -62,6 +63,7 @@ type EntryForm = {
 };
 
 const emptyForm = (): EntryForm => ({
+  equipment_model:     null,
   asset_category:      "REFRIGERATION",
   make:                "",
   model_number:        "",
@@ -78,7 +80,8 @@ export default function KnowledgePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ORS_ADMIN";
 
-  const [entries, setEntries]   = useState<KnowledgeEntry[]>([]);
+  const [entries, setEntries]         = useState<KnowledgeEntry[]>([]);
+  const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState("");
 
@@ -93,6 +96,10 @@ export default function KnowledgePage() {
 
   // Detail drawer
   const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
+
+  useEffect(() => {
+    api.listEquipmentModels().then(setEquipmentModels).catch(() => {});
+  }, []);
 
   function load() {
     setLoading(true);
@@ -117,6 +124,7 @@ export default function KnowledgePage() {
   function openEdit(e: KnowledgeEntry) {
     setEditing(e);
     setForm({
+      equipment_model:     e.equipment_model,
       asset_category:      e.asset_category,
       make:                e.make,
       model_number:        e.model_number,
@@ -277,6 +285,11 @@ export default function KnowledgePage() {
                         {" → "}
                         {ResolutionCodeLabels[entry.resolution_code] ?? entry.resolution_code}
                       </p>
+                      {entry.equipment_model_display && (
+                        <p className="text-xs text-blue-600 font-mono mt-0.5">
+                          {entry.equipment_model_display.make} {entry.equipment_model_display.model_number}
+                        </p>
+                      )}
                       {entry.cause_summary && (
                         <p className="text-xs text-slate-500 mt-1 line-clamp-2">{entry.cause_summary}</p>
                       )}
@@ -386,6 +399,28 @@ export default function KnowledgePage() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Link to Equipment Model (recommended)</label>
+              <select
+                className={inputClass}
+                value={form.equipment_model ?? ""}
+                onChange={(e) => {
+                  const selected = equipmentModels.find((m) => m.id === e.target.value);
+                  setForm((f) => ({
+                    ...f,
+                    equipment_model: e.target.value || null,
+                    ...(selected ? { asset_category: selected.category, make: selected.make, model_number: selected.model_number } : {}),
+                  }));
+                }}
+              >
+                <option value="">— general (not model-specific) —</option>
+                {equipmentModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.make} {m.model_number}</option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">Linking makes this entry searchable by model for AI diagnostics.</p>
+            </div>
+
             <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Equipment Type <span className="text-red-500">*</span>

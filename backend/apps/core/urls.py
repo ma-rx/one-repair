@@ -1,16 +1,17 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
-    AssetViewSet, ClientKPIView, FormatReportView, InvoicePDFView, KPIView,
-    KnowledgeEntryViewSet, OrganizationViewSet, PartRequestViewSet, PartViewSet,
-    PricingConfigView, ServiceReportViewSet, StoreViewSet, TicketViewSet,
-    TimeEntryView, UserViewSet, WorkImageView,
+    AssetViewSet, ClientKPIView, EquipmentModelViewSet, FormatReportView,
+    InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
+    PartRequestViewSet, PartViewSet, PricingConfigView, ServiceReportViewSet,
+    StoreViewSet, TicketViewSet, TimeEntryView, UserViewSet, WorkImageView,
 )
 
 router = DefaultRouter()
 router.register("users", UserViewSet, basename="user")
 router.register("organizations", OrganizationViewSet, basename="organization")
 router.register("stores", StoreViewSet, basename="store")
+router.register("equipment-models", EquipmentModelViewSet, basename="equipment-model")
 router.register("assets", AssetViewSet, basename="asset")
 router.register("parts", PartViewSet, basename="part")
 router.register("tickets", TicketViewSet, basename="ticket")

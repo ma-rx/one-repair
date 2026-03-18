@@ -16,17 +16,18 @@ import requests as http_requests
 from rest_framework.parsers import MultiPartParser
 
 from .models import (
-    Asset, AssetStatus, KnowledgeEntry, Organization, Part, PartRequest, PartRequestStatus,
-    PartUsed, PricingConfig, ServiceReport, Store, Ticket, TicketAsset,
-    TicketStatus, TimeEntry, UserRole, WorkImage,
+    Asset, AssetStatus, EquipmentModel, KnowledgeEntry, Organization, Part,
+    PartRequest, PartRequestStatus, PartUsed, PricingConfig, ServiceReport,
+    Store, Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole, WorkImage,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    CreateUserSerializer, KnowledgeEntrySerializer, OrganizationSerializer,
-    PartRequestSerializer, PartSerializer, PricingConfigSerializer,
-    ServiceReportSerializer, StoreSerializer, TicketAssetSerializer,
-    TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
+    CreateUserSerializer, EquipmentModelSerializer, KnowledgeEntrySerializer,
+    OrganizationSerializer, PartRequestSerializer, PartSerializer,
+    PricingConfigSerializer, ServiceReportSerializer, StoreSerializer,
+    TicketAssetSerializer, TicketSerializer, TimeEntrySerializer,
+    UserSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -157,6 +158,23 @@ class StoreViewSet(viewsets.ModelViewSet):
         return qs
 
 
+# ── EquipmentModel ────────────────────────────────────────────────────────────
+
+class EquipmentModelViewSet(viewsets.ModelViewSet):
+    serializer_class = EquipmentModelSerializer
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsORSAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = EquipmentModel.objects.prefetch_related("instances")
+        if self.request.query_params.get("category"):
+            qs = qs.filter(category=self.request.query_params["category"])
+        return qs
+
+
 # ── Assets ────────────────────────────────────────────────────────────────────
 
 class AssetViewSet(viewsets.ModelViewSet):
@@ -181,6 +199,10 @@ class AssetViewSet(viewsets.ModelViewSet):
         store_id = self.request.query_params.get("store")
         if store_id:
             qs = qs.filter(store_id=store_id)
+
+        equipment_model_id = self.request.query_params.get("equipment_model")
+        if equipment_model_id:
+            qs = qs.filter(equipment_model_id=equipment_model_id)
 
         active_only = self.request.query_params.get("active")
         if active_only == "true":

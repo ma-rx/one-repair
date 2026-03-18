@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, Asset, Store } from "@/lib/api";
+import { api, Asset, EquipmentModel, Store } from "@/lib/api";
 import {
   AssetCategoryLabels, AssetStatusLabels,
 } from "@/types/enums";
@@ -23,12 +23,13 @@ const STATUS_CONFIG: Record<string, { label: string; style: string; icon: React.
 const EMPTY: Partial<Asset> = {
   name: "", category: "OTHER", make: "", model_number: "",
   serial_number: "", install_date: "", warranty_expiry: "",
-  status: "OPERATIONAL", store: "", is_active: true,
+  status: "OPERATIONAL", store: "", is_active: true, equipment_model: null,
 };
 
 export default function AssetsPage() {
-  const [assets, setAssets]         = useState<Asset[]>([]);
-  const [stores, setStores]         = useState<Store[]>([]);
+  const [assets, setAssets]             = useState<Asset[]>([]);
+  const [stores, setStores]             = useState<Store[]>([]);
+  const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [filterStore, setFilterStore]       = useState("");
@@ -43,8 +44,8 @@ export default function AssetsPage() {
   const [formError, setFormError]   = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.listAssets(), api.listStores()])
-      .then(([a, s]) => { setAssets(a); setStores(s); })
+    Promise.all([api.listAssets(), api.listStores(), api.listEquipmentModels()])
+      .then(([a, s, em]) => { setAssets(a); setStores(s); setEquipmentModels(em); })
       .catch(() => setError("Failed to load assets."))
       .finally(() => setLoading(false));
   }, []);
@@ -70,6 +71,7 @@ export default function AssetsPage() {
       model_number: asset.model_number, serial_number: asset.serial_number,
       install_date: asset.install_date ?? "", warranty_expiry: asset.warranty_expiry ?? "",
       status: asset.status, store: asset.store, is_active: asset.is_active,
+      equipment_model: asset.equipment_model,
     });
     setFormError(null);
     setModalOpen(true);
@@ -210,7 +212,7 @@ export default function AssetsPage() {
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Asset</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Category</th>
-                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Make / Model</th>
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Equipment Model</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Serial #</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Store</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Warranty</th>
@@ -232,7 +234,10 @@ export default function AssetsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-slate-500">
-                        {[a.make, a.model_number].filter(Boolean).join(" · ") || "—"}
+                        {a.equipment_model_display
+                          ? <span className="font-medium text-slate-700">{a.equipment_model_display.make} <span className="font-mono text-xs">{a.equipment_model_display.model_number}</span></span>
+                          : <span className="text-slate-300 text-xs">Not linked</span>
+                        }
                       </td>
                       <td className="px-6 py-4 font-mono text-slate-400 text-xs">
                         {a.serial_number || "—"}
@@ -359,6 +364,29 @@ export default function AssetsPage() {
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Equipment Model */}
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Equipment Model</label>
+              <select
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.equipment_model ?? ""}
+                onChange={(e) => {
+                  const selected = equipmentModels.find((m) => m.id === e.target.value);
+                  setForm((f) => ({
+                    ...f,
+                    equipment_model: e.target.value || null,
+                    ...(selected ? { category: selected.category, make: selected.make, model_number: selected.model_number } : {}),
+                  }));
+                }}
+              >
+                <option value="">— not linked —</option>
+                {equipmentModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.make} {m.model_number}</option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">Linking auto-fills category, make, and model number.</p>
             </div>
 
             {/* Name */}

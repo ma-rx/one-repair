@@ -3,9 +3,9 @@ from django.db import models
 from rest_framework import serializers
 
 from .models import (
-    Asset, KnowledgeEntry, Organization, Part, PartRequest, PartRequestStatus, PartRequestUrgency,
-    PartUsed, PricingConfig, ServiceReport, Store, Ticket, TicketAsset,
-    TimeEntry, UserProfile, WorkImage,
+    Asset, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
+    PartRequestStatus, PartRequestUrgency, PartUsed, PricingConfig, ServiceReport,
+    Store, Ticket, TicketAsset, TimeEntry, UserProfile, WorkImage,
 )
 
 
@@ -47,6 +47,19 @@ class CreateUserSerializer(serializers.Serializer):
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
         return value.lower()
+
+
+# ── EquipmentModel ────────────────────────────────────────────────────────────
+
+class EquipmentModelSerializer(serializers.ModelSerializer):
+    instance_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EquipmentModel
+        fields = ["id", "make", "model_number", "category", "description", "instance_count", "created_at", "updated_at"]
+
+    def get_instance_count(self, obj):
+        return obj.instances.filter(is_active=True).count()
 
 
 # ── Organization ──────────────────────────────────────────────────────────────
@@ -96,8 +109,9 @@ class StoreSerializer(serializers.ModelSerializer):
 # ── Asset ─────────────────────────────────────────────────────────────────────
 
 class AssetSerializer(serializers.ModelSerializer):
-    store_name = serializers.CharField(source="store.name", read_only=True)
-    organization_name = serializers.CharField(source="store.organization.name", read_only=True)
+    store_name         = serializers.CharField(source="store.name", read_only=True)
+    organization_name  = serializers.CharField(source="store.organization.name", read_only=True)
+    equipment_model_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -105,8 +119,14 @@ class AssetSerializer(serializers.ModelSerializer):
             "id", "name", "category", "make", "model_number", "serial_number",
             "install_date", "warranty_expiry", "status", "is_active",
             "store", "store_name", "organization_name",
+            "equipment_model", "equipment_model_display",
             "created_at", "updated_at",
         ]
+
+    def get_equipment_model_display(self, obj):
+        if obj.equipment_model:
+            return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number}
+        return None
 
 
 # ── Part ──────────────────────────────────────────────────────────────────────
@@ -318,12 +338,14 @@ class PartRequestInputSerializer(serializers.Serializer):
 # ── KnowledgeEntry ────────────────────────────────────────────────────────────
 
 class KnowledgeEntrySerializer(serializers.ModelSerializer):
-    contributed_by_name = serializers.SerializerMethodField()
+    contributed_by_name     = serializers.SerializerMethodField()
+    equipment_model_display = serializers.SerializerMethodField()
 
     class Meta:
         model = KnowledgeEntry
         fields = [
-            "id", "asset_category", "make", "model_number",
+            "id", "equipment_model", "equipment_model_display",
+            "asset_category", "make", "model_number",
             "symptom_code", "resolution_code", "difficulty",
             "cause_summary", "procedure", "parts_commonly_used", "pro_tips",
             "contributed_by", "contributed_by_name", "is_verified",
@@ -333,6 +355,11 @@ class KnowledgeEntrySerializer(serializers.ModelSerializer):
     def get_contributed_by_name(self, obj):
         if obj.contributed_by:
             return obj.contributed_by.get_full_name() or obj.contributed_by.username
+        return None
+
+    def get_equipment_model_display(self, obj):
+        if obj.equipment_model:
+            return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number}
         return None
 
 

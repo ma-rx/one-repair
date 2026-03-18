@@ -216,6 +216,17 @@ export const api = {
 
   deleteTicket: (id: string) =>
     request<void>(`/tickets/${id}/`, { method: "DELETE" }),
+  // Equipment Models
+  listEquipmentModels: (category?: string) =>
+    request<EquipmentModel[]>(`/equipment-models/${category ? `?category=${category}` : ""}`),
+  getEquipmentModel: (id: string) => request<EquipmentModel>(`/equipment-models/${id}/`),
+  createEquipmentModel: (body: Partial<EquipmentModel>) =>
+    request<EquipmentModel>("/equipment-models/", { method: "POST", body: JSON.stringify(body) }),
+  updateEquipmentModel: (id: string, body: Partial<EquipmentModel>) =>
+    request<EquipmentModel>(`/equipment-models/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteEquipmentModel: (id: string) =>
+    request<void>(`/equipment-models/${id}/`, { method: "DELETE" }),
+
   deleteAsset: (id: string) =>
     request<void>(`/assets/${id}/`, { method: "DELETE" }),
   deletePart: (id: string) =>
@@ -250,6 +261,17 @@ export interface Organization {
   is_active: boolean;
   store_count: number;
   created_at: string;
+}
+
+export interface EquipmentModel {
+  id: string;
+  make: string;
+  model_number: string;
+  category: string;
+  description: string;
+  instance_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Store {
@@ -326,6 +348,8 @@ export interface Asset {
   install_date: string | null;
   warranty_expiry: string | null;
   is_active: boolean;
+  equipment_model: string | null;
+  equipment_model_display: { id: string; make: string; model_number: string } | null;
 }
 
 export interface Part {
@@ -535,6 +559,8 @@ export interface CloseTicketBody {
 
 export interface KnowledgeEntry {
   id: string;
+  equipment_model: string | null;
+  equipment_model_display: { id: string; make: string; model_number: string } | null;
   asset_category: string;
   make: string;
   model_number: string;

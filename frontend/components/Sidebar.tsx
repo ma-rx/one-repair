@@ -27,6 +27,7 @@ const orsNav = [
   { label: "Parts Needed",   href: "/dispatch/parts",   icon: Package      },
   { label: "Organizations",  href: "/organizations",    icon: Building2    },
   { label: "Stores",         href: "/stores",           icon: MapPin       },
+  { label: "Equipment",      href: "/equipment",        icon: Wrench       },
   { label: "Assets",         href: "/assets",           icon: Cpu          },
   { label: "Inventory",      href: "/inventory",        icon: Package      },
   { label: "Users",          href: "/users",            icon: Users        },

@@ -144,6 +144,23 @@ class KnowledgeDifficulty(models.TextChoices):
 
 # ── Models ─────────────────────────────────────────────────────────────────────
 
+class EquipmentModel(models.Model):
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    make         = models.CharField(max_length=100)
+    model_number = models.CharField(max_length=100)
+    category     = models.CharField(max_length=30, choices=AssetCategory.choices)
+    description  = models.TextField(blank=True, default="")
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["make", "model_number"]
+        unique_together = [["make", "model_number"]]
+
+    def __str__(self):
+        return f"{self.make} {self.model_number}"
+
+
 class PricingConfig(models.Model):
     """Singleton — one row stores global pricing rates."""
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -227,19 +244,22 @@ class Store(models.Model):
 
 
 class Asset(models.Model):
-    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    store          = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="assets")
-    name           = models.CharField(max_length=255)
-    category       = models.CharField(max_length=50, choices=AssetCategory.choices, default=AssetCategory.OTHER)
-    make           = models.CharField(max_length=255, blank=True)
-    model_number   = models.CharField(max_length=255, blank=True)
-    serial_number  = models.CharField(max_length=255, blank=True)
-    install_date   = models.DateField(null=True, blank=True)
-    warranty_expiry = models.DateField(null=True, blank=True)
-    status         = models.CharField(max_length=50, choices=AssetStatus.choices, default=AssetStatus.OPERATIONAL)
-    is_active      = models.BooleanField(default=True)
-    created_at     = models.DateTimeField(auto_now_add=True)
-    updated_at     = models.DateTimeField(auto_now=True)
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store            = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="assets")
+    equipment_model  = models.ForeignKey(
+        EquipmentModel, null=True, blank=True, on_delete=models.SET_NULL, related_name="instances"
+    )
+    name             = models.CharField(max_length=255)
+    category         = models.CharField(max_length=50, choices=AssetCategory.choices, default=AssetCategory.OTHER)
+    make             = models.CharField(max_length=255, blank=True)
+    model_number     = models.CharField(max_length=255, blank=True)
+    serial_number    = models.CharField(max_length=255, blank=True)
+    install_date     = models.DateField(null=True, blank=True)
+    warranty_expiry  = models.DateField(null=True, blank=True)
+    status           = models.CharField(max_length=50, choices=AssetStatus.choices, default=AssetStatus.OPERATIONAL)
+    is_active        = models.BooleanField(default=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["name"]
@@ -426,6 +446,9 @@ class PartRequest(models.Model):
 
 class KnowledgeEntry(models.Model):
     id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    equipment_model     = models.ForeignKey(
+        EquipmentModel, null=True, blank=True, on_delete=models.SET_NULL, related_name="knowledge_entries"
+    )
     asset_category      = models.CharField(max_length=30, choices=AssetCategory.choices)
     make                = models.CharField(max_length=100, blank=True, default="")
     model_number        = models.CharField(max_length=100, blank=True, default="")
