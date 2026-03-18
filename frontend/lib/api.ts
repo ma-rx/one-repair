@@ -72,8 +72,14 @@ export const api = {
     request<Asset>(`/assets/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // Parts
-  listParts: (assetCategory?: string) =>
-    request<Part[]>(`/parts/${assetCategory ? `?asset_category=${assetCategory}` : ""}`),
+  listParts: (params?: { assetCategory?: string; make?: string; compatibleModel?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.assetCategory)    qs.set("asset_category",   params.assetCategory);
+    if (params?.make)             qs.set("make",              params.make);
+    if (params?.compatibleModel)  qs.set("compatible_model", params.compatibleModel);
+    const q = qs.toString();
+    return request<Part[]>(`/parts/${q ? `?${q}` : ""}`);
+  },
 
   // Users
   listTechs: () => request<AppUser[]>("/users/?role=TECH"),

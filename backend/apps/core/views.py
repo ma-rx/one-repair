@@ -222,10 +222,16 @@ class PartViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        qs = Part.objects.all()
+        qs = Part.objects.prefetch_related("compatible_models")
         asset_category = self.request.query_params.get("asset_category")
+        make = self.request.query_params.get("make")
+        compatible_model = self.request.query_params.get("compatible_model")
         if asset_category:
             qs = qs.filter(asset_category=asset_category)
+        if make:
+            qs = qs.filter(make__iexact=make)
+        if compatible_model:
+            qs = qs.filter(compatible_models__id=compatible_model)
         return qs
 
 

@@ -44,6 +44,8 @@ export default function InventoryPage() {
   const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [makeFilter, setMakeFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -57,7 +59,11 @@ export default function InventoryPage() {
 
   function load() {
     setLoading(true);
-    api.listParts(categoryFilter || undefined)
+    api.listParts({
+      assetCategory: categoryFilter || undefined,
+      make: makeFilter || undefined,
+      compatibleModel: modelFilter || undefined,
+    })
       .then(setParts)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -65,7 +71,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     load();
-  }, [categoryFilter]);
+  }, [categoryFilter, makeFilter, modelFilter]);
 
   useEffect(() => {
     api.listEquipmentModels().then(setEquipmentModels).catch(() => {});
@@ -134,6 +140,8 @@ export default function InventoryPage() {
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.sku.toLowerCase().includes(search.toLowerCase())
   );
+
+  const distinctMakes = Array.from(new Set(parts.map((p) => p.make).filter(Boolean))).sort();
 
   const lowStockCount = parts.filter((p) => p.is_low_stock).length;
   const totalValue = parts.reduce(
@@ -220,6 +228,26 @@ export default function InventoryPage() {
           <option value="">All Equipment Types</option>
           {ASSET_CATEGORIES.map((c) => (
             <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
+          ))}
+        </select>
+        <select
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={makeFilter}
+          onChange={(e) => setMakeFilter(e.target.value)}
+        >
+          <option value="">All Makes</option>
+          {distinctMakes.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+        <select
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={modelFilter}
+          onChange={(e) => setModelFilter(e.target.value)}
+        >
+          <option value="">All Models</option>
+          {equipmentModels.map((m) => (
+            <option key={m.id} value={m.id}>{m.make} {m.model_number}{m.model_name ? ` — ${m.model_name}` : ""}</option>
           ))}
         </select>
       </div>
