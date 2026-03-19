@@ -24,9 +24,11 @@ from .models import (
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    CreateUserSerializer, EquipmentModelSerializer, KnowledgeEntrySerializer,
+    CreateUserSerializer, EquipmentModelSerializer, GenerateInvoiceSerializer,
+    KnowledgeEntrySerializer,
     OrganizationSerializer, PartRequestSerializer, PartSerializer,
-    PricingConfigSerializer, ResolutionCodeEntrySerializer, ServiceReportSerializer,
+    PricingConfigSerializer, ResolutionCodeEntrySerializer, SaveProgressSerializer,
+    ServiceReportSerializer,
     StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
     TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
 )
@@ -497,6 +499,217 @@ class TicketViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["post"], url_path="save-progress")
+    def save_progress(self, request, pk=None):
+        ticket = self.get_object()
+
+        if ticket.status in (TicketStatus.CLOSED, TicketStatus.COMPLETED):
+            return Response(
+                {"detail": "Cannot save progress on a completed or closed ticket."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = SaveProgressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Auto-calculate labor if not provided
+        if data.get("labor_cost") is None:
+            pricing = PricingConfig.objects.first() or PricingConfig()
+            entries = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=False)
+            total_minutes = sum(e.total_minutes or 0 for e in entries)
+            hours = max(float(pricing.min_hours), total_minutes / 60.0)
+            labor_cost_val = float(pricing.trip_charge) + hours * float(pricing.hourly_rate)
+        else:
+            labor_cost_val = data["labor_cost"]
+
+        # Draft parts as JSON (no inventory deduction yet)
+        draft_parts = [
+            {"part_id": str(pu["part_id"]), "quantity": pu["quantity"]}
+            for pu in data.get("parts_used", [])
+        ]
+
+        with transaction.atomic():
+            # Create or update service report
+            report, _ = ServiceReport.objects.update_or_create(
+                ticket=ticket,
+                defaults={
+                    "submitted_by": request.user,
+                    "resolution_code": data["resolution_code"],
+                    "labor_cost": labor_cost_val,
+                    "tech_notes": data.get("tech_notes", ""),
+                    "formatted_report": data.get("formatted_report", ""),
+                    "draft_parts": draft_parts,
+                },
+            )
+
+            # Create part requests (idempotent-ish — may create duplicates if called multiple times)
+            for pn_input in data.get("parts_needed", []):
+                pr_kwargs = {
+                    "ticket": ticket,
+                    "quantity_needed": pn_input.get("quantity_needed", 1),
+                    "urgency": pn_input.get("urgency", "NEXT_VISIT"),
+                    "notes": pn_input.get("notes", ""),
+                }
+                if pn_input.get("part_id"):
+                    try:
+                        part_obj = Part.objects.get(pk=pn_input["part_id"])
+                        pr_kwargs["part"] = part_obj
+                    except Part.DoesNotExist:
+                        pass
+                else:
+                    pr_kwargs.update({
+                        "part_name": pn_input.get("part_name", ""),
+                        "sku": pn_input.get("sku", ""),
+                        "asset_category": pn_input.get("asset_category", ""),
+                        "make": pn_input.get("make", ""),
+                        "model_number": pn_input.get("model_number", ""),
+                        "vendor": pn_input.get("vendor", ""),
+                        "cost_price": pn_input.get("cost_price"),
+                        "selling_price": pn_input.get("selling_price"),
+                    })
+                PartRequest.objects.create(**pr_kwargs)
+
+            # Move ticket to IN_PROGRESS if still at DISPATCHED
+            if ticket.status == TicketStatus.DISPATCHED:
+                ticket.status = TicketStatus.IN_PROGRESS
+                ticket.save(update_fields=["status", "updated_at"])
+
+        return Response(ServiceReportSerializer(report).data)
+
+    @action(detail=True, methods=["post"], url_path="mark-complete")
+    def mark_complete(self, request, pk=None):
+        ticket = self.get_object()
+
+        if ticket.status == TicketStatus.CLOSED:
+            return Response({"detail": "Ticket is already closed."}, status=status.HTTP_400_BAD_REQUEST)
+        if ticket.status == TicketStatus.COMPLETED:
+            return Response({"detail": "Ticket is already marked complete."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Clock out tech if still clocked in
+        active_entry = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=True).first()
+        if active_entry:
+            now = timezone.now()
+            active_entry.clocked_out_at = now
+            delta = now - active_entry.clocked_in_at
+            active_entry.total_minutes = int(delta.total_seconds() / 60)
+            active_entry.save(update_fields=["clocked_out_at", "total_minutes"])
+
+        ticket.status = TicketStatus.COMPLETED
+        ticket.save(update_fields=["status", "updated_at"])
+
+        return Response(TicketSerializer(ticket).data)
+
+    @action(detail=True, methods=["post"], url_path="generate-invoice")
+    def generate_invoice(self, request, pk=None):
+        ticket = self.get_object()
+
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Only ORS Admin can generate invoices."}, status=status.HTTP_403_FORBIDDEN)
+
+        if ticket.status == TicketStatus.CLOSED:
+            return Response({"detail": "Ticket is already closed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = GenerateInvoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        parts_input = data.get("parts_used", [])
+
+        # Validate stock
+        part_objects = {}
+        for pu_input in parts_input:
+            try:
+                part = Part.objects.get(pk=pu_input["part_id"])
+            except Part.DoesNotExist:
+                return Response({"detail": f"Part {pu_input['part_id']} not found."}, status=status.HTTP_404_NOT_FOUND)
+            if part.quantity_on_hand < pu_input["quantity"]:
+                return Response(
+                    {"detail": f"Insufficient stock for '{part.name}'. Available: {part.quantity_on_hand}, requested: {pu_input['quantity']}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            part_objects[str(pu_input["part_id"])] = part
+
+        # Auto-calculate labor if not provided
+        if data.get("labor_cost") is None:
+            pricing = PricingConfig.objects.first() or PricingConfig()
+            entries = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=False)
+            total_minutes = sum(e.total_minutes or 0 for e in entries)
+            hours = max(float(pricing.min_hours), total_minutes / 60.0)
+            labor_cost_val = float(pricing.trip_charge) + hours * float(pricing.hourly_rate)
+        else:
+            labor_cost_val = data["labor_cost"]
+
+        # Use pricing config tax_rate as default if not specified
+        if data.get("tax_rate") is None:
+            pricing = PricingConfig.objects.first()
+            tax_rate_val = float(pricing.tax_rate) if pricing else 0
+        else:
+            tax_rate_val = float(data["tax_rate"])
+
+        with transaction.atomic():
+            # Get or create service report
+            report, _ = ServiceReport.objects.get_or_create(
+                ticket=ticket,
+                defaults={
+                    "submitted_by": request.user,
+                    "resolution_code": data["resolution_code"],
+                    "labor_cost": labor_cost_val,
+                    "invoice_email": data.get("invoice_email", ""),
+                    "tech_notes": data.get("tech_notes", ""),
+                    "formatted_report": data.get("formatted_report", ""),
+                    "tax_rate": tax_rate_val,
+                },
+            )
+            # Update with latest values
+            report.resolution_code = data["resolution_code"]
+            report.labor_cost = labor_cost_val
+            report.invoice_email = data.get("invoice_email", "")
+            report.tech_notes = data.get("tech_notes", "")
+            report.formatted_report = data.get("formatted_report", "")
+            report.tax_rate = tax_rate_val
+            report.draft_parts = []
+            report.save()
+
+            # Remove any existing PartUsed records (replace with final list)
+            report.parts_used.all().delete()
+
+            # Create PartUsed and deduct inventory
+            for pu_input in parts_input:
+                part = part_objects[str(pu_input["part_id"])]
+                PartUsed.objects.create(
+                    service_report=report,
+                    part=part,
+                    quantity=pu_input["quantity"],
+                    unit_price_at_time=part.selling_price,
+                )
+                part.quantity_on_hand -= pu_input["quantity"]
+                part.save(update_fields=["quantity_on_hand", "updated_at"])
+
+            # Close ticket
+            ticket.status = TicketStatus.CLOSED
+            ticket.closed_at = timezone.now()
+            ticket.save(update_fields=["status", "closed_at", "updated_at"])
+
+            # Update asset status
+            for ta in ticket.ticket_assets.select_related("asset"):
+                if ta.asset:
+                    ta.asset.status = AssetStatus.OPERATIONAL
+                    ta.asset.save(update_fields=["status", "updated_at"])
+
+        # Generate and optionally send PDF
+        try:
+            pdf_bytes = generate_invoice_pdf(report)
+            email = data.get("invoice_email", "")
+            if email:
+                send_invoice_email(email, report, pdf_bytes)
+                report.invoice_sent = True
+                report.save(update_fields=["invoice_sent"])
+        except Exception:
+            pass
+
+        return Response(ServiceReportSerializer(report).data)
+
 
 # ── Part Requests ─────────────────────────────────────────────────────────────
 
@@ -658,8 +871,9 @@ class PartRequestViewSet(viewsets.ModelViewSet):
 
 # ── Service Reports ───────────────────────────────────────────────────────────
 
-class ServiceReportViewSet(viewsets.ReadOnlyModelViewSet):
+class ServiceReportViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceReportSerializer
+    http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
         user = self.request.user
@@ -678,6 +892,17 @@ class ServiceReportViewSet(viewsets.ReadOnlyModelViewSet):
                 .select_related("ticket__asset__store__organization")
             )
         return ServiceReport.objects.none()
+
+    def partial_update(self, request, *args, **kwargs):
+        report = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        allowed = ["resolution_code", "labor_cost", "tech_notes", "formatted_report", "tax_rate", "invoice_email", "draft_parts"]
+        data = {k: v for k, v in request.data.items() if k in allowed}
+        serializer = self.get_serializer(report, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────

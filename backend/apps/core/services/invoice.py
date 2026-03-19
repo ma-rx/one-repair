@@ -122,6 +122,10 @@ def generate_invoice_pdf(service_report) -> bytes:
     pdf.cell(col_label, 5, "Labor:", ln=False, align="R")
     pdf.cell(col_val, 5, f"${service_report.labor_cost:.2f}", ln=True, align="R")
 
+    if service_report.tax_rate:
+        pdf.cell(col_label, 5, f"Sales Tax ({service_report.tax_rate}%):", ln=False, align="R")
+        pdf.cell(col_val, 5, f"${service_report.sales_tax:.2f}", ln=True, align="R")
+
     pdf.set_draw_color(203, 213, 225)
     pdf.line(130, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(2)

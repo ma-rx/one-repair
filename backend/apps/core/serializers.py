@@ -195,7 +195,7 @@ class PartUsedInputSerializer(serializers.Serializer):
 class PricingConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = PricingConfig
-        fields = ["id", "trip_charge", "hourly_rate", "min_hours", "updated_at"]
+        fields = ["id", "trip_charge", "hourly_rate", "min_hours", "tax_rate", "updated_at"]
 
 
 # ── TimeEntry ─────────────────────────────────────────────────────────────────
@@ -219,6 +219,7 @@ class WorkImageSerializer(serializers.ModelSerializer):
 class ServiceReportSerializer(serializers.ModelSerializer):
     parts_used = PartUsedSerializer(many=True, read_only=True)
     parts_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    sales_tax = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     grand_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
@@ -227,6 +228,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
             "id", "ticket", "resolution_code", "labor_cost",
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report",
+            "draft_parts", "tax_rate", "sales_tax",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
 
@@ -415,5 +417,30 @@ class CloseTicketSerializer(serializers.Serializer):
     parts_used       = PartUsedInputSerializer(many=True, required=False, default=list)
     parts_needed     = PartRequestInputSerializer(many=True, required=False, default=list)
     invoice_email    = serializers.EmailField(required=False, allow_blank=True)
+    tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
+    formatted_report = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SaveProgressSerializer(serializers.Serializer):
+    resolution_code  = serializers.ChoiceField(
+        choices=ServiceReport._meta.get_field("resolution_code").choices,
+        required=False, default="OTHER",
+    )
+    labor_cost       = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
+    parts_used       = PartUsedInputSerializer(many=True, required=False, default=list)
+    parts_needed     = PartRequestInputSerializer(many=True, required=False, default=list)
+    tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
+    formatted_report = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class GenerateInvoiceSerializer(serializers.Serializer):
+    resolution_code  = serializers.ChoiceField(
+        choices=ServiceReport._meta.get_field("resolution_code").choices,
+        required=False, default="OTHER",
+    )
+    labor_cost       = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
+    tax_rate         = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True, default=None)
+    parts_used       = PartUsedInputSerializer(many=True, required=False, default=list)
+    invoice_email    = serializers.EmailField(required=False, allow_blank=True, default="")
     tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
     formatted_report = serializers.CharField(required=False, allow_blank=True, default="")

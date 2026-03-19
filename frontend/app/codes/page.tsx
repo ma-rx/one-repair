@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
 import { api, SymptomCodeEntry, ResolutionCodeEntry } from "@/lib/api";
 import { AssetCategoryLabels } from "@/types/enums";
-import { Tag, Plus, Pencil, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { Tag, Plus, Pencil, Trash2, Loader2, AlertCircle, Upload, Download } from "lucide-react";
 
 type CodeEntry = SymptomCodeEntry | ResolutionCodeEntry;
 
@@ -50,6 +50,11 @@ export default function CodesPage() {
 
   const [deleteConfirm, setDeleteConfirm] = useState<CodeEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // CSV import
+  const csvRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResults, setImportResults] = useState<{ created: number; errors: string[] } | null>(null);
 
   function load() {
     setLoading(true);
@@ -153,6 +158,72 @@ export default function CodesPage() {
     }
   }
 
+  function downloadTemplate() {
+    const rows = [
+      ["type", "code", "label", "make", "asset_category", "sort_order"],
+      ["symptom", "NO_POWER", "No Power", "", "", "0"],
+      ["symptom", "OVERHEATING", "Overheating", "Hoshizaki", "ICE_MACHINE", "1"],
+      ["resolution", "REPLACED_PART", "Replaced Part", "", "", "0"],
+      ["resolution", "CLEANED_SERVICED", "Cleaned / Serviced", "", "REFRIGERATION", "1"],
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "codes_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (csvRef.current) csvRef.current.value = "";
+
+    setImporting(true);
+    setImportResults(null);
+
+    const text = await file.text();
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) { setImporting(false); return; }
+
+    const headers = lines[0].split(",").map((h) => h.replace(/"/g, "").trim().toLowerCase());
+    const idx = (name: string) => headers.indexOf(name);
+
+    let created = 0;
+    const errors: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",").map((c) => c.replace(/^"|"$/g, "").trim());
+      const get = (name: string) => cols[idx(name)] ?? "";
+
+      const type = get("type").toLowerCase();
+      const code = get("code").toUpperCase().replace(/\s+/g, "_");
+      const label = get("label");
+      const make = get("make");
+      const asset_category = get("asset_category");
+      const sort_order = parseInt(get("sort_order")) || 0;
+
+      if (!code || !label) { errors.push(`Row ${i + 1}: code and label are required`); continue; }
+      if (type !== "symptom" && type !== "resolution") { errors.push(`Row ${i + 1}: type must be "symptom" or "resolution"`); continue; }
+
+      try {
+        if (type === "symptom") {
+          const c = await api.createSymptomCode({ code, label, make, asset_category, sort_order });
+          setSymptomCodes((prev) => [...prev, c]);
+        } else {
+          const c = await api.createResolutionCode({ code, label, make, asset_category, sort_order });
+          setResolutionCodes((prev) => [...prev, c]);
+        }
+        created++;
+      } catch (err: unknown) {
+        errors.push(`Row ${i + 1} (${code}): ${err instanceof Error ? err.message : "failed"}`);
+      }
+    }
+
+    setImportResults({ created, errors });
+    setImporting(false);
+  }
+
   const set =
     (key: keyof EntryForm) =>
     (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -170,12 +241,30 @@ export default function CodesPage() {
             Manage symptom and resolution codes for work orders
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Code
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadTemplate}
+            className="flex items-center gap-2 border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium px-3 py-2.5 rounded-lg transition-colors"
+            title="Download CSV template"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => csvRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-2 border border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Import CSV
+          </button>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Code
+          </button>
+        </div>
       </div>
 
       {/* Tab toggle */}
@@ -197,6 +286,15 @@ export default function CodesPage() {
           </button>
         ))}
       </div>
+
+      {/* Import results */}
+      {importResults && (
+        <div className={`rounded-lg px-4 py-3 text-sm mb-5 ${importResults.errors.length === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+          <p className="font-medium">{importResults.created} code{importResults.created !== 1 ? "s" : ""} imported.</p>
+          {importResults.errors.map((e, i) => <p key={i} className="text-xs mt-1 opacity-80">{e}</p>)}
+          <button onClick={() => setImportResults(null)} className="text-xs underline mt-1 opacity-60">Dismiss</button>
+        </div>
+      )}
 
       {/* Make filter */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">

@@ -62,6 +62,7 @@ class TicketStatus(models.TextChoices):
     DISPATCHED    = "DISPATCHED",    "Dispatched"
     IN_PROGRESS   = "IN_PROGRESS",   "In Progress"
     PENDING_PARTS = "PENDING_PARTS", "Pending Parts"
+    COMPLETED     = "COMPLETED",     "Completed"
     RESOLVED      = "RESOLVED",      "Resolved"
     CLOSED        = "CLOSED",        "Closed"
     CANCELLED     = "CANCELLED",     "Cancelled"
@@ -215,6 +216,7 @@ class PricingConfig(models.Model):
     trip_charge = models.DecimalField(max_digits=8, decimal_places=2, default=95.00)
     hourly_rate = models.DecimalField(max_digits=8, decimal_places=2, default=125.00)
     min_hours   = models.DecimalField(max_digits=4, decimal_places=2, default=1.00)
+    tax_rate    = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -222,7 +224,7 @@ class PricingConfig(models.Model):
         verbose_name_plural = "Pricing Config"
 
     def __str__(self):
-        return f"${self.trip_charge} trip + ${self.hourly_rate}/hr (min {self.min_hours}h)"
+        return f"${self.trip_charge} trip + ${self.hourly_rate}/hr (min {self.min_hours}h, tax {self.tax_rate}%)"
 
 class Organization(models.Model):
     id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -425,6 +427,8 @@ class ServiceReport(models.Model):
     invoice_email    = models.EmailField(blank=True)
     tech_notes       = models.TextField(blank=True)
     formatted_report = models.TextField(blank=True)
+    draft_parts      = models.JSONField(default=list)   # [{"part_id": "uuid", "quantity": N}]
+    tax_rate         = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     created_at       = models.DateTimeField(auto_now_add=True)
     updated_at       = models.DateTimeField(auto_now=True)
 
@@ -439,8 +443,13 @@ class ServiceReport(models.Model):
         return sum(p.line_total for p in self.parts_used.all())
 
     @property
+    def sales_tax(self):
+        from decimal import Decimal
+        return (self.labor_cost + self.parts_total) * self.tax_rate / Decimal("100")
+
+    @property
     def grand_total(self):
-        return self.labor_cost + self.parts_total
+        return self.labor_cost + self.parts_total + self.sales_tax
 
 
 class PartUsed(models.Model):

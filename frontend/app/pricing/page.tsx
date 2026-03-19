@@ -14,6 +14,7 @@ export default function PricingPage() {
   const [tripCharge, setTripCharge] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
   const [minHours, setMinHours]     = useState("");
+  const [taxRate, setTaxRate]       = useState("");
 
   useEffect(() => {
     api.getPricing()
@@ -22,6 +23,7 @@ export default function PricingPage() {
         setTripCharge(c.trip_charge);
         setHourlyRate(c.hourly_rate);
         setMinHours(c.min_hours);
+        setTaxRate(c.tax_rate || "0");
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -35,6 +37,7 @@ export default function PricingPage() {
         trip_charge: tripCharge,
         hourly_rate: hourlyRate,
         min_hours: minHours,
+        tax_rate: taxRate,
       } as Partial<PricingConfig>);
       setConfig(updated);
       setSaved(true);
@@ -115,6 +118,17 @@ export default function PricingPage() {
                   onChange={(e) => setMinHours(e.target.value)}
                 />
                 <p className="text-slate-400 text-xs mt-1">Tech must bill at least this many hours even if clocked time is less</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Default Sales Tax Rate (%)</label>
+                <input
+                  type="number" min="0" step="0.01" max="100" required
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={taxRate}
+                  onChange={(e) => setTaxRate(e.target.value)}
+                />
+                <p className="text-slate-400 text-xs mt-1">Applied to parts + labor. Set to 0 for no tax.</p>
               </div>
 
               {tripCharge && hourlyRate && minHours && (

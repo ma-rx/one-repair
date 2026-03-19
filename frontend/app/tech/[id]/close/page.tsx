@@ -7,7 +7,7 @@ import {
 } from "@/lib/api";
 import { SymptomCodeLabels, AssetCategoryLabels } from "@/types/enums";
 import {
-  AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Clock, FileText,
+  AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Clock,
   Loader2, Plus, RefreshCw, Trash2, Wrench, X, Sparkles,
 } from "lucide-react";
 
@@ -144,6 +144,8 @@ export default function TechWorkPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [timeStatus, setTimeStatus]     = useState<TimeEntryStatus | null>(null);
   const [clockLoading, setClockLoading] = useState(false);
@@ -160,10 +162,9 @@ export default function TechWorkPage() {
   const [reportAccepted, setReportAccepted]   = useState(false);
   const [aiError, setAiError]                 = useState("");
 
-  const [partLines, setPartLines]           = useState<PartLine[]>([]);
-  const [neededLines, setNeededLines]       = useState<PartNeededLine[]>([]);
-  const [invoiceEmail, setInvoiceEmail]     = useState("");
-  const [submitting, setSubmitting]         = useState(false);
+  const [partLines, setPartLines]     = useState<PartLine[]>([]);
+  const [neededLines, setNeededLines] = useState<PartNeededLine[]>([]);
+  const [submitting, setSubmitting]   = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -249,10 +250,8 @@ export default function TechWorkPage() {
     setNeededLines((prev) => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true); setError(null);
-
+  async function handleSaveProgress() {
+    setSaving(true); setError(null);
     const parts_needed: PartRequestInput[] = neededLines
       .filter((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim())
       .map((l) => {
@@ -273,21 +272,41 @@ export default function TechWorkPage() {
           notes: l.notes,
         };
       });
-
     try {
-      await api.closeTicket(id, {
+      await api.saveProgress(id, {
         resolution_code: "OTHER",
         labor_cost: null,
         parts_used: partLines.filter((l) => l.part_id && l.quantity > 0),
         parts_needed,
-        invoice_email: invoiceEmail || undefined,
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
       });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleMarkComplete() {
+    if (!confirm("Mark this job as complete? The ORS team will review and generate the invoice.")) return;
+    setSubmitting(true); setError(null);
+    try {
+      await api.saveProgress(id, {
+        resolution_code: "OTHER",
+        labor_cost: null,
+        parts_used: partLines.filter((l) => l.part_id && l.quantity > 0),
+        parts_needed: [],
+        tech_notes: techNotes,
+        formatted_report: reportAccepted ? formattedReport : techNotes,
+      });
+      await api.markComplete(id);
       setSuccess(true);
       setTimeout(() => router.push("/tech"), 1800);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to close ticket.");
+      setError(err instanceof Error ? err.message : "Failed to mark complete.");
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +314,6 @@ export default function TechWorkPage() {
 
   const totalMinutes   = (timeStatus?.total_minutes ?? 0) + (timeStatus?.is_clocked_in ? Math.floor(elapsed / 60) : 0);
   const estimatedLabor = timeStatus ? calcLabor(totalMinutes, timeStatus.pricing) : 0;
-  const grandTotal     = calcPartsTotal() + estimatedLabor;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -319,7 +337,7 @@ export default function TechWorkPage() {
         ) : !ticket ? (
           <div className="py-12 text-center text-red-500">Ticket not found.</div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-5">
             {error && (
               <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
                 <AlertCircle className="w-4 h-4 shrink-0" /> {error}
@@ -327,7 +345,12 @@ export default function TechWorkPage() {
             )}
             {success && (
               <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-lg px-4 py-3 text-sm">
-                <CheckCircle2 className="w-4 h-4 shrink-0" /> Ticket closed! Redirecting…
+                <CheckCircle2 className="w-4 h-4 shrink-0" /> Job marked complete! Redirecting…
+              </div>
+            )}
+            {saveSuccess && (
+              <div className="flex items-center gap-2 bg-blue-50 text-blue-700 rounded-lg px-4 py-3 text-sm">
+                <CheckCircle2 className="w-4 h-4 shrink-0" /> Progress saved.
               </div>
             )}
 
@@ -471,7 +494,6 @@ export default function TechWorkPage() {
               )}
             </div>
 
-
             {/* Parts used */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -591,17 +613,10 @@ export default function TechWorkPage() {
               ))}
             </div>
 
-            {/* Invoice + totals */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Invoice</p>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Send to Email <span className="text-slate-400 text-xs font-normal">(optional)</span>
-                </label>
-                <input type="email" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="client@example.com" value={invoiceEmail} onChange={(e) => setInvoiceEmail(e.target.value)} />
-              </div>
-              <div className="border-t border-slate-100 pt-4 space-y-1.5 text-sm">
+            {/* Totals (read-only estimate for tech) */}
+            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-2">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-3">Estimate</p>
+              <div className="space-y-1.5 text-sm">
                 {timeStatus && <>
                   <div className="flex justify-between text-slate-500"><span>Trip charge</span><span>${timeStatus.pricing.trip_charge}</span></div>
                   <div className="flex justify-between text-slate-500">
@@ -610,20 +625,28 @@ export default function TechWorkPage() {
                   </div>
                 </>}
                 <div className="flex justify-between text-slate-500"><span>Parts subtotal</span><span>${calcPartsTotal().toFixed(2)}</span></div>
-                <div className="flex justify-between font-bold text-slate-900 text-base pt-1 border-t border-slate-200"><span>Estimated Total</span><span>${grandTotal.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold text-slate-900 text-base pt-1 border-t border-slate-200"><span>Estimated Total</span><span>${(calcPartsTotal() + estimatedLabor).toFixed(2)}</span></div>
                 {totalMinutes === 0 && <p className="text-amber-600 text-xs">No time tracked — minimum 1 hour will be billed</p>}
               </div>
             </div>
 
             <div className="flex gap-3">
-              <button type="button" className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50" onClick={() => router.back()}>Cancel</button>
-              <button type="submit" disabled={submitting}
-                className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                Close & Generate Invoice
+              <button type="button" onClick={() => router.back()}
+                className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="button" onClick={handleSaveProgress} disabled={saving || submitting}
+                className="flex-1 border border-blue-300 text-blue-600 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Save Progress
+              </button>
+              <button type="button" onClick={handleMarkComplete} disabled={submitting || saving}
+                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Mark Complete
               </button>
             </div>
-          </form>
+          </div>
         )}
       </div>
     </div>

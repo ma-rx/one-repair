@@ -95,6 +95,7 @@ export default function DispatchTicketDetailPage() {
 
   const canAssign = ticket && (ticket.status === "OPEN" || ticket.status === "DISPATCHED");
   const canClose  = ticket && (ticket.status === "IN_PROGRESS" || ticket.status === "PENDING_PARTS" || ticket.status === "DISPATCHED");
+  const canReviewInvoice = ticket && ticket.status === "COMPLETED";
   const isClosed  = ticket?.status === "CLOSED";
 
   return (
@@ -129,6 +130,14 @@ export default function DispatchTicketDetailPage() {
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
                   >
                     <FileText className="w-4 h-4" /> Service Report
+                  </Link>
+                )}
+                {canReviewInvoice && (
+                  <Link
+                    href={`/dispatch/${id}/close`}
+                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    <FileText className="w-4 h-4" /> Review &amp; Invoice
                   </Link>
                 )}
               </div>

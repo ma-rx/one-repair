@@ -117,6 +117,44 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  saveProgress: (ticketId: string, data: {
+    resolution_code?: string;
+    labor_cost?: number | null;
+    parts_used?: Array<{ part_id: string; quantity: number }>;
+    parts_needed?: PartRequestInput[];
+    tech_notes?: string;
+    formatted_report?: string;
+  }) =>
+    request<ServiceReport>(`/tickets/${ticketId}/save-progress/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  markComplete: (ticketId: string) =>
+    request<Ticket>(`/tickets/${ticketId}/mark-complete/`, {
+      method: "POST",
+    }),
+
+  generateInvoice: (ticketId: string, data: {
+    resolution_code?: string;
+    labor_cost?: number | null;
+    tax_rate?: number | null;
+    parts_used?: Array<{ part_id: string; quantity: number }>;
+    invoice_email?: string;
+    tech_notes?: string;
+    formatted_report?: string;
+  }) =>
+    request<ServiceReport>(`/tickets/${ticketId}/generate-invoice/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateServiceReport: (id: string, data: Partial<ServiceReport & { draft_parts: Array<{ part_id: string; quantity: number }> }>) =>
+    request<ServiceReport>(`/service-reports/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
   // KPIs
   getKPIs: () => request<KPIData>("/kpis/"),
 
@@ -488,6 +526,10 @@ export interface ServiceReport {
   tech_notes: string;
   formatted_report: string;
   labor_cost: string;
+  invoice_email: string;
+  draft_parts: Array<{ part_id: string; quantity: number }>;
+  tax_rate: string;
+  sales_tax: string;
   parts_total: string;
   grand_total: string;
   invoice_sent: boolean;
@@ -527,6 +569,7 @@ export interface PricingConfig {
   trip_charge: string;
   hourly_rate: string;
   min_hours: string;
+  tax_rate: string;
   updated_at: string;
 }
 
