@@ -5,7 +5,7 @@ import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
 import { api, EquipmentModel } from "@/lib/api";
 import { AssetCategoryLabels } from "@/types/enums";
-import { List, LayoutGrid, Plus, Pencil, Trash2, Loader2, AlertCircle, ChevronLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, AlertCircle } from "lucide-react";
 
 const ASSET_CATEGORIES = Object.keys(AssetCategoryLabels);
 
@@ -16,9 +16,8 @@ export default function EquipmentPage() {
   const [models, setModels]       = useState<EquipmentModel[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
-
-  const [selectedMake, setSelectedMake] = useState<string | null>(null);
-  const [view, setView] = useState<"makes" | "list">("makes");
+  const [filterMake, setFilterMake]   = useState("");
+  const [filterCat, setFilterCat]     = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing]     = useState<EquipmentModel | null>(null);
@@ -85,6 +84,12 @@ export default function EquipmentPage() {
     }
   }
 
+  const distinctMakes = Array.from(new Set(models.map((m) => m.make))).sort();
+
+  const displayed = [...models]
+    .filter((m) => (!filterMake || m.make === filterMake) && (!filterCat || m.category === filterCat))
+    .sort((a, b) => a.make.localeCompare(b.make) || a.model_number.localeCompare(b.model_number));
+
   const inputClass = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   return (
@@ -94,28 +99,42 @@ export default function EquipmentPage() {
           <h1 className="text-2xl font-bold text-slate-900">Equipment Models</h1>
           <p className="text-slate-500 text-sm mt-0.5">Catalog of makes and models you service</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
-            <button
-              onClick={() => { setView("makes"); setSelectedMake(null); }}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${view === "makes" ? "bg-slate-100 text-slate-800 font-medium" : "text-slate-400 hover:text-slate-600"}`}
-            >
-              <LayoutGrid className="w-4 h-4" /> Makes
-            </button>
-            <button
-              onClick={() => setView("list")}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${view === "list" ? "bg-slate-100 text-slate-800 font-medium" : "text-slate-400 hover:text-slate-600"}`}
-            >
-              <List className="w-4 h-4" /> All Models
-            </button>
-          </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Model
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Model
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-5">
+        <select
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={filterMake}
+          onChange={(e) => setFilterMake(e.target.value)}
+        >
+          <option value="">All Makes</option>
+          {distinctMakes.map((make) => (
+            <option key={make} value={make}>{make}</option>
+          ))}
+        </select>
+        <select
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={filterCat}
+          onChange={(e) => setFilterCat(e.target.value)}
+        >
+          <option value="">All Categories</option>
+          {ASSET_CATEGORIES.map((c) => (
+            <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
+          ))}
+        </select>
+        {(filterMake || filterCat) && (
+          <button onClick={() => { setFilterMake(""); setFilterCat(""); }} className="text-sm text-slate-400 hover:text-slate-600">
+            Clear
           </button>
-        </div>
+        )}
+        <span className="text-slate-400 text-sm ml-auto">{displayed.length} model{displayed.length !== 1 ? "s" : ""}</span>
       </div>
 
       {loading ? (
@@ -126,13 +145,12 @@ export default function EquipmentPage() {
         <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" /> {error}
         </div>
-      ) : models.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
-          <p className="font-medium">No equipment models yet</p>
-          <p className="text-sm mt-1">Add the makes and models you service.</p>
+          <p className="font-medium">{models.length === 0 ? "No equipment models yet" : "No models match your filters"}</p>
+          {models.length === 0 && <p className="text-sm mt-1">Add the makes and models you service.</p>}
         </div>
-      ) : view === "list" ? (
-        /* ── Flat alphabetical list ── */
+      ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -147,7 +165,7 @@ export default function EquipmentPage() {
               </tr>
             </thead>
             <tbody>
-              {[...models].sort((a, b) => a.make.localeCompare(b.make) || a.model_number.localeCompare(b.model_number)).map((m) => (
+              {displayed.map((m) => (
                 <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-800">{m.make}</td>
                   <td className="px-6 py-4 font-mono text-slate-700">{m.model_number}</td>
@@ -174,87 +192,6 @@ export default function EquipmentPage() {
             </tbody>
           </table>
         </div>
-      ) : selectedMake === null ? (
-        /* ── Makes grid ── */
-        (() => {
-          const makeGroups = Array.from(
-            models.reduce((acc, m) => {
-              if (!acc.has(m.make)) acc.set(m.make, []);
-              acc.get(m.make)!.push(m);
-              return acc;
-            }, new Map<string, EquipmentModel[]>())
-          ).sort(([a], [b]) => a.localeCompare(b));
-
-          return (
-            <div className="flex flex-wrap gap-3">
-              {makeGroups.map(([make, group]) => (
-                <button
-                  key={make}
-                  onClick={() => setSelectedMake(make)}
-                  className="bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-left hover:border-blue-400 hover:shadow-sm transition-all"
-                >
-                  <p className="font-semibold text-slate-800">{make}</p>
-                  <p className="text-slate-400 text-xs mt-0.5">{group.length} model{group.length !== 1 ? "s" : ""}</p>
-                </button>
-              ))}
-            </div>
-          );
-        })()
-      ) : (
-        /* ── Models for selected make ── */
-        (() => {
-          const filtered = models.filter((m) => m.make === selectedMake);
-          return (
-            <>
-              <button
-                onClick={() => setSelectedMake(null)}
-                className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm mb-5 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" /> All Makes
-              </button>
-              <h2 className="text-lg font-bold text-slate-800 mb-4">{selectedMake}</h2>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left px-6 py-3 text-slate-500 font-medium">Model Number</th>
-                      <th className="text-left px-6 py-3 text-slate-500 font-medium">Model Name</th>
-                      <th className="text-left px-6 py-3 text-slate-500 font-medium">Category</th>
-                      <th className="text-left px-6 py-3 text-slate-500 font-medium">Instances</th>
-                      <th className="text-left px-6 py-3 text-slate-500 font-medium">Notes</th>
-                      <th className="px-6 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((m) => (
-                      <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-mono text-slate-700">{m.model_number}</td>
-                        <td className="px-6 py-4 text-slate-500">{m.model_name || "—"}</td>
-                        <td className="px-6 py-4">
-                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-medium">
-                            {AssetCategoryLabels[m.category] ?? m.category}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">{m.instance_count}</td>
-                        <td className="px-6 py-4 text-slate-400 text-xs max-w-xs truncate">{m.description || "—"}</td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-3">
-                            <button onClick={() => openEdit(m)} className="text-slate-400 hover:text-blue-600 transition-colors">
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleDelete(m)} disabled={deletingId === m.id} className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-50">
-                              {deletingId === m.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          );
-        })()
       )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Equipment Model" : "Add Equipment Model"}>
@@ -280,7 +217,7 @@ export default function EquipmentPage() {
             </div>
           </div>
 
-          <div className="col-span-2">
+          <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Model Name (optional)</label>
             <input type="text" className={inputClass} value={form.model_name}
               onChange={(e) => setForm((f) => ({ ...f, model_name: e.target.value }))}
