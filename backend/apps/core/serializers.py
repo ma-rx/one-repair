@@ -126,7 +126,7 @@ class AssetSerializer(serializers.ModelSerializer):
 
     def get_equipment_model_display(self, obj):
         if obj.equipment_model:
-            return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number}
+            return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number, "model_name": obj.equipment_model.model_name}
         return None
 
 
@@ -390,7 +390,7 @@ class KnowledgeEntrySerializer(serializers.ModelSerializer):
 
     def get_equipment_model_display(self, obj):
         if obj.equipment_model:
-            return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number}
+            return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number, "model_name": obj.equipment_model.model_name}
         return None
 
 

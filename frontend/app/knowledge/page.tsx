@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, EquipmentModel, KnowledgeEntry } from "@/lib/api";
+import { api, EquipmentModel, KnowledgeEntry, Part } from "@/lib/api";
 import {
   AssetCategoryLabels, KnowledgeDifficultyLabels,
   SymptomCodeLabels, ResolutionCodeLabels,
 } from "@/types/enums";
 import {
   BookOpen, Plus, Pencil, Loader2, CheckCircle2,
-  ShieldCheck, AlertCircle,
+  ShieldCheck, AlertCircle, ChevronDown, X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -36,6 +36,96 @@ const RESOLUTION_CODES = [
 ];
 
 const DIFFICULTIES = ["EASY", "MEDIUM", "HARD", "ADVANCED"];
+
+function PartsMultiSelect({
+  parts,
+  selected,
+  onChange,
+}: {
+  parts: Part[];
+  selected: Part[];
+  onChange: (parts: Part[]) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const selectedIds = new Set(selected.map((p) => p.id));
+  const filtered = parts.filter(
+    (p) =>
+      !selectedIds.has(p.id) &&
+      (p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  function add(part: Part) {
+    onChange([...selected, part]);
+    setSearch("");
+  }
+
+  function remove(id: string) {
+    onChange(selected.filter((p) => p.id !== id));
+  }
+
+  return (
+    <div ref={ref} className="space-y-2">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((p) => (
+            <span key={p.id} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2 py-1 rounded-full">
+              {p.name}
+              <button type="button" onClick={() => remove(p.id)} className="hover:text-blue-900">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="relative">
+        <div
+          className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus-within:ring-2 focus-within:ring-blue-500 cursor-text"
+          onClick={() => setOpen(true)}
+        >
+          <input
+            className="flex-1 outline-none bg-transparent text-slate-800 placeholder-slate-400"
+            placeholder={selected.length === 0 ? "Search parts by name or SKU…" : "Add another part…"}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+          />
+          <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+        </div>
+        {open && (
+          <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-slate-400">{search ? "No matching parts" : "No more parts to add"}</p>
+            ) : (
+              filtered.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                  onClick={() => { add(p); setOpen(false); }}
+                >
+                  <p className="font-medium text-slate-800">{p.name}</p>
+                  {p.sku && <p className="text-xs text-slate-400 mt-0.5">SKU: {p.sku}</p>}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const difficultyStyle: Record<string, string> = {
   EASY:     "bg-emerald-100 text-emerald-700",
@@ -78,6 +168,8 @@ export default function KnowledgePage() {
 
   const [entries, setEntries]         = useState<KnowledgeEntry[]>([]);
   const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
+  const [allParts, setAllParts]       = useState<Part[]>([]);
+  const [selectedParts, setSelectedParts] = useState<Part[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState("");
 
@@ -95,6 +187,7 @@ export default function KnowledgePage() {
 
   useEffect(() => {
     api.listEquipmentModels().then(setEquipmentModels).catch(() => {});
+    api.listParts().then(setAllParts).catch(() => {});
   }, []);
 
   function load() {
@@ -113,6 +206,7 @@ export default function KnowledgePage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm());
+    setSelectedParts([]);
     setFormError("");
     setModalOpen(true);
   }
@@ -132,6 +226,9 @@ export default function KnowledgePage() {
       parts_commonly_used: e.parts_commonly_used,
       pro_tips:            e.pro_tips,
     });
+    // Pre-select parts that match names stored in the field
+    const storedNames = e.parts_commonly_used.split(",").map((n) => n.trim().toLowerCase()).filter(Boolean);
+    setSelectedParts(allParts.filter((p) => storedNames.includes(p.name.toLowerCase())));
     setFormError("");
     setModalOpen(true);
   }
@@ -140,13 +237,14 @@ export default function KnowledgePage() {
     ev.preventDefault();
     setSaving(true);
     setFormError("");
+    const formWithParts = { ...form, parts_commonly_used: selectedParts.map((p) => p.name).join(", ") };
     try {
       if (editing) {
-        const updated = await api.updateKnowledgeEntry(editing.id, form);
+        const updated = await api.updateKnowledgeEntry(editing.id, formWithParts);
         setEntries((prev) => prev.map((e) => e.id === updated.id ? updated : e));
         if (selected?.id === updated.id) setSelected(updated);
       } else {
-        const created = await api.createKnowledgeEntry(form);
+        const created = await api.createKnowledgeEntry(formWithParts);
         setEntries((prev) => [created, ...prev]);
       }
       setModalOpen(false);
@@ -284,6 +382,7 @@ export default function KnowledgePage() {
                       {entry.equipment_model_display && (
                         <p className="text-xs text-blue-600 font-mono mt-0.5">
                           {entry.equipment_model_display.make} {entry.equipment_model_display.model_number}
+                          {entry.equipment_model_display.model_name ? ` — ${entry.equipment_model_display.model_name}` : ""}
                         </p>
                       )}
                       {entry.cause_summary && (
@@ -411,7 +510,7 @@ export default function KnowledgePage() {
               >
                 <option value="">— general (not model-specific) —</option>
                 {equipmentModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.make} {m.model_number}</option>
+                  <option key={m.id} value={m.id}>{m.make} {m.model_number}{m.model_name ? ` — ${m.model_name}` : ""}</option>
                 ))}
               </select>
               <p className="text-xs text-slate-400 mt-1">Linking makes this entry searchable by model for AI diagnostics.</p>
@@ -494,11 +593,10 @@ export default function KnowledgePage() {
 
             <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">Parts Commonly Used</label>
-              <textarea
-                className={textareaClass}
-                value={form.parts_commonly_used}
-                onChange={set("parts_commonly_used")}
-                placeholder="e.g. Copeland ZR36K3E-PFV compressor, 45MFD run capacitor, 10-ton service valve..."
+              <PartsMultiSelect
+                parts={allParts}
+                selected={selectedParts}
+                onChange={setSelectedParts}
               />
             </div>
 

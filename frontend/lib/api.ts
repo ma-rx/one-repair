@@ -423,7 +423,7 @@ export interface Asset {
   warranty_expiry: string | null;
   is_active: boolean;
   equipment_model: string | null;
-  equipment_model_display: { id: string; make: string; model_number: string } | null;
+  equipment_model_display: { id: string; make: string; model_number: string; model_name: string } | null;
 }
 
 export interface Part {
@@ -662,7 +662,7 @@ export interface ResolutionCodeEntry {
 export interface KnowledgeEntry {
   id: string;
   equipment_model: string | null;
-  equipment_model_display: { id: string; make: string; model_number: string } | null;
+  equipment_model_display: { id: string; make: string; model_number: string; model_name: string } | null;
   asset_category: string;
   make: string;
   model_number: string;
