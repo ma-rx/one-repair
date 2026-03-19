@@ -3,8 +3,9 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AssetViewSet, ClientKPIView, EquipmentModelViewSet, FormatReportView,
     InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
-    PartRequestViewSet, PartViewSet, PricingConfigView, ServiceReportViewSet,
-    StoreViewSet, TicketViewSet, TimeEntryView, UserViewSet, WorkImageView,
+    PartRequestViewSet, PartViewSet, PricingConfigView, ResolutionCodeEntryViewSet,
+    ServiceReportViewSet, StoreViewSet, SymptomCodeEntryViewSet, TicketViewSet,
+    TimeEntryView, UserViewSet, WorkImageView,
 )
 
 router = DefaultRouter()
@@ -18,6 +19,8 @@ router.register("tickets", TicketViewSet, basename="ticket")
 router.register("service-reports", ServiceReportViewSet, basename="service-report")
 router.register("part-requests", PartRequestViewSet, basename="part-request")
 router.register("knowledge", KnowledgeEntryViewSet, basename="knowledge")
+router.register("symptom-codes", SymptomCodeEntryViewSet, basename="symptom-codes")
+router.register("resolution-codes", ResolutionCodeEntryViewSet, basename="resolution-codes")
 
 urlpatterns = router.urls + [
     path("kpis/", KPIView.as_view()),

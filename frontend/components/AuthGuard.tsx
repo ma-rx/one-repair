@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const PUBLIC_PATHS = ["/login"];
 
 const ROLE_ALLOWED: Record<string, string[]> = {
-  ORS_ADMIN:      ["/dispatch", "/scan", "/organizations", "/stores", "/equipment", "/assets", "/inventory", "/users", "/kpis", "/pricing", "/calendar", "/knowledge"],
+  ORS_ADMIN:      ["/dispatch", "/scan", "/organizations", "/stores", "/equipment", "/assets", "/inventory", "/users", "/kpis", "/pricing", "/calendar", "/knowledge", "/codes"],
   CLIENT_ADMIN:   ["/portal", "/scan"],
   CLIENT_MANAGER: ["/manager"],
   TECH:           ["/tech", "/scan"],

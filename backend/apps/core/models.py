@@ -153,6 +153,44 @@ class KnowledgeDifficulty(models.TextChoices):
 
 # ── Models ─────────────────────────────────────────────────────────────────────
 
+class SymptomCodeEntry(models.Model):
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code         = models.CharField(max_length=100)
+    label        = models.CharField(max_length=255)
+    make         = models.CharField(max_length=100, blank=True, default="")  # blank = global
+    asset_category = models.CharField(max_length=30, choices=AssetCategory.choices, blank=True, default="")
+    is_active    = models.BooleanField(default=True)
+    sort_order   = models.PositiveIntegerField(default=0)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "label"]
+        unique_together = [["code", "make"]]
+
+    def __str__(self):
+        return f"{self.label} ({self.make or 'Global'})"
+
+
+class ResolutionCodeEntry(models.Model):
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code         = models.CharField(max_length=100)
+    label        = models.CharField(max_length=255)
+    make         = models.CharField(max_length=100, blank=True, default="")  # blank = global
+    asset_category = models.CharField(max_length=30, choices=AssetCategory.choices, blank=True, default="")
+    is_active    = models.BooleanField(default=True)
+    sort_order   = models.PositiveIntegerField(default=0)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "label"]
+        unique_together = [["code", "make"]]
+
+    def __str__(self):
+        return f"{self.label} ({self.make or 'Global'})"
+
+
 class EquipmentModel(models.Model):
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     make         = models.CharField(max_length=100)

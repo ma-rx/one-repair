@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Avg, Count, F, Sum
+from django.db.models import Avg, Count, F, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from django.http import HttpResponse
@@ -17,17 +17,18 @@ from rest_framework.parsers import MultiPartParser
 
 from .models import (
     Asset, AssetStatus, EquipmentModel, KnowledgeEntry, Organization, Part,
-    PartRequest, PartRequestStatus, PartUsed, PricingConfig, ServiceReport,
-    Store, Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole, WorkImage,
+    PartRequest, PartRequestStatus, PartUsed, PricingConfig, ResolutionCodeEntry,
+    ServiceReport, Store, Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole,
+    WorkImage, SymptomCodeEntry,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
     CreateUserSerializer, EquipmentModelSerializer, KnowledgeEntrySerializer,
     OrganizationSerializer, PartRequestSerializer, PartSerializer,
-    PricingConfigSerializer, ServiceReportSerializer, StoreSerializer,
-    TicketAssetSerializer, TicketSerializer, TimeEntrySerializer,
-    UserSerializer, WorkImageSerializer,
+    PricingConfigSerializer, ResolutionCodeEntrySerializer, ServiceReportSerializer,
+    StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
+    TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -1152,3 +1153,43 @@ class KnowledgeEntryViewSet(viewsets.ModelViewSet):
         entry.is_verified = True
         entry.save(update_fields=["is_verified"])
         return Response(KnowledgeEntrySerializer(entry).data)
+
+
+# ── SymptomCodeEntry / ResolutionCodeEntry ─────────────────────────────────────
+
+class SymptomCodeEntryViewSet(viewsets.ModelViewSet):
+    serializer_class = SymptomCodeEntrySerializer
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsORSAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = SymptomCodeEntry.objects.filter(is_active=True)
+        make = self.request.query_params.get("make")
+        asset_category = self.request.query_params.get("asset_category")
+        if make:
+            qs = qs.filter(Q(make="") | Q(make__iexact=make))
+        if asset_category:
+            qs = qs.filter(Q(asset_category="") | Q(asset_category=asset_category))
+        return qs
+
+
+class ResolutionCodeEntryViewSet(viewsets.ModelViewSet):
+    serializer_class = ResolutionCodeEntrySerializer
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsORSAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = ResolutionCodeEntry.objects.filter(is_active=True)
+        make = self.request.query_params.get("make")
+        asset_category = self.request.query_params.get("asset_category")
+        if make:
+            qs = qs.filter(Q(make="") | Q(make__iexact=make))
+        if asset_category:
+            qs = qs.filter(Q(asset_category="") | Q(asset_category=asset_category))
+        return qs

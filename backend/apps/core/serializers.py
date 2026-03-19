@@ -4,8 +4,9 @@ from rest_framework import serializers
 
 from .models import (
     Asset, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
-    PartRequestStatus, PartRequestUrgency, PartUsed, PricingConfig, ServiceReport,
-    Store, Ticket, TicketAsset, TimeEntry, UserProfile, WorkImage,
+    PartRequestStatus, PartRequestUrgency, PartUsed, PricingConfig, ResolutionCodeEntry,
+    ServiceReport, Store, Ticket, TicketAsset, TimeEntry, UserProfile, WorkImage,
+    SymptomCodeEntry,
 )
 
 
@@ -389,6 +390,20 @@ class KnowledgeEntrySerializer(serializers.ModelSerializer):
         if obj.equipment_model:
             return {"id": str(obj.equipment_model.id), "make": obj.equipment_model.make, "model_number": obj.equipment_model.model_number}
         return None
+
+
+# ── SymptomCodeEntry / ResolutionCodeEntry ────────────────────────────────────
+
+class SymptomCodeEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SymptomCodeEntry
+        fields = ["id", "code", "label", "make", "asset_category", "is_active", "sort_order", "created_at", "updated_at"]
+
+
+class ResolutionCodeEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResolutionCodeEntry
+        fields = ["id", "code", "label", "make", "asset_category", "is_active", "sort_order", "created_at", "updated_at"]
 
 
 class CloseTicketSerializer(serializers.Serializer):

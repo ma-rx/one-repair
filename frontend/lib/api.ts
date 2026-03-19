@@ -222,6 +222,35 @@ export const api = {
 
   deleteTicket: (id: string) =>
     request<void>(`/tickets/${id}/`, { method: "DELETE" }),
+
+  // Symptom & Resolution Codes
+  listSymptomCodes: (params?: { make?: string; asset_category?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.make) qs.set("make", params.make);
+    if (params?.asset_category) qs.set("asset_category", params.asset_category);
+    const q = qs.toString();
+    return request<SymptomCodeEntry[]>(`/symptom-codes/${q ? `?${q}` : ""}`);
+  },
+  createSymptomCode: (body: Partial<SymptomCodeEntry>) =>
+    request<SymptomCodeEntry>("/symptom-codes/", { method: "POST", body: JSON.stringify(body) }),
+  updateSymptomCode: (id: string, body: Partial<SymptomCodeEntry>) =>
+    request<SymptomCodeEntry>(`/symptom-codes/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSymptomCode: (id: string) =>
+    request<void>(`/symptom-codes/${id}/`, { method: "DELETE" }),
+
+  listResolutionCodes: (params?: { make?: string; asset_category?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.make) qs.set("make", params.make);
+    if (params?.asset_category) qs.set("asset_category", params.asset_category);
+    const q = qs.toString();
+    return request<ResolutionCodeEntry[]>(`/resolution-codes/${q ? `?${q}` : ""}`);
+  },
+  createResolutionCode: (body: Partial<ResolutionCodeEntry>) =>
+    request<ResolutionCodeEntry>("/resolution-codes/", { method: "POST", body: JSON.stringify(body) }),
+  updateResolutionCode: (id: string, body: Partial<ResolutionCodeEntry>) =>
+    request<ResolutionCodeEntry>(`/resolution-codes/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteResolutionCode: (id: string) =>
+    request<void>(`/resolution-codes/${id}/`, { method: "DELETE" }),
   // Equipment Models
   listEquipmentModels: (category?: string) =>
     request<EquipmentModel[]>(`/equipment-models/${category ? `?category=${category}` : ""}`),
@@ -561,6 +590,30 @@ export interface CloseTicketBody {
   invoice_email?: string;
   tech_notes?: string;
   formatted_report?: string;
+}
+
+export interface SymptomCodeEntry {
+  id: string;
+  code: string;
+  label: string;
+  make: string;
+  asset_category: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResolutionCodeEntry {
+  id: string;
+  code: string;
+  label: string;
+  make: string;
+  asset_category: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface KnowledgeEntry {
