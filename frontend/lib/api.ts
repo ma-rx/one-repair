@@ -320,6 +320,33 @@ export const api = {
     request<KnowledgeEntry>(`/knowledge/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
   verifyKnowledgeEntry: (id: string) =>
     request<KnowledgeEntry>(`/knowledge/${id}/verify/`, { method: "POST" }),
+
+  // Historical Import
+  suggestCodes: async (rows: Array<{
+    make: string;
+    model_number: string;
+    asset_category: string;
+    symptom_description: string;
+    resolution_description: string;
+  }>): Promise<{ results: Array<{
+    row_index: number;
+    symptom_code: string;
+    symptom_is_new: boolean;
+    symptom_label: string;
+    symptom_make: string;
+    symptom_asset_category: string;
+    resolution_code: string;
+    resolution_is_new: boolean;
+    resolution_label: string;
+    resolution_make: string;
+    resolution_asset_category: string;
+  }> }> => {
+    return request("/import/suggest-codes/", { method: "POST", body: JSON.stringify({ rows }) });
+  },
+
+  bulkImportTickets: async (tickets: Array<Record<string, unknown>>): Promise<{ created: number; errors: string[] }> => {
+    return request("/import/bulk-tickets/", { method: "POST", body: JSON.stringify({ tickets }) });
+  },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────

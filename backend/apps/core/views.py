@@ -1199,6 +1199,221 @@ class FormatReportView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# ── Historical Import: AI Code Suggester ──────────────────────────────────────
+
+class SuggestCodesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from decouple import config as env
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        api_key = env("ANTHROPIC_API_KEY", default="")
+        if not api_key:
+            return Response({"detail": "AI not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        rows = request.data.get("rows", [])
+        if not rows:
+            return Response({"results": []})
+
+        # Load existing codes for context
+        existing_symptom_codes = list(
+            SymptomCodeEntry.objects.filter(is_active=True).values("code", "label", "make")
+        )
+        existing_resolution_codes = list(
+            ResolutionCodeEntry.objects.filter(is_active=True).values("code", "label", "make")
+        )
+
+        symptom_list = "\n".join(
+            f"  {c['code']} — {c['label']}" + (f" (make: {c['make']})" if c['make'] else "")
+            for c in existing_symptom_codes
+        )
+        resolution_list = "\n".join(
+            f"  {c['code']} — {c['label']}" + (f" (make: {c['make']})" if c['make'] else "")
+            for c in existing_resolution_codes
+        )
+
+        rows_text = "\n".join(
+            f"Row {i}: make={r.get('make','')}, model={r.get('model_number','')}, "
+            f"category={r.get('asset_category','')}, "
+            f"symptom_desc={r.get('symptom_description','')}, "
+            f"resolution_desc={r.get('resolution_description','')}"
+            for i, r in enumerate(rows)
+        )
+
+        prompt = f"""You are helping map field service repair records to structured codes for an AI training dataset.
+
+EXISTING SYMPTOM CODES:
+{symptom_list}
+
+EXISTING RESOLUTION CODES:
+{resolution_list}
+
+REPAIR RECORDS TO CLASSIFY:
+{rows_text}
+
+For each row, determine the best symptom code and resolution code.
+- If a good match exists in the existing codes, use it (use the exact code string).
+- If no good match exists, propose a NEW code. New codes should:
+  - Be UPPER_SNAKE_CASE
+  - Be concise but specific (e.g. ICE_BRIDGE_FAILURE, HARVEST_CYCLE_FAULT)
+  - Include the make name if it's manufacturer-specific (e.g. make: "Hoshizaki")
+  - Be blank make if it's generic enough to apply to any manufacturer
+
+Respond with a JSON array (no markdown, just raw JSON) with one object per row:
+[
+  {{
+    "row_index": 0,
+    "symptom_code": "NOT_COOLING",
+    "symptom_is_new": false,
+    "symptom_label": "Not Cooling",
+    "symptom_make": "",
+    "symptom_asset_category": "",
+    "resolution_code": "REPLACED_PART",
+    "resolution_is_new": false,
+    "resolution_label": "Replaced Part (Other)",
+    "resolution_make": "",
+    "resolution_asset_category": ""
+  }}
+]
+
+Only output the JSON array, nothing else."""
+
+        try:
+            import anthropic
+            import json as json_module
+            client = anthropic.Anthropic(api_key=api_key)
+            message = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = message.content[0].text.strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            results = json_module.loads(raw.strip())
+            return Response({"results": results})
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ── Historical Import: Bulk Ticket Creator ────────────────────────────────────
+
+class BulkImportTicketsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        tickets_data = request.data.get("tickets", [])
+        if not tickets_data:
+            return Response({"detail": "No tickets provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        created = 0
+        errors = []
+
+        for i, td in enumerate(tickets_data):
+            try:
+                with transaction.atomic():
+                    # Resolve store
+                    store = None
+                    store_name = td.get("store_name", "").strip()
+                    if store_name:
+                        store = Store.objects.filter(name__iexact=store_name).first()
+
+                    # Resolve equipment model
+                    eq_model = None
+                    make = td.get("make", "").strip()
+                    model_number = td.get("model_number", "").strip()
+                    if make and model_number:
+                        eq_model = EquipmentModel.objects.filter(
+                            make__iexact=make, model_number__iexact=model_number
+                        ).first()
+
+                    # Resolve technician
+                    tech = None
+                    tech_name = td.get("technician", "").strip()
+                    if tech_name:
+                        parts = tech_name.split()
+                        if len(parts) >= 2:
+                            from django.db.models import Q as DjangoQ
+                            tech = User.objects.filter(
+                                first_name__iexact=parts[0],
+                                last_name__iexact=parts[-1]
+                            ).first()
+
+                    # Parse date
+                    from django.utils.dateparse import parse_date, parse_datetime
+                    import datetime as dt_module
+                    job_date = None
+                    date_str = td.get("date", "")
+                    if date_str:
+                        job_date = parse_date(str(date_str))
+
+                    # Determine asset category
+                    asset_category = td.get("asset_category", "OTHER") or "OTHER"
+
+                    # Create ticket
+                    ticket = Ticket.objects.create(
+                        store=store,
+                        asset_description=f"{make} {model_number}".strip() if (make or model_number) else td.get("asset_name", ""),
+                        assigned_tech=tech,
+                        symptom_code=td.get("symptom_code", "OTHER"),
+                        description=td.get("symptom_description", ""),
+                        status=TicketStatus.CLOSED,
+                        scheduled_date=job_date,
+                        closed_at=timezone.make_aware(
+                            dt_module.datetime.combine(job_date, dt_module.time(12, 0))
+                        ) if job_date else timezone.now(),
+                        opened_by=request.user,
+                    )
+
+                    # Create TicketAsset
+                    asset = None
+                    if eq_model and store:
+                        asset = Asset.objects.filter(
+                            equipment_model=eq_model, store=store
+                        ).first()
+
+                    TicketAsset.objects.create(
+                        ticket=ticket,
+                        asset=asset,
+                        asset_description=f"{make} {model_number}".strip() if not asset else "",
+                        symptom_code=td.get("symptom_code", "OTHER"),
+                        resolution_code=td.get("resolution_code", "OTHER"),
+                    )
+
+                    # Parse labor cost
+                    labor_cost = 0
+                    try:
+                        labor_cost = float(str(td.get("labor_cost", 0) or 0).replace("$", "").replace(",", ""))
+                    except (ValueError, TypeError):
+                        pass
+
+                    # Create ServiceReport
+                    report = ServiceReport.objects.create(
+                        ticket=ticket,
+                        submitted_by=request.user,
+                        resolution_code=td.get("resolution_code", "OTHER"),
+                        labor_cost=labor_cost,
+                        tech_notes=td.get("tech_notes", ""),
+                        formatted_report=td.get("tech_notes", ""),
+                        invoice_sent=False,
+                    )
+
+                    created += 1
+
+            except Exception as e:
+                errors.append(f"Row {i + 1}: {str(e)}")
+
+        return Response({"created": created, "errors": errors})
+
+
 # ── Client KPIs ───────────────────────────────────────────────────────────────
 
 class ClientKPIView(APIView):

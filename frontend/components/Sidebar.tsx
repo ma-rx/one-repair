@@ -19,6 +19,7 @@ import {
   CalendarDays,
   BookOpen,
   Tag,
+  Upload,
 } from "lucide-react";
 
 const orsNav = [
@@ -34,6 +35,7 @@ const orsNav = [
   { label: "Users",          href: "/users",            icon: Users        },
   { label: "Knowledge Base", href: "/knowledge",        icon: BookOpen     },
   { label: "Codes",          href: "/codes",            icon: Tag          },
+  { label: "Import",         href: "/import",           icon: Upload       },
   { label: "KPIs",           href: "/kpis",             icon: BarChart3    },
 ];
 
