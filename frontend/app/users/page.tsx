@@ -51,6 +51,7 @@ export default function UsersPage() {
   const [error, setError]     = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing]     = useState<OrgUser | null>(null);
   const [form, setForm]           = useState<UserForm>(emptyForm());
   const [saving, setSaving]       = useState(false);
   const [formError, setFormError] = useState("");
@@ -78,36 +79,82 @@ export default function UsersPage() {
     : stores;
 
   function openCreate() {
+    setEditing(null);
     setForm(emptyForm());
+    setFormError("");
+    setModalOpen(true);
+  }
+
+  function openEdit(u: OrgUser) {
+    setEditing(u);
+    setForm({
+      email:        u.email,
+      first_name:   u.first_name,
+      last_name:    u.last_name,
+      password:     "",
+      role:         u.role,
+      organization: u.organization?.id ?? "",
+      store:        u.store?.id ?? "",
+    });
     setFormError("");
     setModalOpen(true);
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.email || !form.first_name || !form.password || !form.role) {
-      setFormError("Email, first name, password, and role are required.");
-      return;
-    }
-    setSaving(true);
-    setFormError("");
-    const body: CreateUserBody = {
-      email:      form.email,
-      first_name: form.first_name,
-      last_name:  form.last_name,
-      password:   form.password,
-      role:       form.role,
-      ...(form.organization ? { organization: form.organization } : {}),
-      ...(form.store        ? { store: form.store }               : {}),
-    };
-    try {
-      const created = await api.createUser(body);
-      setUsers((prev) => [created, ...prev]);
-      setModalOpen(false);
-    } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : "Failed to create user.");
-    } finally {
-      setSaving(false);
+
+    if (editing) {
+      // Edit mode — password optional
+      if (!form.email || !form.first_name || !form.role) {
+        setFormError("Email, first name, and role are required.");
+        return;
+      }
+      setSaving(true);
+      setFormError("");
+      const body: Partial<CreateUserBody> = {
+        email:      form.email,
+        first_name: form.first_name,
+        last_name:  form.last_name,
+        role:       form.role,
+        ...(form.organization ? { organization: form.organization } : { organization: undefined }),
+        ...(form.store        ? { store: form.store }               : { store: undefined }),
+      };
+      if (form.password) body.password = form.password;
+      try {
+        const updated = await api.updateUser(editing.id, body);
+        setUsers((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+        setModalOpen(false);
+      } catch (e: unknown) {
+        setFormError(e instanceof Error ? e.message : "Failed to update user.");
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      // Create mode
+      if (!form.email || !form.first_name || !form.password || !form.role) {
+        setFormError("Email, first name, password, and role are required.");
+        return;
+      }
+      setSaving(true);
+      setFormError("");
+      const body: CreateUserBody = {
+        email:      form.email,
+        first_name: form.first_name,
+        last_name:  form.last_name,
+        password:   form.password,
+        role:       form.role,
+        ...(form.organization ? { organization: form.organization } : {}),
+        ...(form.store        ? { store: form.store }               : {}),
+      };
+      try {
+        const created = await api.createUser(body);
+        setUsers((prev) => [created, ...prev]);
+        setModalOpen(false);
+      } catch (e: unknown) {
+        setFormError(e instanceof Error ? e.message : "Failed to create user.");
+      } finally {
+        setSaving(false);
+      }
     }
   }
 
@@ -212,19 +259,28 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleToggle(u)}
-                      title={u.is_active ? "Deactivate" : "Reactivate"}
-                      className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-                        u.is_active
-                          ? "text-red-600 bg-red-50 hover:bg-red-100"
-                          : "text-green-600 bg-green-50 hover:bg-green-100"
-                      }`}
-                    >
-                      {u.is_active
-                        ? <><UserX className="w-3.5 h-3.5" /> Deactivate</>
-                        : <><UserCheck className="w-3.5 h-3.5" /> Reactivate</>}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => openEdit(u)}
+                        title="Edit user"
+                        className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors text-slate-600 bg-slate-100 hover:bg-slate-200"
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggle(u)}
+                        title={u.is_active ? "Deactivate" : "Reactivate"}
+                        className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+                          u.is_active
+                            ? "text-red-600 bg-red-50 hover:bg-red-100"
+                            : "text-green-600 bg-green-50 hover:bg-green-100"
+                        }`}
+                      >
+                        {u.is_active
+                          ? <><UserX className="w-3.5 h-3.5" /> Deactivate</>
+                          : <><UserCheck className="w-3.5 h-3.5" /> Reactivate</>}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -233,8 +289,12 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* Create User Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add User">
+      {/* Create / Edit User Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? "Edit User" : "Add User"}
+      >
         <form onSubmit={handleSave} className="space-y-4">
           {formError && (
             <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{formError}</p>
@@ -279,7 +339,7 @@ export default function UsersPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Password <span className="text-red-500">*</span>
+              Password {!editing && <span className="text-red-500">*</span>}
             </label>
             <input
               type="password"
@@ -287,9 +347,11 @@ export default function UsersPage() {
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
+              required={!editing}
             />
-            <p className="text-slate-400 text-xs mt-1">Minimum 8 characters</p>
+            <p className="text-slate-400 text-xs mt-1">
+              {editing ? "Leave blank to keep current password" : "Minimum 8 characters"}
+            </p>
           </div>
 
           <div>
@@ -364,7 +426,7 @@ export default function UsersPage() {
               className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create User
+              {editing ? "Save Changes" : "Create User"}
             </button>
           </div>
         </form>

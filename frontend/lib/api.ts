@@ -89,6 +89,8 @@ export const api = {
     request<OrgUser>("/users/", { method: "POST", body: JSON.stringify(body) }),
   toggleUserActive: (id: number) =>
     request<OrgUser>(`/users/${id}/deactivate/`, { method: "PATCH" }),
+  updateUser: (id: number, body: Partial<CreateUserBody>) =>
+    request<OrgUser>(`/users/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // Tickets
   createTicket: (body: CreateTicketBody) =>

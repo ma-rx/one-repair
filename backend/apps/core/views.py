@@ -100,6 +100,59 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
+    def partial_update(self, request, *args, **kwargs):
+        user = self.get_object()
+        d = request.data
+
+        # Update User model fields
+        user_fields = []
+        if "first_name" in d:
+            user.first_name = d["first_name"]
+            user_fields.append("first_name")
+        if "last_name" in d:
+            user.last_name = d["last_name"]
+            user_fields.append("last_name")
+        if "email" in d:
+            user.email = d["email"]
+            user.username = d["email"]
+            user_fields += ["email", "username"]
+        if "password" in d and d["password"]:
+            user.set_password(d["password"])
+            user_fields.append("password")
+        if user_fields:
+            user.save(update_fields=user_fields)
+
+        # Update profile fields
+        profile = user.profile
+        profile_fields = []
+        if "role" in d:
+            profile.role = d["role"]
+            profile_fields.append("role")
+        if "organization" in d:
+            if d["organization"]:
+                try:
+                    from .models import Organization
+                    profile.organization = Organization.objects.get(pk=d["organization"])
+                except Organization.DoesNotExist:
+                    return Response({"detail": "Organization not found."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                profile.organization = None
+            profile_fields.append("organization")
+        if "store" in d:
+            if d["store"]:
+                try:
+                    profile.store = Store.objects.get(pk=d["store"])
+                except Store.DoesNotExist:
+                    return Response({"detail": "Store not found."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                profile.store = None
+            profile_fields.append("store")
+        if profile_fields:
+            profile.save(update_fields=profile_fields)
+
+        user.refresh_from_db()
+        return Response(UserSerializer(user).data)
+
     @action(detail=True, methods=["patch"], url_path="deactivate")
     def deactivate(self, request, pk=None):
         user = self.get_object()
