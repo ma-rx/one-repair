@@ -1459,6 +1459,21 @@ class BulkImportTicketsView(APIView):
                         invoice_sent=False,
                     )
 
+                    # Resolve parts used by SKU (comma-separated)
+                    parts_used_str = td.get("parts_used", "") or ""
+                    for sku_raw in parts_used_str.split(","):
+                        sku = sku_raw.strip()
+                        if not sku:
+                            continue
+                        part = Part.objects.filter(sku__iexact=sku).first()
+                        if part:
+                            PartUsed.objects.create(
+                                service_report=report,
+                                part=part,
+                                quantity=1,
+                                unit_price_at_time=part.unit_price,
+                            )
+
                     created += 1
 
             except Exception as e:
