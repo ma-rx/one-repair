@@ -9,9 +9,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Null out any existing 1536-dim embeddings before resizing
         migrations.RunSQL(
-            """
+            sql="""
             UPDATE core_ticket SET embedding = NULL WHERE embedding IS NOT NULL;
             UPDATE core_knowledgeentry SET embedding = NULL WHERE embedding IS NOT NULL;
             ALTER TABLE core_ticket ALTER COLUMN embedding TYPE vector(1024);
@@ -23,5 +22,17 @@ class Migration(migrations.Migration):
             ALTER TABLE core_ticket ALTER COLUMN embedding TYPE vector(1536);
             ALTER TABLE core_knowledgeentry ALTER COLUMN embedding TYPE vector(1536);
             """,
+            state_operations=[
+                migrations.AlterField(
+                    model_name="ticket",
+                    name="embedding",
+                    field=pgvector.django.VectorField(blank=True, dimensions=1024, null=True),
+                ),
+                migrations.AlterField(
+                    model_name="knowledgeentry",
+                    name="embedding",
+                    field=pgvector.django.VectorField(blank=True, dimensions=1024, null=True),
+                ),
+            ],
         ),
     ]
