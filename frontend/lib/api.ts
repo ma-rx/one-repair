@@ -349,6 +349,14 @@ export const api = {
   bulkImportTickets: async (tickets: Array<Record<string, unknown>>): Promise<{ created: number; errors: string[] }> => {
     return request("/import/bulk-tickets/", { method: "POST", body: JSON.stringify({ tickets }) });
   },
+
+  diagnosticSearch: (params: {
+    description: string;
+    asset_category?: string;
+    make?: string;
+    model_number?: string;
+  }): Promise<DiagnosticSearchResult> =>
+    request("/diagnostic-search/", { method: "POST", body: JSON.stringify(params) }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -707,4 +715,34 @@ export interface KnowledgeEntry {
   is_verified: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface DiagnosticTicketResult {
+  id: string;
+  asset_description: string;
+  description: string;
+  resolution_code: string;
+  tech_notes: string;
+  parts_used: { name: string; sku: string }[];
+  similarity: number;
+  closed_at: string | null;
+}
+
+export interface DiagnosticKnowledgeResult {
+  id: string;
+  make: string;
+  model_number: string;
+  asset_category: string;
+  cause_summary: string;
+  procedure: string;
+  parts_commonly_used: string;
+  pro_tips: string;
+  difficulty: string;
+  is_verified: boolean;
+  similarity: number;
+}
+
+export interface DiagnosticSearchResult {
+  tickets: DiagnosticTicketResult[];
+  knowledge: DiagnosticKnowledgeResult[];
 }

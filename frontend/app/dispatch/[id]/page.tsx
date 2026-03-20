@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, Ticket, TicketAsset, WorkImage } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
 import TicketDetail from "@/components/TicketDetail";
+import DiagnosticAssist from "@/components/DiagnosticAssist";
 import { SymptomCodeLabels, ResolutionCodeLabels } from "@/types/enums";
 import { Loader2, UserCheck, FileText, Brain, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 
@@ -228,6 +229,11 @@ export default function DispatchTicketDetailPage() {
               </div>
             </div>
           )}
+          <DiagnosticAssist
+            initialDescription={ticket.description}
+            assetCategory={ticket.assets[0]?.asset_name ? undefined : undefined}
+          />
+
           {isAdmin && (
             <div className="flex justify-end pt-2">
               <button

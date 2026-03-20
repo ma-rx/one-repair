@@ -761,6 +761,13 @@ class TicketViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
 
+        # Generate embedding for AI retrieval (non-blocking)
+        try:
+            from .services.embeddings import embed_ticket
+            embed_ticket(ticket)
+        except Exception:
+            pass
+
         return Response(ServiceReportSerializer(report).data)
 
 
@@ -1371,6 +1378,7 @@ class BulkImportTicketsView(APIView):
         errors = []
 
         for i, td in enumerate(tickets_data):
+            imported_ticket = None
             try:
                 with transaction.atomic():
                     # Resolve store
@@ -1394,14 +1402,13 @@ class BulkImportTicketsView(APIView):
                     if tech_name:
                         parts = tech_name.split()
                         if len(parts) >= 2:
-                            from django.db.models import Q as DjangoQ
                             tech = User.objects.filter(
                                 first_name__iexact=parts[0],
                                 last_name__iexact=parts[-1]
                             ).first()
 
                     # Parse date
-                    from django.utils.dateparse import parse_date, parse_datetime
+                    from django.utils.dateparse import parse_date
                     import datetime as dt_module
                     job_date = None
                     date_str = td.get("date", "")
@@ -1412,7 +1419,7 @@ class BulkImportTicketsView(APIView):
                     asset_category = td.get("asset_category", "OTHER") or "OTHER"
 
                     # Create ticket
-                    ticket = Ticket.objects.create(
+                    imported_ticket = Ticket.objects.create(
                         store=store,
                         asset_description=f"{make} {model_number}".strip() if (make or model_number) else td.get("asset_name", ""),
                         assigned_tech=tech,
@@ -1434,7 +1441,7 @@ class BulkImportTicketsView(APIView):
                         ).first()
 
                     TicketAsset.objects.create(
-                        ticket=ticket,
+                        ticket=imported_ticket,
                         asset=asset,
                         asset_description=f"{make} {model_number}".strip() if not asset else "",
                         symptom_code=td.get("symptom_code", "OTHER"),
@@ -1450,7 +1457,7 @@ class BulkImportTicketsView(APIView):
 
                     # Create ServiceReport
                     report = ServiceReport.objects.create(
-                        ticket=ticket,
+                        ticket=imported_ticket,
                         submitted_by=request.user,
                         resolution_code=td.get("resolution_code", "OTHER"),
                         labor_cost=labor_cost,
@@ -1478,8 +1485,104 @@ class BulkImportTicketsView(APIView):
 
             except Exception as e:
                 errors.append(f"Row {i + 1}: {str(e)}")
+                continue
+
+            # Generate embedding outside the transaction (non-blocking)
+            if imported_ticket is not None:
+                try:
+                    from .services.embeddings import embed_ticket
+                    embed_ticket(imported_ticket)
+                except Exception:
+                    pass
 
         return Response({"created": created, "errors": errors})
+
+
+# ── Diagnostic Search (RAG) ───────────────────────────────────────────────────
+
+class DiagnosticSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        description = request.data.get("description", "").strip()
+        asset_category = request.data.get("asset_category", "").strip()
+        make = request.data.get("make", "").strip()
+        model_number = request.data.get("model_number", "").strip()
+
+        if not description:
+            return Response({"detail": "description is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .services.embeddings import get_embedding
+        from pgvector.django import CosineDistance
+
+        query_vec = get_embedding(description)
+        if query_vec is None:
+            return Response(
+                {"detail": "Embedding service unavailable."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # ── Closed ticket search ──────────────────────────────────────────────
+        ticket_qs = (
+            Ticket.objects
+            .filter(status=TicketStatus.CLOSED, embedding__isnull=False)
+            .prefetch_related("service_reports__parts_used__part")
+        )
+        ticket_results = (
+            ticket_qs
+            .annotate(distance=CosineDistance("embedding", query_vec))
+            .order_by("distance")[:5]
+        )
+
+        tickets_out = []
+        for t in ticket_results:
+            report = t.service_reports.first()
+            parts = []
+            if report:
+                parts = [
+                    {"name": pu.part.name, "sku": pu.part.sku}
+                    for pu in report.parts_used.all()
+                    if pu.part
+                ]
+            tickets_out.append({
+                "id": str(t.id),
+                "asset_description": t.asset_description,
+                "description": t.description,
+                "resolution_code": report.resolution_code if report else "",
+                "tech_notes": report.tech_notes if report else "",
+                "parts_used": parts,
+                "similarity": round(1 - float(t.distance), 3),
+                "closed_at": t.closed_at,
+            })
+
+        # ── Knowledge entry search ────────────────────────────────────────────
+        knowledge_qs = KnowledgeEntry.objects.filter(embedding__isnull=False)
+        if asset_category:
+            knowledge_qs = knowledge_qs.filter(asset_category=asset_category)
+
+        knowledge_results = (
+            knowledge_qs
+            .annotate(distance=CosineDistance("embedding", query_vec))
+            .order_by("distance")[:3]
+        )
+
+        knowledge_out = []
+        for k in knowledge_results:
+            knowledge_out.append({
+                "id": str(k.id),
+                "make": k.make,
+                "model_number": k.model_number,
+                "asset_category": k.asset_category,
+                "cause_summary": k.cause_summary,
+                "procedure": k.procedure,
+                "parts_commonly_used": k.parts_commonly_used,
+                "pro_tips": k.pro_tips,
+                "difficulty": k.difficulty,
+                "is_verified": k.is_verified,
+                "similarity": round(1 - float(k.distance), 3),
+            })
+
+        return Response({"tickets": tickets_out, "knowledge": knowledge_out})
 
 
 # ── Client KPIs ───────────────────────────────────────────────────────────────
@@ -1650,7 +1753,20 @@ class KnowledgeEntryViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(contributed_by=self.request.user)
+        entry = serializer.save(contributed_by=self.request.user)
+        try:
+            from .services.embeddings import embed_knowledge_entry
+            embed_knowledge_entry(entry)
+        except Exception:
+            pass
+
+    def perform_update(self, serializer):
+        entry = serializer.save()
+        try:
+            from .services.embeddings import embed_knowledge_entry
+            embed_knowledge_entry(entry)
+        except Exception:
+            pass
 
     @action(detail=True, methods=["post"], url_path="verify")
     def verify(self, request, pk=None):

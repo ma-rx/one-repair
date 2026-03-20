@@ -1,4 +1,6 @@
 anthropic>=0.40.0
+openai>=1.0.0
+pgvector>=0.3.0
 asgiref==3.11.1
 certifi==2026.2.25
 charset-normalizer==3.4.5

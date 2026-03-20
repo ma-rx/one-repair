@@ -151,3 +151,7 @@ SIMPLE_JWT = {
 
 RESEND_API_KEY    = config("RESEND_API_KEY", default="")
 RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="invoices@onerepairsolutions.com")
+
+# ── OpenAI (embeddings) ───────────────────────────────────────────────────────
+
+OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
