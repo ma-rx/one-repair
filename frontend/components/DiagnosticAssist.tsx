@@ -186,7 +186,7 @@ function KnowledgeCard({ k }: { k: DiagnosticKnowledgeResult }) {
               {[k.make, k.model_number].filter(Boolean).join(" ") || k.asset_category}
             </p>
             {k.is_verified && (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" title="Verified" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" aria-label="Verified" />
             )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{k.cause_summary || "—"}</p>
