@@ -6,22 +6,25 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        from openai import OpenAI
-        _client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        import voyageai
+        _client = voyageai.Client(api_key=settings.VOYAGE_API_KEY)
     return _client
 
 
-def get_embedding(text: str) -> list[float] | None:
+def get_embedding(text: str, input_type: str = "document") -> list[float] | None:
+    """
+    Generate a Voyage AI embedding.
+    Use input_type="document" when indexing records.
+    Use input_type="query" when embedding a search query — Voyage optimises
+    each vector for its role in retrieval, which meaningfully improves accuracy.
+    """
     text = text.strip()
-    if not text or not settings.OPENAI_API_KEY:
+    if not text or not settings.VOYAGE_API_KEY:
         return None
     try:
         client = _get_client()
-        response = client.embeddings.create(
-            input=text,
-            model="text-embedding-3-small",
-        )
-        return response.data[0].embedding
+        result = client.embed([text], model="voyage-3", input_type=input_type)
+        return result.embeddings[0]
     except Exception:
         return None
 
@@ -29,7 +32,7 @@ def get_embedding(text: str) -> list[float] | None:
 def build_ticket_text(ticket) -> str:
     parts = []
 
-    # Equipment
+    # Equipment identity
     if ticket.asset_description:
         parts.append(f"Equipment: {ticket.asset_description}")
     if ticket.asset and ticket.asset.equipment_model:
@@ -76,7 +79,7 @@ def embed_ticket(ticket) -> bool:
     text = build_ticket_text(ticket)
     if not text:
         return False
-    vec = get_embedding(text)
+    vec = get_embedding(text, input_type="document")
     if vec is None:
         return False
     ticket.embedding = vec
@@ -88,7 +91,7 @@ def embed_knowledge_entry(entry) -> bool:
     text = build_knowledge_text(entry)
     if not text:
         return False
-    vec = get_embedding(text)
+    vec = get_embedding(text, input_type="document")
     if vec is None:
         return False
     entry.embedding = vec

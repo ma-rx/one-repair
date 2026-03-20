@@ -1,5 +1,5 @@
 anthropic>=0.40.0
-openai>=1.0.0
+voyageai>=0.3.0
 pgvector>=0.3.0
 asgiref==3.11.1
 certifi==2026.2.25

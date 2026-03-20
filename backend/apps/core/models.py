@@ -363,7 +363,7 @@ class Ticket(models.Model):
     scheduled_date = models.DateField(null=True, blank=True)
     sla_due_at     = models.DateTimeField(null=True, blank=True)
     closed_at      = models.DateTimeField(null=True, blank=True)
-    embedding      = VectorField(dimensions=1536, null=True, blank=True)
+    embedding      = VectorField(dimensions=1024, null=True, blank=True)
     created_at   = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -521,7 +521,7 @@ class KnowledgeEntry(models.Model):
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name="knowledge_entries"
     )
     is_verified         = models.BooleanField(default=False)
-    embedding           = VectorField(dimensions=1536, null=True, blank=True)
+    embedding           = VectorField(dimensions=1024, null=True, blank=True)
     created_at          = models.DateTimeField(auto_now_add=True)
     updated_at          = models.DateTimeField(auto_now=True)
 

@@ -742,7 +742,23 @@ export interface DiagnosticKnowledgeResult {
   similarity: number;
 }
 
+export interface DiagnosisPart {
+  name: string;
+  sku: string;
+  reason: string;
+}
+
+export interface Diagnosis {
+  likely_cause: string;
+  recommended_steps: string[];
+  parts_to_order: DiagnosisPart[];
+  confidence: "low" | "medium" | "high";
+  difficulty: string;
+  caution: string | null;
+}
+
 export interface DiagnosticSearchResult {
+  diagnosis: Diagnosis | null;
   tickets: DiagnosticTicketResult[];
   knowledge: DiagnosticKnowledgeResult[];
 }

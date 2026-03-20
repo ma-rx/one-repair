@@ -1515,7 +1515,8 @@ class DiagnosticSearchView(APIView):
         from .services.embeddings import get_embedding
         from pgvector.django import CosineDistance
 
-        query_vec = get_embedding(description)
+        # Use input_type="query" for the search vector — Voyage optimises for retrieval
+        query_vec = get_embedding(description, input_type="query")
         if query_vec is None:
             return Response(
                 {"detail": "Embedding service unavailable."},
@@ -1582,7 +1583,91 @@ class DiagnosticSearchView(APIView):
                 "similarity": round(1 - float(k.distance), 3),
             })
 
-        return Response({"tickets": tickets_out, "knowledge": knowledge_out})
+        # ── Claude generation layer ───────────────────────────────────────────
+        diagnosis = None
+        if tickets_out or knowledge_out:
+            try:
+                import json as _json
+                import anthropic as _anthropic
+                from django.conf import settings as _settings
+
+                context_parts = []
+
+                equipment_hint = " ".join(filter(None, [make, model_number]))
+                if equipment_hint:
+                    context_parts.append(f"Equipment: {equipment_hint}")
+
+                if knowledge_out:
+                    context_parts.append("\n--- KNOWLEDGE BASE ENTRIES ---")
+                    for k in knowledge_out:
+                        entry_parts = [f"Equipment: {k['make']} {k['model_number']}".strip()]
+                        if k["cause_summary"]:
+                            entry_parts.append(f"Cause: {k['cause_summary']}")
+                        if k["procedure"]:
+                            entry_parts.append(f"Procedure: {k['procedure']}")
+                        if k["parts_commonly_used"]:
+                            entry_parts.append(f"Common Parts: {k['parts_commonly_used']}")
+                        if k["pro_tips"]:
+                            entry_parts.append(f"Tips: {k['pro_tips']}")
+                        context_parts.append("\n".join(entry_parts))
+
+                if tickets_out:
+                    context_parts.append("\n--- SIMILAR PAST REPAIRS ---")
+                    for t in tickets_out:
+                        t_parts = [f"Equipment: {t['asset_description']}"]
+                        if t["description"]:
+                            t_parts.append(f"Problem: {t['description']}")
+                        if t["tech_notes"]:
+                            t_parts.append(f"Notes: {t['tech_notes']}")
+                        if t["resolution_code"]:
+                            t_parts.append(f"Resolution: {t['resolution_code']}")
+                        if t["parts_used"]:
+                            names = ", ".join(f"{p['name']} ({p['sku']})" for p in t["parts_used"])
+                            t_parts.append(f"Parts Used: {names}")
+                        context_parts.append("\n".join(t_parts))
+
+                context = "\n\n".join(context_parts)
+
+                prompt = f"""You are an expert field service technician for commercial equipment repair.
+
+A technician is on-site and has described the issue as:
+"{description}"
+
+Based on the context below from past repairs and the knowledge base, provide a practical diagnosis.
+
+{context}
+
+Respond ONLY with a JSON object in exactly this format:
+{{
+  "likely_cause": "concise explanation of the most probable root cause",
+  "recommended_steps": ["step 1", "step 2", "step 3"],
+  "parts_to_order": [{{"name": "part name", "sku": "SKU if known else empty string", "reason": "why this part"}}],
+  "confidence": "low|medium|high",
+  "difficulty": "easy|medium|hard|advanced",
+  "caution": "any safety warnings or null"
+}}
+
+Be direct and practical. Steps should be actionable field instructions."""
+
+                from decouple import config as _config
+                _anthropic_key = _config("ANTHROPIC_API_KEY", default="")
+                client = _anthropic.Anthropic(api_key=_anthropic_key)
+                msg = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=600,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                raw = msg.content[0].text.strip()
+                # Strip markdown code fences if present
+                if raw.startswith("```"):
+                    raw = raw.split("```")[1]
+                    if raw.startswith("json"):
+                        raw = raw[4:]
+                diagnosis = _json.loads(raw.strip())
+            except Exception:
+                diagnosis = None
+
+        return Response({"diagnosis": diagnosis, "tickets": tickets_out, "knowledge": knowledge_out})
 
 
 # ── Client KPIs ───────────────────────────────────────────────────────────────

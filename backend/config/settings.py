@@ -154,4 +154,5 @@ RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="invoices@onerepairsolut
 
 # ── OpenAI (embeddings) ───────────────────────────────────────────────────────
 
-OPENAI_API_KEY = config("OPENAI_API_KEY", default="")
+ANTHROPIC_API_KEY = config("ANTHROPIC_API_KEY", default="")
+VOYAGE_API_KEY    = config("VOYAGE_API_KEY", default="")
