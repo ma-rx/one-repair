@@ -11,6 +11,8 @@ from fpdf import FPDF
 def generate_invoice_pdf(service_report) -> bytes:
     ticket = service_report.ticket
     asset = ticket.asset
+    if asset is None:
+        raise ValueError("Cannot generate invoice PDF: ticket has no linked asset.")
     store = asset.store
     org = store.organization
 

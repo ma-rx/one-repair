@@ -557,10 +557,9 @@ class TicketViewSet(viewsets.ModelViewSet):
             .get(pk=service_report.pk)
         )
 
-        pdf_bytes = generate_invoice_pdf(service_report)
-
         invoice_email = data.get("invoice_email", "")
-        if invoice_email:
+        if invoice_email and service_report.ticket.asset:
+            pdf_bytes = generate_invoice_pdf(service_report)
             sent = send_invoice_email(invoice_email, service_report, pdf_bytes)
             service_report.invoice_sent = sent
             service_report.save(update_fields=["invoice_sent"])
