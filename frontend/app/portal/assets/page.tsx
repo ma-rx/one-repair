@@ -20,7 +20,7 @@ export default function PortalAssetsPage() {
 
   useEffect(() => {
     api.listAssets()
-      .then(setAssets)
+      .then((data) => setAssets(data.results))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);

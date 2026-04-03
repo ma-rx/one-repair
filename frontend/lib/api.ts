@@ -59,12 +59,15 @@ export const api = {
 
   // Assets
   getAsset:   (id: string) => request<Asset>(`/assets/${id}/`),
-  listAssets: (params?: { store?: string; active?: boolean }) => {
+  listAssets: (params?: { store?: string; category?: string; status?: string; active?: boolean; page?: number }) => {
     const qs = new URLSearchParams();
-    if (params?.store)  qs.set("store", params.store);
-    if (params?.active) qs.set("active", "true");
+    if (params?.store)    qs.set("store", params.store);
+    if (params?.category) qs.set("category", params.category);
+    if (params?.status)   qs.set("status", params.status);
+    if (params?.active)   qs.set("active", "true");
+    if (params?.page && params.page > 1) qs.set("page", String(params.page));
     const q = qs.toString();
-    return request<Asset[]>(`/assets/${q ? `?${q}` : ""}`);
+    return request<{ count: number; next: string | null; previous: string | null; results: Asset[] }>(`/assets/${q ? `?${q}` : ""}`);
   },
   createAsset: (body: Partial<Asset>) =>
     request<Asset>("/assets/", { method: "POST", body: JSON.stringify(body) }),

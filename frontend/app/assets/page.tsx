@@ -28,6 +28,7 @@ const EMPTY: Partial<Asset> = {
 
 export default function AssetsPage() {
   const [assets, setAssets]             = useState<Asset[]>([]);
+  const [totalCount, setTotalCount]     = useState(0);
   const [stores, setStores]             = useState<Store[]>([]);
   const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -35,6 +36,7 @@ export default function AssetsPage() {
   const [filterStore, setFilterStore]       = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStatus, setFilterStatus]     = useState("");
+  const [page, setPage]             = useState(1);
   const [modalOpen, setModalOpen]   = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -44,18 +46,34 @@ export default function AssetsPage() {
   const [formError, setFormError]   = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.listAssets(), api.listStores(), api.listEquipmentModels()])
-      .then(([a, s, em]) => { setAssets(a); setStores(s); setEquipmentModels(em); })
-      .catch(() => setError("Failed to load assets."))
-      .finally(() => setLoading(false));
+    Promise.all([api.listStores(), api.listEquipmentModels()])
+      .then(([s, em]) => { setStores(s); setEquipmentModels(em); })
+      .catch(() => setError("Failed to load."));
   }, []);
 
-  const displayed = assets.filter((a) => {
-    if (filterStore    && a.store    !== filterStore)    return false;
-    if (filterCategory && a.category !== filterCategory) return false;
-    if (filterStatus   && a.status   !== filterStatus)   return false;
-    return true;
-  });
+  useEffect(() => {
+    setLoading(true);
+    api.listAssets({
+      store: filterStore || undefined,
+      category: filterCategory || undefined,
+      status: filterStatus || undefined,
+      page,
+    })
+      .then((data) => { setAssets(data.results); setTotalCount(data.count); })
+      .catch(() => setError("Failed to load assets."))
+      .finally(() => setLoading(false));
+  }, [filterStore, filterCategory, filterStatus, page]);
+
+  function handleFilterChange(setter: (v: string) => void) {
+    return (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setter(e.target.value);
+      setPage(1);
+    };
+  }
+
+  const pageSize = 100;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const displayed = assets;
 
   function openCreate() {
     setEditing(null);
@@ -152,7 +170,7 @@ export default function AssetsPage() {
         <select
           className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={filterStore}
-          onChange={(e) => setFilterStore(e.target.value)}
+          onChange={handleFilterChange(setFilterStore)}
         >
           <option value="">All Stores</option>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -161,7 +179,7 @@ export default function AssetsPage() {
         <select
           className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
+          onChange={handleFilterChange(setFilterCategory)}
         >
           <option value="">All Categories</option>
           {Object.entries(AssetCategoryLabels).map(([val, label]) => (
@@ -172,7 +190,7 @@ export default function AssetsPage() {
         <select
           className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
+          onChange={handleFilterChange(setFilterStatus)}
         >
           <option value="">All Statuses</option>
           {Object.entries(AssetStatusLabels).map(([val, label]) => (
@@ -182,14 +200,14 @@ export default function AssetsPage() {
 
         {(filterStore || filterCategory || filterStatus) && (
           <button
-            onClick={() => { setFilterStore(""); setFilterCategory(""); setFilterStatus(""); }}
+            onClick={() => { setFilterStore(""); setFilterCategory(""); setFilterStatus(""); setPage(1); }}
             className="text-sm text-slate-400 hover:text-slate-600"
           >
             Clear filters
           </button>
         )}
 
-        <span className="text-slate-400 text-sm ml-auto">{displayed.length} asset{displayed.length !== 1 ? "s" : ""}</span>
+        <span className="text-slate-400 text-sm ml-auto">{totalCount} asset{totalCount !== 1 ? "s" : ""}</span>
       </div>
 
       {loading ? (
@@ -277,6 +295,29 @@ export default function AssetsPage() {
         </div>
       )}
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 text-sm text-slate-500">
+          <span>Page {page} of {totalPages}</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => p - 1)}
+              disabled={page === 1}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page === totalPages}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* CSV Import Modal */}
       <CsvImportModal
         open={importOpen}
@@ -349,7 +390,7 @@ export default function AssetsPage() {
         onImportRow={(data) => api.createAsset(data as Partial<Asset>)}
         onComplete={(succeeded) => {
           if (succeeded > 0) {
-            api.listAssets().then(setAssets).catch(() => {});
+            api.listAssets({ page }).then((data) => { setAssets(data.results); setTotalCount(data.count); }).catch(() => {});
           }
         }}
       />

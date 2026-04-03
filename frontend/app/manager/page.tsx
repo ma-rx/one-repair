@@ -53,7 +53,7 @@ export default function ManagerPage() {
     ])
       .then(([t, a]) => {
         setTickets(t.filter((tk) => ["OPEN", "IN_PROGRESS", "PENDING_PARTS"].includes(tk.status)));
-        setAssets(a);
+        setAssets(a.results);
       })
       .finally(() => setLoading(false));
   }, [storeId]);

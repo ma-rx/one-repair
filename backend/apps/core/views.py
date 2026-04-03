@@ -8,6 +8,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 
 import uuid as uuid_module
@@ -234,6 +235,12 @@ class EquipmentModelViewSet(viewsets.ModelViewSet):
 
 # ── Assets ────────────────────────────────────────────────────────────────────
 
+class AssetPagination(PageNumberPagination):
+    page_size = 100
+    page_size_query_param = "page_size"
+    max_page_size = 500
+
+
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
 
@@ -242,14 +249,16 @@ class AssetViewSet(viewsets.ModelViewSet):
             return [IsClientAdmin()]
         return [IsAuthenticated()]
 
+    pagination_class = AssetPagination
+
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
-            qs = Asset.objects.select_related("store__organization")
+            qs = Asset.objects.select_related("store__organization", "equipment_model")
         elif hasattr(user, "profile") and user.profile.organization:
             qs = Asset.objects.filter(
                 store__organization=user.profile.organization
-            ).select_related("store__organization")
+            ).select_related("store__organization", "equipment_model")
         else:
             return Asset.objects.none()
 
@@ -260,6 +269,14 @@ class AssetViewSet(viewsets.ModelViewSet):
         equipment_model_id = self.request.query_params.get("equipment_model")
         if equipment_model_id:
             qs = qs.filter(equipment_model_id=equipment_model_id)
+
+        category = self.request.query_params.get("category")
+        if category:
+            qs = qs.filter(category=category)
+
+        asset_status = self.request.query_params.get("status")
+        if asset_status:
+            qs = qs.filter(status=asset_status)
 
         active_only = self.request.query_params.get("active")
         if active_only == "true":

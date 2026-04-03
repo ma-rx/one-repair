@@ -27,7 +27,7 @@ export default function StoreDetailPage() {
       api.listStores().then((stores) => stores.find((s) => s.id === id) ?? null),
       api.listAssets({ store: id }),
     ])
-      .then(([s, a]) => { setStore(s); setAssets(a); })
+      .then(([s, a]) => { setStore(s); setAssets(a.results); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);

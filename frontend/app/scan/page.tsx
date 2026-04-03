@@ -53,7 +53,7 @@ function NewTicketForm() {
     if (!storeId) { setAssets([]); setAssetRows([{ assetId: "", customAsset: "" }]); return; }
     setLoadingAssets(true);
     api.listAssets({ store: storeId, active: true })
-      .then(setAssets)
+      .then((data) => setAssets(data.results))
       .catch(() => setError("Failed to load assets."))
       .finally(() => setLoadingAssets(false));
   }, [storeId]);
