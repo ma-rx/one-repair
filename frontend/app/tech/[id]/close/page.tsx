@@ -293,12 +293,32 @@ export default function TechWorkPage() {
   async function handleMarkComplete() {
     if (!confirm("Mark this job as complete? The ORS team will review and generate the invoice.")) return;
     setSubmitting(true); setError(null);
+    const parts_needed: PartRequestInput[] = neededLines
+      .filter((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim())
+      .map((l) => {
+        if (l.mode === "existing") {
+          return { part_id: l.part_id, quantity_needed: l.quantity_needed, urgency: l.urgency, notes: l.notes };
+        }
+        return {
+          part_name: l.part_name,
+          sku: l.sku,
+          asset_category: l.asset_category,
+          make: l.make,
+          model_number: l.model_number,
+          vendor: l.vendor,
+          cost_price: l.cost_price || undefined,
+          selling_price: l.selling_price || undefined,
+          quantity_needed: l.quantity_needed,
+          urgency: l.urgency,
+          notes: l.notes,
+        };
+      });
     try {
       await api.saveProgress(id, {
         resolution_code: "OTHER",
         labor_cost: null,
         parts_used: partLines.filter((l) => l.part_id && l.quantity > 0),
-        parts_needed: [],
+        parts_needed,
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
       });

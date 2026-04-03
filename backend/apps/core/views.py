@@ -640,8 +640,13 @@ class TicketViewSet(viewsets.ModelViewSet):
                     })
                 PartRequest.objects.create(**pr_kwargs)
 
-            # Move ticket to IN_PROGRESS if still at DISPATCHED
-            if ticket.status == TicketStatus.DISPATCHED:
+            # Update ticket status
+            has_pending_parts = bool(data.get("parts_needed"))
+            if has_pending_parts:
+                if ticket.status not in (TicketStatus.CLOSED, TicketStatus.COMPLETED):
+                    ticket.status = TicketStatus.PENDING_PARTS
+                    ticket.save(update_fields=["status", "updated_at"])
+            elif ticket.status == TicketStatus.DISPATCHED:
                 ticket.status = TicketStatus.IN_PROGRESS
                 ticket.save(update_fields=["status", "updated_at"])
 
