@@ -361,6 +361,7 @@ class Ticket(models.Model):
     priority       = models.CharField(max_length=20, choices=TicketPriority.choices, default=TicketPriority.MEDIUM)
     status         = models.CharField(max_length=50, choices=TicketStatus.choices, default=TicketStatus.OPEN, db_index=True)
     scheduled_date = models.DateField(null=True, blank=True)
+    route_order    = models.PositiveIntegerField(null=True, blank=True)
     sla_due_at     = models.DateTimeField(null=True, blank=True)
     closed_at      = models.DateTimeField(null=True, blank=True)
     embedding      = VectorField(dimensions=1024, null=True, blank=True)

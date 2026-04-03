@@ -109,6 +109,13 @@ export const api = {
     }),
   listTicketsByDate: (date: string) =>
     request<Ticket[]>(`/tickets/?date=${date}`),
+  listTicketsByTechAndDate: (techId: number | string, date: string) =>
+    request<Ticket[]>(`/tickets/?tech=${techId}&date=${date}`),
+  setRouteOrder: (ticketIds: string[]) =>
+    request<{ detail: string }>("/tickets/set-route-order/", {
+      method: "POST",
+      body: JSON.stringify({ ticket_ids: ticketIds }),
+    }),
   listTicketsByMonth: (month: string) =>
     request<Ticket[]>(`/tickets/?month=${month}`),
   rescheduleTicket: (id: string, scheduled_date: string) =>
@@ -551,6 +558,7 @@ export interface Ticket {
   priority: string;
   status: string;
   scheduled_date: string | null;
+  route_order: number | null;
   assigned_tech: number | null;
   assigned_tech_name: string | null;
   assets: TicketAsset[];

@@ -271,6 +271,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "id", "asset", "asset_name", "asset_description",
             "store", "store_name", "store_address",
             "symptom_code", "description", "priority", "status", "scheduled_date",
+            "route_order",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
             "assets", "needs_coding", "service_reports", "created_at", "updated_at",

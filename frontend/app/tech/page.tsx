@@ -16,6 +16,7 @@ const statusStyle: Record<string, string> = {
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
   RESOLVED:      "bg-green-100 text-green-700",
+  COMPLETED:     "bg-emerald-100 text-emerald-700",
   CLOSED:        "bg-slate-100 text-slate-500",
 };
 
@@ -75,7 +76,7 @@ export default function TechPage() {
     setError("");
     api.listTicketsByDate(date)
       .then((all) => {
-        const active = all.filter((t) => t.status !== "CLOSED" && t.status !== "CANCELLED");
+        const active = all.filter((t) => t.status !== "CANCELLED");
         setTickets(active);
         setOrder(active.map((t) => t.id));
       })
@@ -98,7 +99,10 @@ export default function TechPage() {
     });
   }
 
-  const routeAddresses = ordered.map((t) => t.store_address).filter(Boolean);
+  const routeAddresses = ordered
+    .filter((t) => t.status !== "COMPLETED" && t.status !== "CLOSED")
+    .map((t) => t.store_address)
+    .filter(Boolean);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -199,13 +203,14 @@ export default function TechPage() {
             <div className="space-y-3">
               {ordered.map((t, idx) => {
                 const isDispatched = t.status === "DISPATCHED";
+                const isCompleted = t.status === "COMPLETED" || t.status === "CLOSED";
                 const displayStatus = isDispatched
                   ? (t.scheduled_date && t.scheduled_date > date ? "Scheduled" : "Dispatched")
                   : t.status.replace(/_/g, " ");
                 const canService = t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS" || t.status === "DISPATCHED";
 
                 return (
-                  <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div key={t.id} className={`bg-white rounded-xl border p-4 ${isCompleted ? "border-slate-100 opacity-70" : "border-slate-200"}`}>
                     <div className="flex items-start gap-3">
                       {/* Stop number + reorder */}
                       {ordered.length > 1 && (
@@ -267,13 +272,18 @@ export default function TechPage() {
                         )}
 
                         {/* Actions */}
-                        {canService && (
+                        {(canService || isCompleted) && (
                           <div className="flex justify-end mt-3">
                             <Link
                               href={`/tech/${t.id}/close`}
-                              className="flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+                              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                                isCompleted
+                                  ? "text-slate-600 bg-slate-100 hover:bg-slate-200"
+                                  : "text-white bg-blue-600 hover:bg-blue-700"
+                              }`}
                             >
-                              <FileText className="w-3.5 h-3.5" /> Service Report
+                              <FileText className="w-3.5 h-3.5" />
+                              {isCompleted ? "Edit Report" : "Service Report"}
                             </Link>
                           </div>
                         )}

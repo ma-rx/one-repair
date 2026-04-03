@@ -345,9 +345,16 @@ class TicketViewSet(viewsets.ModelViewSet):
         if status_filter:
             qs = qs.filter(status=status_filter)
 
+        tech_filter = self.request.query_params.get("tech")
+        if tech_filter and profile.role == UserRole.ORS_ADMIN:
+            qs = qs.filter(assigned_tech_id=tech_filter)
+
         date_filter = self.request.query_params.get("date")
         if date_filter:
-            qs = qs.filter(scheduled_date=date_filter)
+            from django.db.models import F
+            qs = qs.filter(scheduled_date=date_filter).order_by(
+                F("route_order").asc(nulls_last=True), "-created_at"
+            )
 
         month_filter = self.request.query_params.get("month")  # format: YYYY-MM
         if month_filter:
@@ -573,12 +580,6 @@ class TicketViewSet(viewsets.ModelViewSet):
     def save_progress(self, request, pk=None):
         ticket = self.get_object()
 
-        if ticket.status in (TicketStatus.CLOSED, TicketStatus.COMPLETED):
-            return Response(
-                {"detail": "Cannot save progress on a completed or closed ticket."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = SaveProgressSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -675,6 +676,14 @@ class TicketViewSet(viewsets.ModelViewSet):
         ticket.save(update_fields=["status", "updated_at"])
 
         return Response(TicketSerializer(ticket).data)
+
+    @action(detail=False, methods=["post"], url_path="set-route-order")
+    def set_route_order(self, request):
+        ticket_ids = request.data.get("ticket_ids", [])
+        with transaction.atomic():
+            for idx, tid in enumerate(ticket_ids):
+                Ticket.objects.filter(pk=tid).update(route_order=idx)
+        return Response({"detail": "Route order updated."})
 
     @action(detail=True, methods=["post"], url_path="generate-invoice")
     def generate_invoice(self, request, pk=None):

@@ -24,9 +24,10 @@ import {
 
 const orsNav = [
   { label: "New Ticket",     href: "/scan",             icon: QrCode       },
-  { label: "Dispatch",       href: "/dispatch",         icon: ClipboardList },
-  { label: "Calendar",       href: "/calendar",         icon: CalendarDays },
-  { label: "Parts Needed",   href: "/dispatch/parts",   icon: Package      },
+  { label: "Dispatch",       href: "/dispatch",          icon: ClipboardList },
+  { label: "Routing",        href: "/dispatch/routing",  icon: MapPin       },
+  { label: "Calendar",       href: "/calendar",          icon: CalendarDays },
+  { label: "Parts Needed",   href: "/dispatch/parts",    icon: Package      },
   { label: "Organizations",  href: "/organizations",    icon: Building2    },
   { label: "Stores",         href: "/stores",           icon: MapPin       },
   { label: "Equipment",      href: "/equipment",        icon: Wrench       },

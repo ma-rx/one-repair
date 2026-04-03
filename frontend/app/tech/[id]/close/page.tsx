@@ -291,8 +291,19 @@ export default function TechWorkPage() {
   }
 
   async function handleMarkComplete() {
+    if (timeStatus?.is_clocked_in) {
+      setError("You are currently clocked in. Please clock out before marking complete.");
+      return;
+    }
+    if (!timeStatus || timeStatus.total_minutes === 0) {
+      setError("You must clock in and clock out before marking this job complete.");
+      return;
+    }
+    const alreadyComplete = ticket?.status === "COMPLETED" || ticket?.status === "CLOSED";
     const hasParts = neededLines.some((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim());
-    const confirmMsg = hasParts
+    const confirmMsg = alreadyComplete
+      ? "Update the service report for this completed job?"
+      : hasParts
       ? "Submit parts request and leave this ticket pending parts? You will be redirected once submitted."
       : "Mark this job as complete? The ORS team will review and generate the invoice.";
     if (!confirm(confirmMsg)) return;
@@ -326,8 +337,11 @@ export default function TechWorkPage() {
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
       });
-      if (parts_needed.length === 0) {
+      const alreadyComplete = ticket?.status === "COMPLETED" || ticket?.status === "CLOSED";
+      if (!alreadyComplete && parts_needed.length === 0) {
         await api.markComplete(id);
+        setSuccess("complete");
+      } else if (alreadyComplete) {
         setSuccess("complete");
       } else {
         setSuccess("pending_parts");
@@ -661,6 +675,15 @@ export default function TechWorkPage() {
               </div>
             </div>
 
+            {timeStatus && (timeStatus.is_clocked_in || timeStatus.total_minutes === 0) && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-4 py-3 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {timeStatus.is_clocked_in
+                  ? "You are clocked in — clock out before marking complete."
+                  : "Clock in and out before marking this job complete."}
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button type="button" onClick={() => router.back()}
                 className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50">
@@ -674,7 +697,7 @@ export default function TechWorkPage() {
               <button type="button" onClick={handleMarkComplete} disabled={submitting || saving}
                 className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Mark Complete
+                {ticket?.status === "COMPLETED" || ticket?.status === "CLOSED" ? "Update Report" : "Mark Complete"}
               </button>
             </div>
           </div>
