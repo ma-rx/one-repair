@@ -175,10 +175,10 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
-            return Organization.objects.prefetch_related("stores").all()
+            return Organization.objects.annotate(store_count=Count("stores", filter=Q(stores__is_active=True))).all()
         # Other roles see only their own org
         if hasattr(user, "profile") and user.profile.organization:
-            return Organization.objects.filter(id=user.profile.organization_id)
+            return Organization.objects.annotate(store_count=Count("stores", filter=Q(stores__is_active=True))).filter(id=user.profile.organization_id)
         return Organization.objects.none()
 
 
@@ -194,12 +194,13 @@ class StoreViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        _base = Store.objects.select_related("organization", "manager").annotate(
+            asset_count=Count("assets", filter=Q(assets__is_active=True))
+        )
         if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
-            qs = Store.objects.select_related("organization", "manager").prefetch_related("assets")
+            qs = _base
         elif hasattr(user, "profile") and user.profile.organization:
-            qs = Store.objects.filter(
-                organization=user.profile.organization
-            ).select_related("organization", "manager").prefetch_related("assets")
+            qs = _base.filter(organization=user.profile.organization)
         else:
             return Store.objects.none()
 
@@ -225,7 +226,7 @@ class EquipmentModelViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        qs = EquipmentModel.objects.prefetch_related("instances")
+        qs = EquipmentModel.objects.annotate(instance_count=Count("instances", filter=Q(instances__is_active=True)))
         if self.request.query_params.get("category"):
             qs = qs.filter(category=self.request.query_params["category"])
         return qs

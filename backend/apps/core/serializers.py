@@ -60,6 +60,8 @@ class EquipmentModelSerializer(serializers.ModelSerializer):
         fields = ["id", "make", "model_number", "model_name", "category", "description", "instance_count", "created_at", "updated_at"]
 
     def get_instance_count(self, obj):
+        if hasattr(obj, "instance_count"):
+            return obj.instance_count
         return obj.instances.filter(is_active=True).count()
 
 
@@ -76,6 +78,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
         ]
 
     def get_store_count(self, obj):
+        if hasattr(obj, "store_count"):
+            return obj.store_count
         return obj.stores.filter(is_active=True).count()
 
 
@@ -104,6 +108,8 @@ class StoreSerializer(serializers.ModelSerializer):
         return None
 
     def get_asset_count(self, obj):
+        if hasattr(obj, "asset_count"):
+            return obj.asset_count
         return obj.assets.filter(is_active=True).count()
 
 

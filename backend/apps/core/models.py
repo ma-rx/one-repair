@@ -283,7 +283,7 @@ class Store(models.Model):
         User, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="managed_stores"
     )
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -307,8 +307,8 @@ class Asset(models.Model):
     serial_number    = models.CharField(max_length=255, blank=True)
     install_date     = models.DateField(null=True, blank=True)
     warranty_expiry  = models.DateField(null=True, blank=True)
-    status           = models.CharField(max_length=50, choices=AssetStatus.choices, default=AssetStatus.OPERATIONAL)
-    is_active        = models.BooleanField(default=True)
+    status           = models.CharField(max_length=50, choices=AssetStatus.choices, default=AssetStatus.OPERATIONAL, db_index=True)
+    is_active        = models.BooleanField(default=True, db_index=True)
     created_at       = models.DateTimeField(auto_now_add=True)
     updated_at       = models.DateTimeField(auto_now=True)
 
@@ -359,7 +359,7 @@ class Ticket(models.Model):
     symptom_code   = models.CharField(max_length=50, choices=SymptomCode.choices, blank=True, default="")
     description    = models.TextField(blank=True, default="")
     priority       = models.CharField(max_length=20, choices=TicketPriority.choices, default=TicketPriority.MEDIUM)
-    status         = models.CharField(max_length=50, choices=TicketStatus.choices, default=TicketStatus.OPEN)
+    status         = models.CharField(max_length=50, choices=TicketStatus.choices, default=TicketStatus.OPEN, db_index=True)
     scheduled_date = models.DateField(null=True, blank=True)
     sla_due_at     = models.DateTimeField(null=True, blank=True)
     closed_at      = models.DateTimeField(null=True, blank=True)
