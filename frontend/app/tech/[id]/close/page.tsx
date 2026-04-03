@@ -143,7 +143,7 @@ export default function TechWorkPage() {
   const [parts, setParts]     = useState<Part[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<"complete" | "pending_parts" | false>(false);
   const [saving, setSaving]   = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -291,7 +291,11 @@ export default function TechWorkPage() {
   }
 
   async function handleMarkComplete() {
-    if (!confirm("Mark this job as complete? The ORS team will review and generate the invoice.")) return;
+    const hasParts = neededLines.some((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim());
+    const confirmMsg = hasParts
+      ? "Submit parts request and leave this ticket pending parts? You will be redirected once submitted."
+      : "Mark this job as complete? The ORS team will review and generate the invoice.";
+    if (!confirm(confirmMsg)) return;
     setSubmitting(true); setError(null);
     const parts_needed: PartRequestInput[] = neededLines
       .filter((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim())
@@ -322,8 +326,12 @@ export default function TechWorkPage() {
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
       });
-      await api.markComplete(id);
-      setSuccess(true);
+      if (parts_needed.length === 0) {
+        await api.markComplete(id);
+        setSuccess("complete");
+      } else {
+        setSuccess("pending_parts");
+      }
       setTimeout(() => router.push("/tech"), 1800);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to mark complete.");
@@ -365,7 +373,10 @@ export default function TechWorkPage() {
             )}
             {success && (
               <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 rounded-lg px-4 py-3 text-sm">
-                <CheckCircle2 className="w-4 h-4 shrink-0" /> Job marked complete! Redirecting…
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                {success === "pending_parts"
+                  ? "Parts request submitted. Ticket is pending parts. Redirecting…"
+                  : "Job marked complete! Redirecting…"}
               </div>
             )}
             {saveSuccess && (
