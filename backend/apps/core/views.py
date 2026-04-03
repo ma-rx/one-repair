@@ -645,6 +645,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                 ticket.status = TicketStatus.IN_PROGRESS
                 ticket.save(update_fields=["status", "updated_at"])
 
+        report = ServiceReport.objects.prefetch_related("parts_used__part").get(pk=report.pk)
         return Response(ServiceReportSerializer(report).data)
 
     @action(detail=True, methods=["post"], url_path="mark-complete")
@@ -785,6 +786,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
 
+        report = ServiceReport.objects.prefetch_related("parts_used__part").get(pk=report.pk)
         return Response(ServiceReportSerializer(report).data)
 
 
