@@ -1912,8 +1912,11 @@ class DiagnosticChatView(APIView):
                 .order_by("distance")
                 .first()
             )
-            if qa_result and float(qa_result.distance) <= 0.30:
-                verified_answer = qa_result
+            if qa_result:
+                dist = float(qa_result.distance)
+                logger.info("VerifiedAnswer best match '%s' distance=%.3f", qa_result.question, dist)
+                if dist <= 0.40:
+                    verified_answer = qa_result
 
         def search_chunks(query_vec, threshold=0.55):
             results = (
