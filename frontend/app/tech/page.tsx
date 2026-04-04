@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { api, TechDayStatus, Ticket } from "@/lib/api";
+import { api, Ticket } from "@/lib/api";
 import {
   Wrench, LogOut, Loader2, FileText, Plus,
   ChevronLeft, ChevronRight, MapPin, Navigation,
-  ArrowUp, ArrowDown, Calendar, LogIn, Pause, CheckCircle2,
+  ArrowUp, ArrowDown, Calendar,
 } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
@@ -71,18 +71,7 @@ export default function TechPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
 
-  const [dayStatus, setDayStatus]       = useState<TechDayStatus | null | undefined>(undefined);
-  const [showCheckInPrompt, setShowCheckInPrompt] = useState(false);
-  const [checkInLoading, setCheckInLoading] = useState(false);
-
   const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-
-  useEffect(() => {
-    api.getTechDayStatus().then((s) => {
-      setDayStatus(s);
-      if (!s || !s.checked_in_at) setShowCheckInPrompt(true);
-    }).catch(() => setDayStatus(null));
-  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -119,27 +108,6 @@ export default function TechPage() {
     });
   }
 
-  async function handleCheckIn() {
-    setCheckInLoading(true);
-    try {
-      const s = await api.techCheckIn();
-      setDayStatus(s);
-      setShowCheckInPrompt(false);
-    } finally {
-      setCheckInLoading(false);
-    }
-  }
-
-  async function handleCheckOut() {
-    setCheckInLoading(true);
-    try {
-      const s = await api.techCheckOut();
-      setDayStatus(s);
-    } finally {
-      setCheckInLoading(false);
-    }
-  }
-
   const routeAddresses = ordered
     .filter((t) => t.status !== "COMPLETED" && t.status !== "CLOSED")
     .map((t) => t.store_address)
@@ -167,16 +135,6 @@ export default function TechPage() {
           >
             <Plus className="w-4 h-4" /> New Ticket
           </Link>
-          {dayStatus?.checked_in_at && !dayStatus.checked_out_at && (
-            <button
-              onClick={handleCheckOut}
-              disabled={checkInLoading}
-              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
-            >
-              {checkInLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
-              Check Out
-            </button>
-          )}
           <button
             onClick={logout}
             className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm transition-colors"
@@ -185,24 +143,6 @@ export default function TechPage() {
           </button>
         </div>
       </header>
-
-      {/* Checked-in status bar */}
-      {dayStatus?.checked_in_at && !dayStatus.checked_out_at && (
-        <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-2 flex items-center justify-center gap-2">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="text-xs text-emerald-700 font-medium">
-            Checked in at {new Date(dayStatus.checked_in_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-          </span>
-        </div>
-      )}
-      {dayStatus?.checked_out_at && (
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-center gap-2">
-          <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-xs text-slate-500 font-medium">
-            Checked out at {new Date(dayStatus.checked_out_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-          </span>
-        </div>
-      )}
 
       {/* Date bar */}
       <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
@@ -376,32 +316,6 @@ export default function TechPage() {
         )}
       </div>
 
-      {/* Check-in prompt */}
-      {showCheckInPrompt && date === today && (!dayStatus || !dayStatus.checked_in_at) && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-2xl px-6 pt-6 pb-10 shadow-2xl">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-              <LogIn className="w-5 h-5 text-blue-600" />
-            </div>
-            <p className="font-bold text-slate-800 text-lg">Good morning{user?.first_name ? `, ${user.first_name}` : ""}!</p>
-            <p className="text-slate-500 text-sm mt-1 mb-6">Would you like to check in and start your day?</p>
-            <button
-              onClick={handleCheckIn}
-              disabled={checkInLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2"
-            >
-              {checkInLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
-              Check In
-            </button>
-            <button
-              onClick={() => setShowCheckInPrompt(false)}
-              className="w-full mt-3 text-slate-400 text-sm py-2 hover:text-slate-600"
-            >
-              Not yet
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ from rest_framework import serializers
 from .models import (
     Asset, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
     PartsApproval, PartRequestUrgency, PartUsed, PricingConfig, RepairDocument, RepairImage,
-    ResolutionCodeEntry, ServiceReport, Store, TechDayStatus, Ticket, TicketAsset, TimeEntry,
+    ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset, TimeEntry,
     UserProfile, WorkImage, SymptomCodeEntry,
 )
 
@@ -589,12 +589,6 @@ class RepairImageSerializer(serializers.ModelSerializer):
             return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
         return None
 
-
-class TechDayStatusSerializer(serializers.ModelSerializer):
-    class Meta:
-        model  = TechDayStatus
-        fields = ["id", "date", "checked_in_at", "checked_out_at"]
-        read_only_fields = ["id", "date", "checked_in_at", "checked_out_at"]
 
 
 class CloseTicketSerializer(serializers.Serializer):
