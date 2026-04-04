@@ -12,20 +12,12 @@ TERMINAL_STATUSES = {
 }
 
 
-def next_business_day(from_date: date) -> date:
-    """Return the next Monday-Friday after from_date."""
-    d = from_date + timedelta(days=1)
-    while d.weekday() >= 5:  # 5 = Sat, 6 = Sun
-        d += timedelta(days=1)
-    return d
-
-
 class Command(BaseCommand):
-    help = "Roll over any incomplete scheduled tickets to the next business day."
+    help = "Roll over any incomplete scheduled tickets to the next day."
 
     def handle(self, *args, **options):
         today = date.today()
-        next_day = next_business_day(today)
+        next_day = today + timedelta(days=1)
 
         tickets = Ticket.objects.filter(
             scheduled_date__lt=today,
