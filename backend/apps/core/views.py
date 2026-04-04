@@ -1888,84 +1888,95 @@ class DiagnosticChatView(APIView):
         model_number   = ctx.get("model_number", "")
         store_name     = ctx.get("store_name", "")
 
-        # Build RAG query from the last few user messages
-        user_texts = [m["content"] for m in messages if m.get("role") == "user"]
-        query_text = " ".join(user_texts[-3:]).strip()
+        # Build two queries:
+        # 1. Specific — equipment context + latest user message (precise match)
+        # 2. Broad — equipment context + last 3 exchanges both sides (captures confirmed facts)
+        equipment_context = " ".join(filter(None, [make, model_number, asset_category]))
+        latest_user = next(
+            (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
+        )
+        recent_all = " ".join(
+            m["content"] for m in messages[-6:] if m.get("content")
+        )
+        specific_query = f"{equipment_context} {latest_user}".strip()
+        broad_query    = f"{equipment_context} {recent_all}".strip()
+
+        def search_chunks(query_vec, threshold=0.55):
+            results = (
+                RepairDocumentChunk.objects
+                .select_related("document")
+                .filter(embedding__isnull=False)
+                .annotate(distance=CosineDistance("embedding", query_vec))
+                .order_by("distance")[:6]
+            )
+            return [(c, float(c.distance)) for c in results if float(c.distance) <= threshold]
 
         rag_lines = []
-        if query_text:
-            query_vec = get_embedding(query_text, input_type="query")
-            if query_vec:
-                ticket_results = (
-                    Ticket.objects
-                    .filter(status=TicketStatus.CLOSED, embedding__isnull=False)
-                    .prefetch_related("service_reports__parts_used__part")
-                    .annotate(distance=CosineDistance("embedding", query_vec))
-                    .order_by("distance")[:3]
-                )
-                for t in ticket_results:
-                    if float(t.distance) > 0.55:
-                        continue
-                    report = t.service_reports.first()
-                    line = f"Past repair — {t.asset_description}"
-                    if t.description:
-                        line += f": {t.description}"
-                    if report and report.tech_notes:
-                        line += f" | Notes: {report.tech_notes}"
-                    if report and report.resolution_code:
-                        line += f" | Fixed by: {report.resolution_code.replace('_', ' ').lower()}"
-                    if report:
-                        pnames = [pu.part.name for pu in report.parts_used.all() if pu.part]
-                        if pnames:
-                            line += f" | Parts: {', '.join(pnames)}"
+        seen_chunk_ids = set()
+
+        specific_vec = get_embedding(specific_query, input_type="query") if specific_query else None
+        broad_vec    = get_embedding(broad_query, input_type="query") if broad_query and broad_query != specific_query else None
+
+        for query_vec in filter(None, [specific_vec, broad_vec]):
+            ticket_results = (
+                Ticket.objects
+                .filter(status=TicketStatus.CLOSED, embedding__isnull=False)
+                .prefetch_related("service_reports__parts_used__part")
+                .annotate(distance=CosineDistance("embedding", query_vec))
+                .order_by("distance")[:3]
+            )
+            for t in ticket_results:
+                if float(t.distance) > 0.55:
+                    continue
+                report = t.service_reports.first()
+                line = f"Past repair — {t.asset_description}"
+                if t.description:
+                    line += f": {t.description}"
+                if report and report.tech_notes:
+                    line += f" | Notes: {report.tech_notes}"
+                if report and report.resolution_code:
+                    line += f" | Fixed by: {report.resolution_code.replace('_', ' ').lower()}"
+                if report:
+                    pnames = [pu.part.name for pu in report.parts_used.all() if pu.part]
+                    if pnames:
+                        line += f" | Parts: {', '.join(pnames)}"
+                if line not in rag_lines:
                     rag_lines.append(line)
 
-                knowledge_qs = KnowledgeEntry.objects.filter(embedding__isnull=False)
-                if asset_category:
-                    knowledge_qs = knowledge_qs.filter(asset_category=asset_category)
-                knowledge_results = (
-                    knowledge_qs
-                    .annotate(distance=CosineDistance("embedding", query_vec))
-                    .order_by("distance")[:2]
-                )
-                for k in knowledge_results:
-                    if float(k.distance) > 0.45:
-                        continue
-                    line = f"Knowledge — {k.make} {k.model_number}".strip()
-                    if k.symptom_description:
-                        line += f": {k.symptom_description}"
-                    elif k.cause_summary:
-                        line += f": {k.cause_summary}"
-                    if k.diagnostic_steps:
-                        steps = "; ".join(
-                            f"Step {i+1}: {s.get('action','')} → {s.get('next_action','')}"
-                            for i, s in enumerate(k.diagnostic_steps)
-                            if s.get("action")
-                        )
-                        if steps:
-                            line += f" | Steps: {steps}"
-                    if k.parts_commonly_used:
-                        line += f" | Common parts: {k.parts_commonly_used}"
+            knowledge_qs = KnowledgeEntry.objects.filter(embedding__isnull=False)
+            if asset_category:
+                knowledge_qs = knowledge_qs.filter(asset_category=asset_category)
+            knowledge_results = (
+                knowledge_qs
+                .annotate(distance=CosineDistance("embedding", query_vec))
+                .order_by("distance")[:2]
+            )
+            for k in knowledge_results:
+                if float(k.distance) > 0.55:
+                    continue
+                line = f"Knowledge — {k.make} {k.model_number}".strip()
+                if k.symptom_description:
+                    line += f": {k.symptom_description}"
+                elif k.cause_summary:
+                    line += f": {k.cause_summary}"
+                if k.diagnostic_steps:
+                    steps = "; ".join(
+                        f"Step {i+1}: {s.get('action','')} → {s.get('next_action','')}"
+                        for i, s in enumerate(k.diagnostic_steps)
+                        if s.get("action")
+                    )
+                    if steps:
+                        line += f" | Steps: {steps}"
+                if k.parts_commonly_used:
+                    line += f" | Common parts: {k.parts_commonly_used}"
+                if line not in rag_lines:
                     rag_lines.append(line)
 
-                # Repair document chunks (Plaud summaries, tech support transcripts)
-                chunk_results = (
-                    RepairDocumentChunk.objects
-                    .select_related("document")
-                    .filter(embedding__isnull=False)
-                    .annotate(distance=CosineDistance("embedding", query_vec))
-                    .order_by("distance")[:4]
-                )
-                seen_chunks = set()
-                for chunk in chunk_results:
-                    if float(chunk.distance) > 0.45:
-                        continue
-                    # Dedupe: skip if we already have a chunk from this document with similar content
-                    key = (chunk.document_id, chunk.chunk_index)
-                    if key in seen_chunks:
-                        continue
-                    seen_chunks.add(key)
-                    rag_lines.append(f"Support transcript ({chunk.document.title}): {chunk.content.strip()}")
+            for chunk, dist in search_chunks(query_vec):
+                if chunk.id in seen_chunk_ids:
+                    continue
+                seen_chunk_ids.add(chunk.id)
+                rag_lines.append(f"Support transcript ({chunk.document.title}): {chunk.content.strip()}")
 
         equipment_info = " ".join(filter(None, [make, model_number])) or asset_name or "unknown equipment"
 
@@ -1978,7 +1989,8 @@ Current job:
 - Store: {store_name or "unknown"}
 
 Guidelines:
-- If the tech asks a direct question, ANSWER IT — pull from the knowledge base and support documents, do not respond with another question
+- If the tech asks a direct question, ANSWER IT using the support documents and knowledge base below — do not respond with another question
+- Use what the tech has already told you in this conversation to inform your answer — if they confirmed a symptom, factor it in
 - Only ask a clarifying question when you genuinely cannot help without more information
 - Never ask more than one question at a time
 - Keep responses SHORT — the tech is on their phone in the field
@@ -1987,7 +1999,7 @@ Guidelines:
 - Mention safety cautions when relevant"""
 
         if rag_lines:
-            system_prompt += "\n\nRelevant information from past repairs and knowledge base:\n" + "\n".join(rag_lines)
+            system_prompt += "\n\nRelevant information from support documents, past repairs, and knowledge base — use this to answer the tech's question:\n" + "\n".join(rag_lines)
 
         valid_messages = [
             {"role": m["role"], "content": m["content"]}
@@ -1999,8 +2011,8 @@ Guidelines:
             api_key = _config("ANTHROPIC_API_KEY", default="")
             client = _anthropic.Anthropic(api_key=api_key)
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=400,
+                model="claude-sonnet-4-6",
+                max_tokens=800,
                 system=system_prompt,
                 messages=valid_messages,
             )
