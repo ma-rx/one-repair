@@ -205,8 +205,7 @@ export default function DispatchPartsPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-xs text-slate-400 border-b border-slate-100">
-                          <th className="text-left pb-2 font-medium">Part Name</th>
-                          <th className="text-left pb-2 font-medium">SKU</th>
+                          <th className="text-left pb-2 font-medium">Part</th>
                           <th className="text-center pb-2 font-medium">Qty</th>
                           <th className="text-right pb-2 font-medium">Unit Price</th>
                           <th className="text-right pb-2 font-medium">Line Total</th>
@@ -216,8 +215,14 @@ export default function DispatchPartsPage() {
                       <tbody className="divide-y divide-slate-50">
                         {pa.part_requests.map((pr) => (
                           <tr key={pr.id}>
-                            <td className="py-1.5 text-slate-800 font-medium">{pr.part_name_display}</td>
-                            <td className="py-1.5 text-slate-500">{pr.sku || "—"}</td>
+                            <td className="py-1.5">
+                              <p className="text-slate-800 font-medium">{pr.part_name_display}</p>
+                              {(pr.sku || pr.model_number) && (
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                  {[pr.sku && `SKU: ${pr.sku}`, pr.model_number && `Part #: ${pr.model_number}`].filter(Boolean).join(" · ")}
+                                </p>
+                              )}
+                            </td>
                             <td className="py-1.5 text-center text-slate-700">{pr.quantity_needed}</td>
                             <td className="py-1.5 text-right text-slate-700">{fmt(pr.selling_price)}</td>
                             <td className="py-1.5 text-right text-slate-700">{lineTotal(pr.selling_price, pr.quantity_needed)}</td>
@@ -236,7 +241,7 @@ export default function DispatchPartsPage() {
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-slate-200">
-                          <td colSpan={isEditing ? 4 : 3} className="pt-2 text-xs text-slate-400">
+                          <td colSpan={isEditing ? 3 : 2} className="pt-2 text-xs text-slate-400">
                             NTE Limit: ${nte.toFixed(2)}
                           </td>
                           <td className="pt-2 text-right font-bold text-slate-900">
@@ -245,7 +250,7 @@ export default function DispatchPartsPage() {
                           {isEditing && <td />}
                         </tr>
                         <tr>
-                          <td colSpan={isEditing ? 5 : 4} className="pb-1">
+                          <td colSpan={isEditing ? 4 : 3} className="pb-1">
                             {overNte ? (
                               <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
                                 Requires Client Approval (over NTE)

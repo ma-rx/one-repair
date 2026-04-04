@@ -17,6 +17,22 @@ const statusStyle: Record<string, string> = {
   CANCELLED:     "bg-slate-100 text-slate-400",
 };
 
+const partsApprovalBadge: Record<string, string> = {
+  SENT_TO_CLIENT: "bg-purple-50 text-purple-600",
+  APPROVED:       "bg-emerald-50 text-emerald-700",
+  ORDERED:        "bg-cyan-50 text-cyan-700",
+  DELIVERED:      "bg-green-50 text-green-700",
+  DENIED:         "bg-red-50 text-red-600",
+};
+
+const partsApprovalLabel: Record<string, string> = {
+  SENT_TO_CLIENT: "Parts Pending",
+  APPROVED:       "Parts Approved",
+  ORDERED:        "Parts Ordered",
+  DELIVERED:      "Parts Delivered",
+  DENIED:         "Parts Denied",
+};
+
 export default function PortalTicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filter, setFilter] = useState("");
@@ -76,6 +92,7 @@ export default function PortalTicketsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Ticket #</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Asset</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Store</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Issue</th>
@@ -90,15 +107,30 @@ export default function PortalTicketsPage() {
                   className="border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
                   onClick={() => window.location.href = `/portal/tickets/${t.id}`}
                 >
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <Link
+                      href={`/portal/tickets/${t.id}`}
+                      className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
+                    >
+                      {t.ticket_number || "—"}
+                    </Link>
+                  </td>
                   <td className="px-6 py-4 font-medium text-slate-800">{t.asset_name}</td>
                   <td className="px-6 py-4 text-slate-500">{t.store_name}</td>
                   <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
                     {t.description || (t.symptom_code ? (SymptomCodeLabels[t.symptom_code] ?? t.symptom_code) : "—")}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
-                      {t.status.replace(/_/g, " ")}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
+                        {t.status.replace(/_/g, " ")}
+                      </span>
+                      {t.parts_approval_status && partsApprovalLabel[t.parts_approval_status] && (
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${partsApprovalBadge[t.parts_approval_status] ?? ""}`}>
+                          {partsApprovalLabel[t.parts_approval_status]}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-slate-400 text-xs">
                     {new Date(t.created_at).toLocaleDateString()}

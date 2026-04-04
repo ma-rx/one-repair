@@ -244,6 +244,9 @@ export default function TechPage() {
                                 {t.priority}
                               </span>
                             </div>
+                            {t.ticket_number && (
+                              <p className="font-mono text-xs text-blue-600 font-semibold mt-0.5">{t.ticket_number}</p>
+                            )}
                             <p className="text-slate-500 text-sm mt-0.5">{t.store_name}</p>
                             {t.description && (
                               <p className="text-slate-600 text-sm mt-1 line-clamp-2">{t.description}</p>

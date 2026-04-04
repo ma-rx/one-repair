@@ -290,6 +290,7 @@ class TicketSerializer(serializers.ModelSerializer):
     service_reports              = ServiceReportSerializer(many=True, read_only=True)
     assets                       = TicketAssetSerializer(source="ticket_assets", many=True, read_only=True)
     needs_coding                 = serializers.SerializerMethodField()
+    parts_approval_status        = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -301,7 +302,8 @@ class TicketSerializer(serializers.ModelSerializer):
             "route_order",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
-            "assets", "needs_coding", "service_reports", "created_at", "updated_at",
+            "assets", "needs_coding", "parts_approval_status",
+            "service_reports", "created_at", "updated_at",
         ]
 
     def _get_store(self, obj):
@@ -354,6 +356,11 @@ class TicketSerializer(serializers.ModelSerializer):
         return obj.ticket_assets.filter(
             models.Q(symptom_code="") | models.Q(resolution_code="")
         ).exists()
+
+    def get_parts_approval_status(self, obj):
+        """Returns the status of the most recent active (non-PENDING) parts approval."""
+        pa = obj.parts_approvals.exclude(status="PENDING").order_by("-updated_at").first()
+        return pa.status if pa else None
 
 
 # ── PartRequest ───────────────────────────────────────────────────────────────

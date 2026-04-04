@@ -683,6 +683,7 @@ export interface Ticket {
   assigned_tech_name: string | null;
   assets: TicketAsset[];
   needs_coding: boolean;
+  parts_approval_status: string | null;
   service_reports: ServiceReport[];
   created_at: string;
 }
