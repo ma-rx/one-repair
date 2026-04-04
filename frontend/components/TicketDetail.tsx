@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Ticket, WorkImage } from "@/lib/api";
-import { MapPin, Calendar, User, Clock, FileText, ArrowLeft } from "lucide-react";
+import { MapPin, Calendar, User, Clock, Phone, ArrowLeft } from "lucide-react";
 
 export const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
@@ -96,6 +96,34 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
                 </a>
               ) : (
                 <p className="text-slate-600">{ticket.store_address}</p>
+              )}
+            </div>
+          )}
+
+          {ticket.store_phone && (
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Store Phone</p>
+              <a href={`tel:${ticket.store_phone}`} className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium">
+                <Phone className="w-3.5 h-3.5 shrink-0" /> {ticket.store_phone}
+              </a>
+            </div>
+          )}
+
+          {ticket.store_hours && (
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Store Hours</p>
+              <p className="text-slate-700 whitespace-pre-line">{ticket.store_hours}</p>
+            </div>
+          )}
+
+          {ticket.store_district_manager_name && (
+            <div className="col-span-2 bg-slate-50 rounded-lg p-3">
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">District Manager</p>
+              <p className="font-medium text-slate-800">{ticket.store_district_manager_name}</p>
+              {ticket.store_district_manager_phone && (
+                <a href={`tel:${ticket.store_district_manager_phone}`} className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-sm mt-0.5">
+                  <Phone className="w-3.5 h-3.5 shrink-0" /> {ticket.store_district_manager_phone}
+                </a>
               )}
             </div>
           )}

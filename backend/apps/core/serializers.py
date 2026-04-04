@@ -3,7 +3,7 @@ from django.db import models
 from rest_framework import serializers
 
 from .models import (
-    Asset, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
+    Asset, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
     PartsApproval,
     PartRequestUrgency, PartUsed, PricingConfig, ResolutionCodeEntry,
     ServiceReport, Store, Ticket, TicketAsset, TimeEntry, UserProfile, WorkImage,
@@ -84,21 +84,33 @@ class OrganizationSerializer(serializers.ModelSerializer):
         return obj.stores.filter(is_active=True).count()
 
 
+# ── DistrictManager ───────────────────────────────────────────────────────────
+
+class DistrictManagerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DistrictManager
+        fields = ["id", "organization", "name", "phone", "email", "created_at", "updated_at"]
+
+
 # ── Store ─────────────────────────────────────────────────────────────────────
 
 class StoreSerializer(serializers.ModelSerializer):
-    organization_name = serializers.CharField(source="organization.name", read_only=True)
-    manager_name = serializers.SerializerMethodField()
-    asset_count = serializers.SerializerMethodField()
+    organization_name        = serializers.CharField(source="organization.name", read_only=True)
+    manager_name             = serializers.SerializerMethodField()
+    district_manager_name    = serializers.SerializerMethodField()
+    district_manager_phone   = serializers.SerializerMethodField()
+    district_manager_email   = serializers.SerializerMethodField()
+    asset_count              = serializers.SerializerMethodField()
 
     class Meta:
         model = Store
         fields = [
             "id", "name",
             "address_line1", "address_line2", "city", "state", "zip_code", "country",
-            "phone", "email",
+            "phone", "email", "hours",
             "organization", "organization_name",
             "manager", "manager_name",
+            "district_manager", "district_manager_name", "district_manager_phone", "district_manager_email",
             "is_active", "asset_count",
             "created_at", "updated_at",
         ]
@@ -107,6 +119,15 @@ class StoreSerializer(serializers.ModelSerializer):
         if obj.manager:
             return obj.manager.get_full_name() or obj.manager.username
         return None
+
+    def get_district_manager_name(self, obj):
+        return obj.district_manager.name if obj.district_manager else None
+
+    def get_district_manager_phone(self, obj):
+        return obj.district_manager.phone if obj.district_manager else None
+
+    def get_district_manager_email(self, obj):
+        return obj.district_manager.email if obj.district_manager else None
 
     def get_asset_count(self, obj):
         if hasattr(obj, "asset_count"):
@@ -258,25 +279,33 @@ class TicketAssetSerializer(serializers.ModelSerializer):
 # ── Ticket ────────────────────────────────────────────────────────────────────
 
 class TicketSerializer(serializers.ModelSerializer):
-    asset_name         = serializers.SerializerMethodField()
-    store_name         = serializers.SerializerMethodField()
-    store_address      = serializers.SerializerMethodField()
-    assigned_tech_name = serializers.SerializerMethodField()
-    service_reports    = ServiceReportSerializer(many=True, read_only=True)
-    assets             = TicketAssetSerializer(source="ticket_assets", many=True, read_only=True)
-    needs_coding       = serializers.SerializerMethodField()
+    asset_name                   = serializers.SerializerMethodField()
+    store_name                   = serializers.SerializerMethodField()
+    store_address                = serializers.SerializerMethodField()
+    store_phone                  = serializers.SerializerMethodField()
+    store_hours                  = serializers.SerializerMethodField()
+    store_district_manager_name  = serializers.SerializerMethodField()
+    store_district_manager_phone = serializers.SerializerMethodField()
+    assigned_tech_name           = serializers.SerializerMethodField()
+    service_reports              = ServiceReportSerializer(many=True, read_only=True)
+    assets                       = TicketAssetSerializer(source="ticket_assets", many=True, read_only=True)
+    needs_coding                 = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
         fields = [
             "id", "ticket_number", "asset", "asset_name", "asset_description",
-            "store", "store_name", "store_address",
+            "store", "store_name", "store_address", "store_phone", "store_hours",
+            "store_district_manager_name", "store_district_manager_phone",
             "symptom_code", "description", "priority", "status", "scheduled_date",
             "route_order",
             "opened_by", "assigned_tech", "assigned_tech_name",
             "sla_due_at", "closed_at",
             "assets", "needs_coding", "service_reports", "created_at", "updated_at",
         ]
+
+    def _get_store(self, obj):
+        return obj.store or (obj.asset.store if obj.asset else None)
 
     def get_asset_name(self, obj):
         first = obj.ticket_assets.select_related("asset").first()
@@ -287,18 +316,31 @@ class TicketSerializer(serializers.ModelSerializer):
         return obj.asset_description or "Unlisted Equipment"
 
     def get_store_name(self, obj):
-        if obj.store:
-            return obj.store.name
-        if obj.asset and obj.asset.store:
-            return obj.asset.store.name
-        return ""
+        store = self._get_store(obj)
+        return store.name if store else ""
 
     def get_store_address(self, obj):
-        store = obj.store or (obj.asset.store if obj.asset else None)
+        store = self._get_store(obj)
         if not store:
             return ""
         parts = [store.address_line1, store.city, store.state, store.zip_code]
         return ", ".join(p for p in parts if p)
+
+    def get_store_phone(self, obj):
+        store = self._get_store(obj)
+        return store.phone if store else ""
+
+    def get_store_hours(self, obj):
+        store = self._get_store(obj)
+        return store.hours if store else ""
+
+    def get_store_district_manager_name(self, obj):
+        store = self._get_store(obj)
+        return store.district_manager.name if store and store.district_manager else None
+
+    def get_store_district_manager_phone(self, obj):
+        store = self._get_store(obj)
+        return store.district_manager.phone if store and store.district_manager else None
 
     def get_assigned_tech_name(self, obj):
         if obj.assigned_tech:

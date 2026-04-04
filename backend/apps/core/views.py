@@ -17,7 +17,7 @@ import requests as http_requests
 from rest_framework.parsers import MultiPartParser
 
 from .models import (
-    Asset, AssetStatus, EquipmentModel, KnowledgeEntry, Organization, Part,
+    Asset, AssetStatus, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part,
     PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, ResolutionCodeEntry,
     ServiceReport, Store, Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole,
     WorkImage, SymptomCodeEntry,
@@ -25,7 +25,7 @@ from .models import (
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
-    CreateUserSerializer, EquipmentModelSerializer, GenerateInvoiceSerializer,
+    CreateUserSerializer, DistrictManagerSerializer, EquipmentModelSerializer, GenerateInvoiceSerializer,
     KnowledgeEntrySerializer,
     OrganizationSerializer, PartsApprovalSerializer, PartRequestSerializer, PartSerializer,
     PricingConfigSerializer, ResolutionCodeEntrySerializer, SaveProgressSerializer,
@@ -195,10 +195,10 @@ class StoreViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        _base = Store.objects.select_related("organization", "manager").annotate(
+        _base = Store.objects.select_related("organization", "manager", "district_manager").annotate(
             asset_count=Count("assets", filter=Q(assets__is_active=True))
         )
-        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+        if hasattr(user, "profile") and user.profile.role in (UserRole.ORS_ADMIN, UserRole.TECH):
             qs = _base
         elif hasattr(user, "profile") and user.profile.organization:
             qs = _base.filter(organization=user.profile.organization)
@@ -213,6 +213,32 @@ class StoreViewSet(viewsets.ModelViewSet):
         if active_only == "true":
             qs = qs.filter(is_active=True)
 
+        return qs
+
+
+# ── DistrictManager ───────────────────────────────────────────────────────────
+
+class DistrictManagerViewSet(viewsets.ModelViewSet):
+    serializer_class = DistrictManagerSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsClientAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = DistrictManager.objects.select_related("organization")
+        if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
+            pass  # see all
+        elif hasattr(user, "profile") and user.profile.organization:
+            qs = qs.filter(organization=user.profile.organization)
+        else:
+            return DistrictManager.objects.none()
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(organization_id=org_id)
         return qs
 
 

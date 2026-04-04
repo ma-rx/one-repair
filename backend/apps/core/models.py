@@ -278,6 +278,22 @@ class UserProfile(models.Model):
         return f"{self.user.get_full_name()} ({self.role})"
 
 
+class DistrictManager(models.Model):
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="district_managers")
+    name         = models.CharField(max_length=255)
+    phone        = models.CharField(max_length=50, blank=True)
+    email        = models.EmailField(blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+
+
 class Store(models.Model):
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="stores")
@@ -290,9 +306,14 @@ class Store(models.Model):
     country      = models.CharField(max_length=100, default="US")
     phone        = models.CharField(max_length=50, blank=True)
     email        = models.EmailField(blank=True)
+    hours        = models.TextField(blank=True, default="", help_text="Store operating hours (e.g. Mon-Fri 6am-9pm)")
     manager      = models.ForeignKey(
         User, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="managed_stores"
+    )
+    district_manager = models.ForeignKey(
+        DistrictManager, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="stores"
     )
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)

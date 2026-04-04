@@ -4,36 +4,45 @@ import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
-import { api, Organization, Store } from "@/lib/api";
+import { api, DistrictManager, Organization, Store } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { MapPin, Plus, Pencil, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
 
 const EMPTY: Partial<Store> = {
   name: "", organization: "", address_line1: "", address_line2: "",
-  city: "", state: "", zip_code: "", country: "US", phone: "", email: "", is_active: true,
+  city: "", state: "", zip_code: "", country: "US", phone: "", email: "", hours: "",
+  district_manager: null, is_active: true,
 };
 
 export default function StoresPage() {
   const { user } = useAuth();
   const isORS = user?.role === "ORS_ADMIN";
 
-  const [stores, setStores]         = useState<Store[]>([]);
-  const [orgs, setOrgs]             = useState<Organization[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
-  const [filterOrg, setFilterOrg]   = useState("");
-  const [modalOpen, setModalOpen]   = useState(false);
-  const [editing, setEditing]       = useState<Store | null>(null);
-  const [form, setForm]             = useState<Partial<Store>>(EMPTY);
-  const [saving, setSaving]         = useState(false);
-  const [formError, setFormError]   = useState<string | null>(null);
+  const [stores, setStores]               = useState<Store[]>([]);
+  const [orgs, setOrgs]                   = useState<Organization[]>([]);
+  const [districtManagers, setDMs]        = useState<DistrictManager[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState<string | null>(null);
+  const [filterOrg, setFilterOrg]         = useState("");
+  const [modalOpen, setModalOpen]         = useState(false);
+  const [editing, setEditing]             = useState<Store | null>(null);
+  const [form, setForm]                   = useState<Partial<Store>>(EMPTY);
+  const [saving, setSaving]               = useState(false);
+  const [formError, setFormError]         = useState<string | null>(null);
+
+  const [dmModalOpen, setDmModalOpen]     = useState(false);
+  const [editingDM, setEditingDM]         = useState<DistrictManager | null>(null);
+  const [dmForm, setDmForm]               = useState<Partial<DistrictManager>>({ name: "", phone: "", email: "", organization: "" });
+  const [dmSaving, setDmSaving]           = useState(false);
+  const [dmFormError, setDmFormError]     = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       api.listStores(),
       isORS ? api.listOrganizations() : Promise.resolve([]),
+      api.listDistrictManagers(),
     ])
-      .then(([s, o]) => { setStores(s); setOrgs(o); })
+      .then(([s, o, dms]) => { setStores(s); setOrgs(o as Organization[]); setDMs(dms); })
       .catch(() => setError("Failed to load stores."))
       .finally(() => setLoading(false));
   }, [isORS]);
@@ -55,7 +64,9 @@ export default function StoresPage() {
       name: store.name, organization: store.organization,
       address_line1: store.address_line1, address_line2: store.address_line2,
       city: store.city, state: store.state, zip_code: store.zip_code,
-      country: store.country, phone: store.phone, email: store.email, is_active: store.is_active,
+      country: store.country, phone: store.phone, email: store.email,
+      hours: store.hours, district_manager: store.district_manager,
+      is_active: store.is_active,
     });
     setFormError(null);
     setModalOpen(true);
@@ -78,6 +89,40 @@ export default function StoresPage() {
       setFormError(err.message || "Failed to save.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openCreateDM() {
+    setEditingDM(null);
+    setDmForm({ name: "", phone: "", email: "", organization: isORS ? "" : (user?.organization?.id ?? "") });
+    setDmFormError(null);
+    setDmModalOpen(true);
+  }
+
+  function openEditDM(dm: DistrictManager) {
+    setEditingDM(dm);
+    setDmForm({ name: dm.name, phone: dm.phone, email: dm.email, organization: dm.organization });
+    setDmFormError(null);
+    setDmModalOpen(true);
+  }
+
+  async function handleDMSave(e: React.FormEvent) {
+    e.preventDefault();
+    setDmSaving(true);
+    setDmFormError(null);
+    try {
+      if (editingDM) {
+        const updated = await api.updateDistrictManager(editingDM.id, dmForm);
+        setDMs((prev) => prev.map((d) => d.id === updated.id ? updated : d));
+      } else {
+        const created = await api.createDistrictManager(dmForm);
+        setDMs((prev) => [...prev, created]);
+      }
+      setDmModalOpen(false);
+    } catch (err: any) {
+      setDmFormError(err.message || "Failed to save.");
+    } finally {
+      setDmSaving(false);
     }
   }
 
@@ -185,6 +230,55 @@ export default function StoresPage() {
         </div>
       )}
 
+      {/* District Managers section */}
+      <div className="mt-10 mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">District Managers</h2>
+          <p className="text-slate-500 text-sm mt-0.5">Assign district managers to stores</p>
+        </div>
+        <button
+          onClick={openCreateDM}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add DM
+        </button>
+      </div>
+
+      {!loading && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {districtManagers.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">No district managers yet.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Name</th>
+                  {isORS && <th className="text-left px-6 py-3 text-slate-500 font-medium">Organization</th>}
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Phone</th>
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Email</th>
+                  <th className="px-6 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {districtManagers.map((dm) => (
+                  <tr key={dm.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-slate-800">{dm.name}</td>
+                    {isORS && <td className="px-6 py-4 text-slate-500">{orgs.find((o) => o.id === dm.organization)?.name ?? "—"}</td>}
+                    <td className="px-6 py-4 text-slate-500">{dm.phone || "—"}</td>
+                    <td className="px-6 py-4 text-slate-500">{dm.email || "—"}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button onClick={() => openEditDM(dm)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
       <Modal
         title={editing ? "Edit Store" : "New Store"}
         open={modalOpen}
@@ -268,6 +362,34 @@ export default function StoresPage() {
             {f("country", "Country")}
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Store Hours</label>
+            <textarea
+              rows={2}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="e.g. Mon–Fri 5:30am–9pm, Sat–Sun 6am–8pm"
+              value={(form.hours as string) ?? ""}
+              onChange={(e) => setForm((prev) => ({ ...prev, hours: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">District Manager</label>
+            <select
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={(form.district_manager as string) ?? ""}
+              onChange={(e) => setForm((prev) => ({ ...prev, district_manager: e.target.value || null }))}
+            >
+              <option value="">None</option>
+              {districtManagers
+                .filter((dm) => !form.organization || dm.organization === form.organization)
+                .map((dm) => (
+                  <option key={dm.id} value={dm.id}>{dm.name}{dm.phone ? ` — ${dm.phone}` : ""}</option>
+                ))
+              }
+            </select>
+          </div>
+
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -287,6 +409,85 @@ export default function StoresPage() {
               className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {editing ? "Save Changes" : "Create Store"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* District Manager Modal */}
+      <Modal
+        title={editingDM ? "Edit District Manager" : "New District Manager"}
+        open={dmModalOpen}
+        onClose={() => setDmModalOpen(false)}
+        width="max-w-md"
+      >
+        <form onSubmit={handleDMSave} className="space-y-4">
+          {dmFormError && (
+            <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-3 py-2.5 text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0" /> {dmFormError}
+            </div>
+          )}
+
+          {isORS && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Organization <span className="text-red-500">*</span>
+              </label>
+              <select
+                required
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={dmForm.organization ?? ""}
+                onChange={(e) => setDmForm((prev) => ({ ...prev, organization: e.target.value }))}
+              >
+                <option value="">Select organization...</option>
+                {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              required
+              type="text"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={dmForm.name ?? ""}
+              onChange={(e) => setDmForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone</label>
+              <input
+                type="tel"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={dmForm.phone ?? ""}
+                onChange={(e) => setDmForm((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <input
+                type="email"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={dmForm.email ?? ""}
+                onChange={(e) => setDmForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setDmModalOpen(false)}
+              className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50">
+              Cancel
+            </button>
+            <button type="submit" disabled={dmSaving}
+              className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+              {dmSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {editingDM ? "Save Changes" : "Create"}
             </button>
           </div>
         </form>

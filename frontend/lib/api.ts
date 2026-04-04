@@ -57,6 +57,16 @@ export const api = {
   updateStore: (id: string, body: Partial<Store>) =>
     request<Store>(`/stores/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
 
+  // District Managers
+  listDistrictManagers: (orgId?: string) =>
+    request<DistrictManager[]>(`/district-managers/${orgId ? `?organization=${orgId}` : ""}`),
+  createDistrictManager: (body: Partial<DistrictManager>) =>
+    request<DistrictManager>("/district-managers/", { method: "POST", body: JSON.stringify(body) }),
+  updateDistrictManager: (id: string, body: Partial<DistrictManager>) =>
+    request<DistrictManager>(`/district-managers/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteDistrictManager: (id: string) =>
+    request<void>(`/district-managers/${id}/`, { method: "DELETE" }),
+
   // Assets
   getAsset:   (id: string) => request<Asset>(`/assets/${id}/`),
   listAssets: (params?: { store?: string; category?: string; status?: string; active?: boolean; page?: number }) => {
@@ -443,6 +453,16 @@ export interface EquipmentModel {
   updated_at: string;
 }
 
+export interface DistrictManager {
+  id: string;
+  organization: string;
+  name: string;
+  phone: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Store {
   id: string;
   name: string;
@@ -456,8 +476,13 @@ export interface Store {
   country: string;
   phone: string;
   email: string;
+  hours: string;
   manager: number | null;
   manager_name: string | null;
+  district_manager: string | null;
+  district_manager_name: string | null;
+  district_manager_phone: string | null;
+  district_manager_email: string | null;
   is_active: boolean;
   asset_count: number;
   created_at: string;
@@ -644,6 +669,10 @@ export interface Ticket {
   store: string | null;
   store_name: string;
   store_address: string;
+  store_phone: string;
+  store_hours: string;
+  store_district_manager_name: string | null;
+  store_district_manager_phone: string | null;
   symptom_code: string;
   description: string;
   priority: string;

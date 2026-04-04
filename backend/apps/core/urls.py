@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     AssetViewSet, BulkImportTicketsView, ClientKPIView, DiagnosticSearchView,
-    EquipmentModelViewSet, FormatReportView,
+    DistrictManagerViewSet, EquipmentModelViewSet, FormatReportView,
     InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
     PartsApprovalViewSet, PartRequestViewSet, PartViewSet, PricingConfigView, ResolutionCodeEntryViewSet,
     ServiceReportViewSet, StoreViewSet, SuggestCodesView, SymptomCodeEntryViewSet, TicketViewSet,
@@ -13,6 +13,7 @@ router = DefaultRouter()
 router.register("users", UserViewSet, basename="user")
 router.register("organizations", OrganizationViewSet, basename="organization")
 router.register("stores", StoreViewSet, basename="store")
+router.register("district-managers", DistrictManagerViewSet, basename="district-manager")
 router.register("equipment-models", EquipmentModelViewSet, basename="equipment-model")
 router.register("assets", AssetViewSet, basename="asset")
 router.register("parts", PartViewSet, basename="part")
