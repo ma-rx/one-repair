@@ -1901,14 +1901,15 @@ class DiagnosticChatView(APIView):
         specific_query = f"{equipment_context} {latest_user}".strip()
         broad_query    = f"{equipment_context} {recent_all}".strip()
 
-        # Search ORS Verified Answers first — tight threshold, injected verbatim
+        # Search ORS Verified Answers — use only the raw user message, no equipment context,
+        # so bare question embeddings match regardless of what equipment is on the ticket
         verified_answer = None
-        specific_vec_for_qa = get_embedding(specific_query, input_type="query") if specific_query else None
-        if specific_vec_for_qa:
+        qa_vec = get_embedding(latest_user, input_type="query") if latest_user else None
+        if qa_vec:
             qa_result = (
                 VerifiedAnswer.objects
                 .filter(embedding__isnull=False)
-                .annotate(distance=CosineDistance("embedding", specific_vec_for_qa))
+                .annotate(distance=CosineDistance("embedding", qa_vec))
                 .order_by("distance")
                 .first()
             )
