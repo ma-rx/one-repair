@@ -942,6 +942,7 @@ export interface VerifiedAnswer {
   answer: string;
   make: string;
   asset_category: string;
+  aliases: string[];
   created_by: number | null;
   created_by_name: string | null;
   is_embedded: boolean;

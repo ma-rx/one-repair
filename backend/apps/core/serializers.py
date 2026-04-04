@@ -564,7 +564,7 @@ class VerifiedAnswerSerializer(serializers.ModelSerializer):
     class Meta:
         from .models import VerifiedAnswer
         model  = VerifiedAnswer
-        fields = ["id", "question", "answer", "make", "asset_category", "created_by", "created_by_name", "is_embedded", "created_at", "updated_at"]
+        fields = ["id", "question", "answer", "make", "asset_category", "aliases", "created_by", "created_by_name", "is_embedded", "created_at", "updated_at"]
         read_only_fields = ["created_by"]
 
     def get_created_by_name(self, obj):

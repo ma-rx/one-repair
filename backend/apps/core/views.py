@@ -1916,7 +1916,7 @@ class DiagnosticChatView(APIView):
             if qa_result:
                 dist = float(qa_result.distance)
                 logger.info("VerifiedAnswer best match '%s' distance=%.3f", qa_result.question, dist)
-                if dist <= 0.40:
+                if dist <= 0.55:
                     verified_answer = qa_result
 
         def search_chunks(query_vec, threshold=0.55):
@@ -2355,9 +2355,42 @@ class VerifiedAnswerViewSet(viewsets.ModelViewSet):
     def _embed(self, entry):
         try:
             from .services.embeddings import get_embedding
-            vec = get_embedding(entry.question, input_type="document")
+            aliases = self._generate_aliases(entry.question)
+            if aliases != entry.aliases:
+                entry.aliases = aliases
+                entry.save(update_fields=["aliases"])
+            # Embed the canonical question + all aliases together so the vector
+            # covers a wider semantic space and matches more query variations
+            combined = "\n".join([entry.question] + aliases)
+            vec = get_embedding(combined, input_type="document")
             if vec:
                 entry.embedding = vec
                 entry.save(update_fields=["embedding"])
         except Exception as e:
             logger.error("VerifiedAnswer embedding failed for %s: %s", entry.id, e)
+
+    def _generate_aliases(self, question: str) -> list:
+        try:
+            api_key = _config("ANTHROPIC_API_KEY", default="")
+            if not api_key:
+                return []
+            client = _anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Generate 5 alternative short phrasings a field technician might use to ask "
+                        f"the same question as: \"{question}\"\n"
+                        f"Return only a JSON array of strings, nothing else. Example: [\"phrase 1\", \"phrase 2\"]"
+                    ),
+                }],
+            )
+            import json
+            text = response.content[0].text.strip()
+            aliases = json.loads(text)
+            return [a for a in aliases if isinstance(a, str)][:5]
+        except Exception as e:
+            logger.warning("Alias generation failed for '%s': %s", question, e)
+            return []

@@ -682,6 +682,7 @@ class VerifiedAnswer(models.Model):
     answer         = models.TextField()
     make           = models.CharField(max_length=100, blank=True, default="")
     asset_category = models.CharField(max_length=100, blank=True, default="")
+    aliases        = models.JSONField(default=list, blank=True)
     embedding      = VectorField(dimensions=1024, null=True, blank=True)
     created_by     = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="verified_answers")
     created_at     = models.DateTimeField(auto_now_add=True)

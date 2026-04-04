@@ -555,7 +555,19 @@ function VerifiedAnswersTab() {
                             <p className="text-xs text-slate-400 line-clamp-2 ml-6">{ans.answer}</p>
                           )}
                           {selected?.id === ans.id && (
-                            <p className="text-sm text-slate-700 mt-2 ml-6 whitespace-pre-wrap">{ans.answer}</p>
+                            <div className="ml-6 mt-2 space-y-2">
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap">{ans.answer}</p>
+                              {ans.aliases?.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Also matches</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {ans.aliases.map((a, i) => (
+                                      <span key={i} className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{a}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           )}
                           {ans.asset_category && (
                             <span className="ml-6 mt-2 inline-block text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
