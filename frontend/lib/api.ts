@@ -137,6 +137,7 @@ export const api = {
     tech_notes?: string;
     formatted_report?: string;
     manager_on_site?: string;
+    manager_signature?: string;
   }) =>
     request<ServiceReport>(`/tickets/${ticketId}/save-progress/`, {
       method: "POST",
@@ -664,6 +665,7 @@ export interface ServiceReport {
   tech_notes: string;
   formatted_report: string;
   manager_on_site: string;
+  manager_signature: string;
   labor_cost: string;
   invoice_email: string;
   draft_parts: Array<{ part_id: string; quantity: number }>;

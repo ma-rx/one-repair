@@ -234,7 +234,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         fields = [
             "id", "ticket", "resolution_code", "labor_cost",
             "invoice_sent", "invoice_email",
-            "tech_notes", "formatted_report", "manager_on_site",
+            "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
             "draft_parts", "tax_rate", "sales_tax",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
@@ -473,7 +473,8 @@ class CloseTicketSerializer(serializers.Serializer):
     invoice_email    = serializers.EmailField(required=False, allow_blank=True)
     tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
     formatted_report = serializers.CharField(required=False, allow_blank=True, default="")
-    manager_on_site  = serializers.CharField(required=False, allow_blank=True, default="")
+    manager_on_site      = serializers.CharField(required=False, allow_blank=True, default="")
+    manager_signature    = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class SaveProgressSerializer(serializers.Serializer):
@@ -486,7 +487,8 @@ class SaveProgressSerializer(serializers.Serializer):
     parts_needed     = PartRequestInputSerializer(many=True, required=False, default=list)
     tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
     formatted_report = serializers.CharField(required=False, allow_blank=True, default="")
-    manager_on_site  = serializers.CharField(required=False, allow_blank=True, default="")
+    manager_on_site      = serializers.CharField(required=False, allow_blank=True, default="")
+    manager_signature    = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class GenerateInvoiceSerializer(serializers.Serializer):

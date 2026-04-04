@@ -625,6 +625,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                     "tech_notes": data.get("tech_notes", ""),
                     "formatted_report": data.get("formatted_report", ""),
                     "manager_on_site": data.get("manager_on_site", ""),
+                    "manager_signature": data.get("manager_signature", ""),
                     "draft_parts": draft_parts,
                 },
             )
@@ -783,6 +784,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             report.tech_notes = data.get("tech_notes", "")
             report.formatted_report = data.get("formatted_report", "")
             report.manager_on_site = data.get("manager_on_site", "")
+            report.manager_signature = data.get("manager_signature", "")
             report.tax_rate = tax_rate_val
             report.draft_parts = []
             report.save()

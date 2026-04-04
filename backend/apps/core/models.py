@@ -469,7 +469,8 @@ class ServiceReport(models.Model):
     invoice_email    = models.EmailField(blank=True)
     tech_notes       = models.TextField(blank=True)
     formatted_report = models.TextField(blank=True)
-    manager_on_site  = models.CharField(max_length=255, blank=True, default="")
+    manager_on_site      = models.CharField(max_length=255, blank=True, default="")
+    manager_signature    = models.TextField(blank=True, default="")  # base64 PNG data URL
     draft_parts      = models.JSONField(default=list)   # [{"part_id": "uuid", "quantity": N}]
     tax_rate         = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     created_at       = models.DateTimeField(auto_now_add=True)

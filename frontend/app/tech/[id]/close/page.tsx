@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   api, Part, PartRequestInput, PricingConfig, Ticket, TimeEntryStatus, WorkImage,
@@ -28,6 +28,98 @@ interface PartNeededLine {
   quantity_needed: number;
   urgency: "ASAP" | "NEXT_VISIT";
   notes: string;
+}
+
+function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing   = useRef(false);
+  const [signed, setSigned] = useState(false);
+
+  function getPos(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ("touches" in e) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top)  * scaleY,
+      };
+    }
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
+    };
+  }
+
+  function start(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d"); if (!ctx) return;
+    drawing.current = true;
+    const { x, y } = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  function draw(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d"); if (!ctx) return;
+    const { x, y } = getPos(e, canvas);
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = "round";
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.moveTo(x, y);
+    if (!signed) setSigned(true);
+  }
+
+  function stop() {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const canvas = canvasRef.current; if (!canvas) return;
+    onChange(canvas.toDataURL("image/png"));
+  }
+
+  function clear() {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d"); if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSigned(false);
+    onChange("");
+  }
+
+  return (
+    <div>
+      <div className="relative border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 overflow-hidden" style={{ touchAction: "none" }}>
+        <canvas
+          ref={canvasRef}
+          width={600}
+          height={180}
+          className="w-full h-44 cursor-crosshair"
+          onMouseDown={start}
+          onMouseMove={draw}
+          onMouseUp={stop}
+          onMouseLeave={stop}
+          onTouchStart={start}
+          onTouchMove={draw}
+          onTouchEnd={stop}
+        />
+        {!signed && (
+          <p className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm pointer-events-none select-none">
+            Sign here
+          </p>
+        )}
+      </div>
+      {signed && (
+        <button type="button" onClick={clear} className="mt-2 text-xs text-slate-400 hover:text-red-500 transition-colors">
+          Clear signature
+        </button>
+      )}
+    </div>
+  );
 }
 
 function emptyNeededLine(): PartNeededLine {
@@ -156,7 +248,8 @@ export default function TechWorkPage() {
   const [uploadingImg, setUploadingImg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [managerOnSite, setManagerOnSite]     = useState("");
+  const [managerOnSite, setManagerOnSite]         = useState("");
+  const [managerSignature, setManagerSignature]   = useState("");
   const [techNotes, setTechNotes]             = useState("");
   const [formattedReport, setFormattedReport] = useState("");
   const [aiLoading, setAiLoading]             = useState(false);
@@ -282,6 +375,7 @@ export default function TechWorkPage() {
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
         manager_on_site: managerOnSite,
+        manager_signature: managerSignature,
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -339,6 +433,7 @@ export default function TechWorkPage() {
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
         manager_on_site: managerOnSite,
+        manager_signature: managerSignature,
       });
       const alreadyComplete = ticket?.status === "COMPLETED" || ticket?.status === "CLOSED";
       if (!alreadyComplete && parts_needed.length === 0) {
@@ -505,6 +600,12 @@ export default function TechWorkPage() {
                   value={managerOnSite}
                   onChange={(e) => setManagerOnSite(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Manager Signature <span className="text-slate-400 font-normal text-xs">(optional)</span>
+                </label>
+                <SignaturePad onChange={setManagerSignature} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
