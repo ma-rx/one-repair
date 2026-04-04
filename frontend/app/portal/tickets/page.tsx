@@ -7,31 +7,25 @@ import { api, Ticket } from "@/lib/api";
 import { SymptomCodeLabels } from "@/types/enums";
 import { Plus, Loader2 } from "lucide-react";
 
-const statusStyle: Record<string, string> = {
-  OPEN:          "bg-red-100 text-red-700",
-  DISPATCHED:    "bg-purple-100 text-purple-700",
-  IN_PROGRESS:   "bg-blue-100 text-blue-700",
-  PENDING_PARTS: "bg-amber-100 text-amber-700",
-  RESOLVED:      "bg-green-100 text-green-700",
-  CLOSED:        "bg-slate-100 text-slate-500",
-  CANCELLED:     "bg-slate-100 text-slate-400",
-};
-
-const partsApprovalBadge: Record<string, string> = {
-  SENT_TO_CLIENT: "bg-purple-50 text-purple-600",
-  APPROVED:       "bg-emerald-50 text-emerald-700",
-  ORDERED:        "bg-cyan-50 text-cyan-700",
-  DELIVERED:      "bg-green-50 text-green-700",
-  DENIED:         "bg-red-50 text-red-600",
-};
-
-const partsApprovalLabel: Record<string, string> = {
-  SENT_TO_CLIENT: "Parts Pending",
-  APPROVED:       "Parts Approved",
-  ORDERED:        "Parts Ordered",
-  DELIVERED:      "Parts Delivered",
-  DENIED:         "Parts Denied",
-};
+function getStatusDisplay(status: string, partsApprovalStatus: string | null): { label: string; style: string } {
+  if (status === "PENDING_PARTS") {
+    if (partsApprovalStatus === "ORDERED")        return { label: "Parts Ordered",   style: "bg-cyan-100 text-cyan-700" };
+    if (partsApprovalStatus === "DELIVERED")      return { label: "Parts Delivered", style: "bg-green-100 text-green-700" };
+    if (partsApprovalStatus === "APPROVED")       return { label: "Parts Approved",  style: "bg-emerald-100 text-emerald-700" };
+    if (partsApprovalStatus === "SENT_TO_CLIENT") return { label: "Pending Approval", style: "bg-purple-100 text-purple-700" };
+    if (partsApprovalStatus === "DENIED")         return { label: "Parts Denied",    style: "bg-red-100 text-red-700" };
+  }
+  const style: Record<string, string> = {
+    OPEN:          "bg-red-100 text-red-700",
+    DISPATCHED:    "bg-purple-100 text-purple-700",
+    IN_PROGRESS:   "bg-blue-100 text-blue-700",
+    PENDING_PARTS: "bg-amber-100 text-amber-700",
+    RESOLVED:      "bg-green-100 text-green-700",
+    CLOSED:        "bg-slate-100 text-slate-500",
+    CANCELLED:     "bg-slate-100 text-slate-400",
+  };
+  return { label: status.replace(/_/g, " "), style: style[status] ?? "" };
+}
 
 export default function PortalTicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -121,16 +115,14 @@ export default function PortalTicketsPage() {
                     {t.description || (t.symptom_code ? (SymptomCodeLabels[t.symptom_code] ?? t.symptom_code) : "—")}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
-                        {t.status.replace(/_/g, " ")}
-                      </span>
-                      {t.parts_approval_status && partsApprovalLabel[t.parts_approval_status] && (
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${partsApprovalBadge[t.parts_approval_status] ?? ""}`}>
-                          {partsApprovalLabel[t.parts_approval_status]}
+                    {(() => {
+                      const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null);
+                      return (
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${style}`}>
+                          {label}
                         </span>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-slate-400 text-xs">
                     {new Date(t.created_at).toLocaleDateString()}

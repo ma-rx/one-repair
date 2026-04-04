@@ -20,19 +20,16 @@ const statusStyle: Record<string, string> = {
   CANCELLED:     "bg-slate-100 text-slate-400",
 };
 
-const partsApprovalBadge: Record<string, string> = {
-  SENT_TO_CLIENT: "bg-purple-50 text-purple-600",
-  APPROVED:       "bg-emerald-50 text-emerald-700",
-  ORDERED:        "bg-cyan-50 text-cyan-700",
-  DELIVERED:      "bg-green-100 text-green-700 font-semibold",
-};
-
-const partsApprovalLabel: Record<string, string> = {
-  SENT_TO_CLIENT: "Parts Pending Client",
-  APPROVED:       "Parts Approved",
-  ORDERED:        "Parts Ordered",
-  DELIVERED:      "Parts Delivered",
-};
+// When PENDING_PARTS, override display based on parts approval progress
+function getStatusDisplay(status: string, partsApprovalStatus: string | null): { label: string; style: string } {
+  if (status === "PENDING_PARTS") {
+    if (partsApprovalStatus === "ORDERED")   return { label: "Parts Ordered",   style: "bg-cyan-100 text-cyan-700" };
+    if (partsApprovalStatus === "DELIVERED") return { label: "Parts Delivered", style: "bg-green-100 text-green-700" };
+    if (partsApprovalStatus === "APPROVED")  return { label: "Parts Approved",  style: "bg-emerald-100 text-emerald-700" };
+    if (partsApprovalStatus === "SENT_TO_CLIENT") return { label: "Pending Client", style: "bg-purple-100 text-purple-700" };
+  }
+  return { label: status.replace(/_/g, " "), style: statusStyle[status] ?? "" };
+}
 
 const priorityDot: Record<string, string> = {
   LOW:      "bg-slate-400",
@@ -177,21 +174,21 @@ export default function DispatchPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[t.status] ?? ""}`}>
-                        {t.status.replace(/_/g, " ")}
-                      </span>
-                      {t.parts_approval_status && partsApprovalLabel[t.parts_approval_status] && (
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs ${partsApprovalBadge[t.parts_approval_status] ?? ""}`}>
-                          {partsApprovalLabel[t.parts_approval_status]}
-                        </span>
-                      )}
-                      {t.needs_coding && (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                          <Brain className="w-3 h-3" /> Needs coding
-                        </span>
-                      )}
-                    </div>
+                    {(() => {
+                      const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null);
+                      return (
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${style}`}>
+                            {label}
+                          </span>
+                          {t.needs_coding && (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                              <Brain className="w-3 h-3" /> Needs coding
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-slate-500">
                     {t.assigned_tech_name ?? <span className="text-slate-300">Unassigned</span>}
