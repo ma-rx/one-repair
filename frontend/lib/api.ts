@@ -444,7 +444,7 @@ export const api = {
 
   // Repair Documents
   listRepairDocuments: () => request<RepairDocument[]>("/repair-documents/"),
-  bulkUploadDocuments: (documents: { title: string; content: string }[]) =>
+  bulkUploadDocuments: (documents: { title: string; make: string; content: string }[]) =>
     request<{ created: number }>("/repair-documents/bulk-upload/", {
       method: "POST",
       body: JSON.stringify({ documents }),
@@ -944,6 +944,7 @@ export interface VerifiedAnswer {
   asset_category: string;
   created_by: number | null;
   created_by_name: string | null;
+  is_embedded: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -951,6 +952,7 @@ export interface VerifiedAnswer {
 export interface RepairDocument {
   id: string;
   title: string;
+  make: string;
   content: string;
   uploaded_by: number | null;
   uploaded_by_name: string | null;

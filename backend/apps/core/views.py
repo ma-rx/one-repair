@@ -2269,12 +2269,14 @@ class RepairDocumentViewSet(viewsets.ModelViewSet):
         errors  = []
         for item in documents:
             title   = (item.get("title") or "Untitled").strip()[:255]
+            make    = (item.get("make") or "").strip()[:100]
             content = (item.get("content") or "").strip()
             if not content:
                 errors.append(f"{title}: empty content, skipped")
                 continue
             doc = RepairDocument.objects.create(
                 title=title,
+                make=make,
                 content=content,
                 uploaded_by=request.user,
             )

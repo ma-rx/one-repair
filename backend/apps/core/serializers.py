@@ -545,7 +545,7 @@ class RepairDocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RepairDocument
-        fields = ["id", "title", "content", "uploaded_by", "uploaded_by_name", "is_embedded", "created_at"]
+        fields = ["id", "title", "make", "content", "uploaded_by", "uploaded_by_name", "is_embedded", "created_at"]
         read_only_fields = ["uploaded_by"]
 
     def get_uploaded_by_name(self, obj):
@@ -559,17 +559,21 @@ class RepairDocumentSerializer(serializers.ModelSerializer):
 
 class VerifiedAnswerSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
+    is_embedded     = serializers.SerializerMethodField()
 
     class Meta:
         from .models import VerifiedAnswer
         model  = VerifiedAnswer
-        fields = ["id", "question", "answer", "make", "asset_category", "created_by", "created_by_name", "created_at", "updated_at"]
+        fields = ["id", "question", "answer", "make", "asset_category", "created_by", "created_by_name", "is_embedded", "created_at", "updated_at"]
         read_only_fields = ["created_by"]
 
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return None
+
+    def get_is_embedded(self, obj):
+        return obj.embedding is not None
 
 
 class CloseTicketSerializer(serializers.Serializer):

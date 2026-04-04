@@ -209,11 +209,12 @@ function StepBuilder({ steps, onChange }: {
 // ── Support Documents tab ─────────────────────────────────────────────────────
 
 function DocumentsTab() {
-  const [docs, setDocs]         = useState<RepairDocument[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [docs, setDocs]           = useState<RepairDocument[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [error, setError]       = useState("");
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError]         = useState("");
+  const [deleting, setDeleting]   = useState<string | null>(null);
+  const [pendingMake, setPendingMake] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -226,17 +227,16 @@ function DocumentsTab() {
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-
     setUploading(true);
     setError("");
-
     try {
       const documents = await Promise.all(
         files.map((file) =>
-          new Promise<{ title: string; content: string }>((resolve, reject) => {
+          new Promise<{ title: string; make: string; content: string }>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve({
-              title: file.name.replace(/\.(txt|md)$/i, ""),
+              title:   file.name.replace(/\.(txt|md)$/i, ""),
+              make:    pendingMake,
               content: reader.result as string,
             });
             reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
@@ -244,7 +244,6 @@ function DocumentsTab() {
           })
         )
       );
-
       await api.bulkUploadDocuments(documents);
       const updated = await api.listRepairDocuments();
       setDocs(updated);
@@ -269,31 +268,38 @@ function DocumentsTab() {
     }
   }
 
+  // Group by manufacturer
+  const grouped = docs.reduce<Record<string, RepairDocument[]>>((acc, d) => {
+    const key = d.make?.trim() || "General";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(d);
+    return acc;
+  }, {});
+  const manufacturers = Object.keys(grouped).sort((a, b) =>
+    a === "General" ? 1 : b === "General" ? -1 : a.localeCompare(b)
+  );
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
         <p className="text-sm text-slate-500">
           Upload Plaud summary transcripts (.txt or .md). The AI diagnostic tool will reference these when techs ask questions in the field.
         </p>
-        <div>
+        <div className="flex items-center gap-2 shrink-0">
           <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.md"
-            multiple
-            className="hidden"
-            onChange={handleFiles}
+            type="text"
+            placeholder="Manufacturer (optional)"
+            value={pendingMake}
+            onChange={(e) => setPendingMake(e.target.value)}
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
           />
+          <input ref={fileInputRef} type="file" accept=".txt,.md" multiple className="hidden" onChange={handleFiles} />
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
           >
-            {uploading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
-            ) : (
-              <><Upload className="w-4 h-4" /> Upload .txt / .md Files</>
-            )}
+            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</> : <><Upload className="w-4 h-4" /> Upload .txt / .md</>}
           </button>
         </div>
       </div>
@@ -312,43 +318,46 @@ function DocumentsTab() {
         <div className="text-center py-20 text-slate-400">
           <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No documents uploaded yet</p>
-          <p className="text-sm mt-1">Upload Plaud summary .txt files to give the AI field knowledge.</p>
+          <p className="text-sm mt-1">Upload Plaud summary .txt or .md files to give the AI field knowledge.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {docs.map((doc) => (
-            <div key={doc.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-4">
-              <FileText className="w-5 h-5 text-slate-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
-                  {doc.is_embedded ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">
-                      <CheckCircle2 className="w-3 h-3" /> AI Ready
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">
-                      <AlertCircle className="w-3 h-3" /> Not embedded
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {doc.content.length.toLocaleString()} characters
-                  {doc.uploaded_by_name ? ` · Uploaded by ${doc.uploaded_by_name}` : ""}
-                  {" · "}{new Date(doc.created_at).toLocaleDateString()}
-                </p>
+        <div className="space-y-6">
+          {manufacturers.map((mfr) => (
+            <div key={mfr}>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 px-1">{mfr}</h3>
+              <div className="space-y-2">
+                {grouped[mfr].map((doc) => (
+                  <div key={doc.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-4">
+                    <FileText className="w-5 h-5 text-slate-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
+                        {doc.is_embedded ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">
+                            <CheckCircle2 className="w-3 h-3" /> AI Ready
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">
+                            <AlertCircle className="w-3 h-3" /> Not embedded
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {doc.content.length.toLocaleString()} characters
+                        {doc.uploaded_by_name ? ` · ${doc.uploaded_by_name}` : ""}
+                        {" · "}{new Date(doc.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      disabled={deleting === doc.id}
+                      className="text-slate-400 hover:text-red-600 transition-colors shrink-0 p-1"
+                    >
+                      {deleting === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
+                  </div>
+                ))}
               </div>
-              <button
-                onClick={() => handleDelete(doc.id)}
-                disabled={deleting === doc.id}
-                className="text-slate-400 hover:text-red-600 transition-colors shrink-0 p-1"
-              >
-                {deleting === doc.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-              </button>
             </div>
           ))}
         </div>
@@ -367,6 +376,7 @@ function VerifiedAnswersTab() {
   const [error, setError]             = useState("");
   const [selected, setSelected]       = useState<VerifiedAnswer | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [editing, setEditing]         = useState<VerifiedAnswer | null>(null);
 
   // Builder state
   const [messages, setMessages]       = useState<ChatMessage[]>([]);
@@ -425,6 +435,28 @@ function VerifiedAnswersTab() {
       setAnswers((prev) => [created, ...prev]);
       setBuilderOpen(false);
       setMessages([]);
+      setSaveForm(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEdit(ans: VerifiedAnswer) {
+    setEditing(ans);
+    setSaveForm({ question: ans.question, answer: ans.answer, make: ans.make, asset_category: ans.asset_category });
+    setBuilderOpen(false);
+  }
+
+  async function handleEditSave() {
+    if (!saveForm || !editing) return;
+    setSaving(true);
+    try {
+      const updated = await api.updateVerifiedAnswer(editing.id, saveForm);
+      setAnswers((prev) => prev.map((a) => a.id === updated.id ? updated : a));
+      if (selected?.id === updated.id) setSelected(updated);
+      setEditing(null);
       setSaveForm(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -506,9 +538,18 @@ function VerifiedAnswersTab() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <BadgeCheck className="w-4 h-4 text-blue-600 shrink-0" />
                             <p className="text-sm font-medium text-slate-800">{ans.question}</p>
+                            {ans.is_embedded ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">
+                                <CheckCircle2 className="w-3 h-3" /> AI Ready
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">
+                                <AlertCircle className="w-3 h-3" /> Not embedded
+                              </span>
+                            )}
                           </div>
                           {selected?.id !== ans.id && (
                             <p className="text-xs text-slate-400 line-clamp-2 ml-6">{ans.answer}</p>
@@ -522,13 +563,21 @@ function VerifiedAnswersTab() {
                             </span>
                           )}
                         </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(ans.id); }}
-                          disabled={deleting === ans.id}
-                          className="text-slate-400 hover:text-red-600 transition-colors shrink-0 p-1"
-                        >
-                          {deleting === ans.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEdit(ans); }}
+                            className="text-slate-400 hover:text-blue-600 transition-colors p-1"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(ans.id); }}
+                            disabled={deleting === ans.id}
+                            className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                          >
+                            {deleting === ans.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -538,6 +587,74 @@ function VerifiedAnswersTab() {
           </div>
         )}
       </div>
+
+      {/* Edit panel */}
+      {editing && saveForm && (
+        <div className="w-[420px] shrink-0 border border-slate-200 rounded-xl bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <span className="text-sm font-semibold text-slate-800">Edit Verified Answer</span>
+            <button onClick={() => { setEditing(null); setSaveForm(null); }} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Question</label>
+              <input
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={saveForm.question}
+                onChange={(e) => setSaveForm((f) => f ? { ...f, question: e.target.value } : f)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Answer</label>
+              <textarea
+                rows={6}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                value={saveForm.answer}
+                onChange={(e) => setSaveForm((f) => f ? { ...f, answer: e.target.value } : f)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Manufacturer</label>
+                <input
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. TurboChef"
+                  value={saveForm.make}
+                  onChange={(e) => setSaveForm((f) => f ? { ...f, make: e.target.value } : f)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+                <select
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={saveForm.asset_category}
+                  onChange={(e) => setSaveForm((f) => f ? { ...f, asset_category: e.target.value } : f)}
+                >
+                  <option value="">— any —</option>
+                  {Object.keys(AssetCategoryLabels).map((c) => (
+                    <option key={c} value={c}>{AssetCategoryLabels[c]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => { setEditing(null); setSaveForm(null); }} className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={saving || !saveForm.question.trim() || !saveForm.answer.trim()}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Q&A Builder panel */}
       {builderOpen && (

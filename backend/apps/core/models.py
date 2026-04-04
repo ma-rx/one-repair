@@ -651,6 +651,7 @@ class KnowledgeEntry(models.Model):
 class RepairDocument(models.Model):
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title       = models.CharField(max_length=255)
+    make        = models.CharField(max_length=100, blank=True, default="")
     content     = models.TextField()
     uploaded_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="repair_documents")
     embedding   = VectorField(dimensions=1024, null=True, blank=True)
@@ -658,7 +659,7 @@ class RepairDocument(models.Model):
     updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["make", "title"]
 
     def __str__(self):
         return self.title
