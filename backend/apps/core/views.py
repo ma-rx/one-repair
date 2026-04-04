@@ -1860,6 +1860,125 @@ Be direct and practical. Steps should be actionable field instructions."""
         return Response({"diagnosis": diagnosis, "tickets": tickets_out, "knowledge": knowledge_out})
 
 
+# ── Diagnostic Chat (conversational AI) ───────────────────────────────────────
+
+class DiagnosticChatView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        import logging
+        import anthropic as _anthropic
+        from decouple import config as _config
+        from .services.embeddings import get_embedding
+        from pgvector.django import CosineDistance
+
+        messages = request.data.get("messages", [])
+        ctx = request.data.get("context", {})
+
+        if not messages:
+            return Response({"detail": "messages required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        asset_name     = ctx.get("asset_name", "")
+        asset_category = ctx.get("asset_category", "")
+        make           = ctx.get("make", "")
+        model_number   = ctx.get("model_number", "")
+        store_name     = ctx.get("store_name", "")
+
+        # Build RAG query from the last few user messages
+        user_texts = [m["content"] for m in messages if m.get("role") == "user"]
+        query_text = " ".join(user_texts[-3:]).strip()
+
+        rag_lines = []
+        if query_text:
+            query_vec = get_embedding(query_text, input_type="query")
+            if query_vec:
+                ticket_results = (
+                    Ticket.objects
+                    .filter(status=TicketStatus.CLOSED, embedding__isnull=False)
+                    .prefetch_related("service_reports__parts_used__part")
+                    .annotate(distance=CosineDistance("embedding", query_vec))
+                    .order_by("distance")[:3]
+                )
+                for t in ticket_results:
+                    if float(t.distance) > 0.45:
+                        continue
+                    report = t.service_reports.first()
+                    line = f"Past repair — {t.asset_description}"
+                    if t.description:
+                        line += f": {t.description}"
+                    if report and report.tech_notes:
+                        line += f" | Notes: {report.tech_notes}"
+                    if report and report.resolution_code:
+                        line += f" | Fixed by: {report.resolution_code.replace('_', ' ').lower()}"
+                    if report:
+                        pnames = [pu.part.name for pu in report.parts_used.all() if pu.part]
+                        if pnames:
+                            line += f" | Parts: {', '.join(pnames)}"
+                    rag_lines.append(line)
+
+                knowledge_qs = KnowledgeEntry.objects.filter(embedding__isnull=False)
+                if asset_category:
+                    knowledge_qs = knowledge_qs.filter(asset_category=asset_category)
+                knowledge_results = (
+                    knowledge_qs
+                    .annotate(distance=CosineDistance("embedding", query_vec))
+                    .order_by("distance")[:2]
+                )
+                for k in knowledge_results:
+                    if float(k.distance) > 0.45:
+                        continue
+                    line = f"Knowledge — {k.make} {k.model_number}".strip()
+                    if k.cause_summary:
+                        line += f": {k.cause_summary}"
+                    if k.procedure:
+                        line += f" | Procedure: {k.procedure}"
+                    if k.parts_commonly_used:
+                        line += f" | Common parts: {k.parts_commonly_used}"
+                    if k.pro_tips:
+                        line += f" | Tips: {k.pro_tips}"
+                    rag_lines.append(line)
+
+        equipment_info = " ".join(filter(None, [make, model_number])) or asset_name or "unknown equipment"
+
+        system_prompt = f"""You are an AI repair assistant for One Repair Solutions field service technicians.
+
+Current job:
+- Asset: {asset_name or "unknown"}
+- Equipment: {equipment_info}
+- Category: {asset_category or "unknown"}
+- Store: {store_name or "unknown"}
+
+Guidelines:
+- Ask ONE focused diagnostic question at a time — never multiple questions at once
+- Keep every response SHORT — the tech is on their phone in the field
+- Be direct and practical, no filler phrases
+- When you have enough information, give clear numbered repair steps and list any parts needed with SKUs if known
+- Mention safety cautions when relevant"""
+
+        if rag_lines:
+            system_prompt += "\n\nRelevant information from past repairs and knowledge base:\n" + "\n".join(rag_lines)
+
+        valid_messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in messages
+            if m.get("role") in ("user", "assistant") and m.get("content")
+        ]
+
+        try:
+            api_key = _config("ANTHROPIC_API_KEY", default="")
+            client = _anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=400,
+                system=system_prompt,
+                messages=valid_messages,
+            )
+            return Response({"reply": response.content[0].text.strip()})
+        except Exception as exc:
+            logging.getLogger(__name__).error("DiagnosticChat error: %s", exc)
+            return Response({"detail": "AI assistant unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
 # ── Client KPIs ───────────────────────────────────────────────────────────────
 
 class ClientKPIView(APIView):

@@ -425,6 +425,12 @@ export const api = {
     model_number?: string;
   }): Promise<DiagnosticSearchResult> =>
     request("/diagnostic-search/", { method: "POST", body: JSON.stringify(params) }),
+
+  diagnosticChat: (
+    messages: { role: "user" | "assistant"; content: string }[],
+    context: { asset_name: string; asset_category: string; make: string; model_number: string; store_name: string }
+  ): Promise<{ reply: string }> =>
+    request("/diagnostic-chat/", { method: "POST", body: JSON.stringify({ messages, context }) }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -670,6 +676,9 @@ export interface Ticket {
   asset: string | null;
   asset_name: string;
   asset_description: string;
+  asset_category: string;
+  asset_make: string;
+  asset_model_number: string;
   store: string | null;
   store_name: string;
   store_address: string;

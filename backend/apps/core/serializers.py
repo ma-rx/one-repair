@@ -280,6 +280,9 @@ class TicketAssetSerializer(serializers.ModelSerializer):
 
 class TicketSerializer(serializers.ModelSerializer):
     asset_name                   = serializers.SerializerMethodField()
+    asset_category               = serializers.SerializerMethodField()
+    asset_make                   = serializers.SerializerMethodField()
+    asset_model_number           = serializers.SerializerMethodField()
     store_name                   = serializers.SerializerMethodField()
     store_address                = serializers.SerializerMethodField()
     store_phone                  = serializers.SerializerMethodField()
@@ -296,6 +299,7 @@ class TicketSerializer(serializers.ModelSerializer):
         model = Ticket
         fields = [
             "id", "ticket_number", "asset", "asset_name", "asset_description",
+            "asset_category", "asset_make", "asset_model_number",
             "store", "store_name", "store_address", "store_phone", "store_hours",
             "store_district_manager_name", "store_district_manager_phone",
             "symptom_code", "description", "priority", "status", "scheduled_date",
@@ -309,6 +313,12 @@ class TicketSerializer(serializers.ModelSerializer):
     def _get_store(self, obj):
         return obj.store or (obj.asset.store if obj.asset else None)
 
+    def _get_primary_asset(self, obj):
+        first = obj.ticket_assets.select_related("asset").first()
+        if first and first.asset:
+            return first.asset
+        return obj.asset
+
     def get_asset_name(self, obj):
         first = obj.ticket_assets.select_related("asset").first()
         if first:
@@ -316,6 +326,18 @@ class TicketSerializer(serializers.ModelSerializer):
         if obj.asset:
             return obj.asset.name
         return obj.asset_description or "Unlisted Equipment"
+
+    def get_asset_category(self, obj):
+        asset = self._get_primary_asset(obj)
+        return asset.category if asset else ""
+
+    def get_asset_make(self, obj):
+        asset = self._get_primary_asset(obj)
+        return asset.make if asset else ""
+
+    def get_asset_model_number(self, obj):
+        asset = self._get_primary_asset(obj)
+        return asset.model_number if asset else ""
 
     def get_store_name(self, obj):
         store = self._get_store(obj)

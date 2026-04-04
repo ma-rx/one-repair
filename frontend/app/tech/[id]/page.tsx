@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Ticket, WorkImage } from "@/lib/api";
 import TicketDetail from "@/components/TicketDetail";
-import { Wrench, Loader2, FileText } from "lucide-react";
+import { Wrench, Loader2, FileText, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 function toLocalDateStr(d: Date) {
@@ -58,14 +58,22 @@ export default function TechTicketDetailPage() {
             backLabel="My Schedule"
             todayStr={todayStr}
             actions={
-              canService ? (
+              <div className="flex flex-col gap-3">
                 <Link
-                  href={`/tech/${id}/close`}
-                  className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+                  href={`/tech/${id}/diagnose`}
+                  className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
                 >
-                  <FileText className="w-4 h-4" /> Service Report
+                  <Bot className="w-4 h-4" /> AI Assistant
                 </Link>
-              ) : null
+                {canService && (
+                  <Link
+                    href={`/tech/${id}/close`}
+                    className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    <FileText className="w-4 h-4" /> Service Report
+                  </Link>
+                )}
+              </div>
             }
           />
         ) : (

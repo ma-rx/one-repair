@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
-    AssetViewSet, BulkImportTicketsView, ClientKPIView, DiagnosticSearchView,
+    AssetViewSet, BulkImportTicketsView, ClientKPIView, DiagnosticChatView, DiagnosticSearchView,
     DistrictManagerViewSet, EquipmentModelViewSet, FormatReportView,
     InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
     PartsApprovalViewSet, PartRequestViewSet, PartViewSet, PricingConfigView, ResolutionCodeEntryViewSet,
@@ -37,4 +37,5 @@ urlpatterns = router.urls + [
     path("import/suggest-codes/", SuggestCodesView.as_view()),
     path("import/bulk-tickets/", BulkImportTicketsView.as_view()),
     path("diagnostic-search/", DiagnosticSearchView.as_view()),
+    path("diagnostic-chat/", DiagnosticChatView.as_view()),
 ]
