@@ -15,13 +15,13 @@ import {
 } from "lucide-react";
 
 const portalNav = [
-  { label: "New Ticket", href: "/scan",            icon: Wrench        },
-  { label: "Tickets",   href: "/portal/tickets",  icon: ClipboardList },
-  { label: "Stores",    href: "/portal/stores",   icon: MapPin        },
-  { label: "Assets",    href: "/portal/assets",   icon: Cpu           },
-  { label: "Parts",     href: "/portal/parts",    icon: Package       },
-  { label: "Invoices",  href: "/portal/invoices", icon: FileText      },
-  { label: "Analytics", href: "/portal/kpis",     icon: BarChart2     },
+  { label: "New Ticket",      href: "/scan",            icon: Wrench        },
+  { label: "Tickets",         href: "/portal/tickets",  icon: ClipboardList },
+  { label: "Parts Approval",  href: "/portal/parts",    icon: Package       },
+  { label: "Stores",          href: "/portal/stores",   icon: MapPin        },
+  { label: "Assets",          href: "/portal/assets",   icon: Cpu           },
+  { label: "Invoices",        href: "/portal/invoices", icon: FileText      },
+  { label: "Analytics",       href: "/portal/kpis",     icon: BarChart2     },
 ];
 
 export default function PortalShell({ children }: { children: React.ReactNode }) {

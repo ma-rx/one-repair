@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PortalShell from "@/components/PortalShell";
-import { api, Asset } from "@/lib/api";
+import { api, Asset, Store } from "@/lib/api";
 import { AssetCategoryLabels, AssetStatusLabels } from "@/types/enums";
 import { Loader2 } from "lucide-react";
 
@@ -15,21 +15,40 @@ const statusColor: Record<string, string> = {
 
 export default function PortalAssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [filterStore, setFilterStore] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.listAssets()
+    api.listStores().then(s => setStores(s.filter(st => st.is_active))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    api.listAssets({ store: filterStore || undefined, active: true })
       .then((data) => setAssets(data.results))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterStore]);
 
   return (
     <PortalShell>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Assets</h1>
-        <p className="text-slate-500 text-sm mt-0.5">All equipment across your locations</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Assets</h1>
+          <p className="text-slate-500 text-sm mt-0.5">All equipment across your locations</p>
+        </div>
+        {stores.length > 0 && (
+          <select
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={filterStore}
+            onChange={(e) => setFilterStore(e.target.value)}
+          >
+            <option value="">All Stores</option>
+            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
