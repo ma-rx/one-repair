@@ -4,7 +4,8 @@ from rest_framework import serializers
 
 from .models import (
     Asset, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
-    PartRequestStatus, PartRequestUrgency, PartUsed, PricingConfig, ResolutionCodeEntry,
+    PartsApproval,
+    PartRequestUrgency, PartUsed, PricingConfig, ResolutionCodeEntry,
     ServiceReport, Store, Ticket, TicketAsset, TimeEntry, UserProfile, WorkImage,
     SymptomCodeEntry,
 )
@@ -74,7 +75,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = [
             "id", "name", "email", "phone", "address",
-            "plan", "is_active", "store_count", "created_at", "updated_at",
+            "plan", "is_active", "code", "nte_limit", "store_count", "created_at", "updated_at",
         ]
 
     def get_store_count(self, obj):
@@ -233,7 +234,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         fields = [
             "id", "ticket", "resolution_code", "labor_cost",
             "invoice_sent", "invoice_email",
-            "tech_notes", "formatted_report",
+            "tech_notes", "formatted_report", "manager_on_site",
             "draft_parts", "tax_rate", "sales_tax",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
@@ -268,7 +269,7 @@ class TicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ticket
         fields = [
-            "id", "asset", "asset_name", "asset_description",
+            "id", "ticket_number", "asset", "asset_name", "asset_description",
             "store", "store_name", "store_address",
             "symptom_code", "description", "priority", "status", "scheduled_date",
             "route_order",
@@ -317,36 +318,82 @@ class TicketSerializer(serializers.ModelSerializer):
 
 class PartRequestSerializer(serializers.ModelSerializer):
     part_name_display = serializers.SerializerMethodField()
-    ticket_summary    = serializers.SerializerMethodField()
 
     class Meta:
         model = PartRequest
         fields = [
-            "id", "ticket", "ticket_summary",
+            "id", "parts_approval", "ticket",
             "part", "part_name_display",
             "part_name", "sku", "asset_category", "make", "model_number",
             "vendor", "cost_price", "selling_price",
             "quantity_needed", "urgency", "notes",
-            "status", "tracking_number",
-            "approved_by_ors_at", "approved_by_client_at", "ordered_at", "delivered_at",
             "created_at", "updated_at",
         ]
 
     def get_part_name_display(self, obj):
         return obj.part.name if obj.part else obj.part_name
 
-    def get_ticket_summary(self, obj):
+
+# ── PartsApproval ─────────────────────────────────────────────────────────────
+
+class PartsApprovalSerializer(serializers.ModelSerializer):
+    part_requests            = PartRequestSerializer(many=True, read_only=True)
+    total_selling_price      = serializers.SerializerMethodField()
+    nte_limit                = serializers.SerializerMethodField()
+    requires_client_approval = serializers.SerializerMethodField()
+    ticket_detail            = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PartsApproval
+        fields = [
+            "id", "ticket", "ticket_detail", "status",
+            "notes_for_client", "denied_reason", "tracking_number",
+            "total_selling_price", "nte_limit", "requires_client_approval",
+            "part_requests",
+            "sent_at", "approved_at", "denied_at", "ordered_at", "delivered_at",
+            "created_at", "updated_at",
+        ]
+
+    def get_total_selling_price(self, obj):
+        from decimal import Decimal
+        return str(sum(
+            (pr.selling_price or Decimal("0")) * pr.quantity_needed
+            for pr in obj.part_requests.all()
+        ))
+
+    def get_nte_limit(self, obj):
+        try:
+            return str(obj.ticket.store.organization.nte_limit)
+        except Exception:
+            return "500.00"
+
+    def get_requires_client_approval(self, obj):
+        try:
+            total = sum(
+                (pr.selling_price or 0) * pr.quantity_needed
+                for pr in obj.part_requests.all()
+            )
+            nte = obj.ticket.store.organization.nte_limit
+            return total > nte
+        except Exception:
+            return False
+
+    def get_ticket_detail(self, obj):
         t = obj.ticket
-        first_ta = t.ticket_assets.filter(asset__isnull=False).first()
+        first_ta = t.ticket_assets.select_related("asset").first()
         if first_ta:
-            asset_name = first_ta.asset.name
+            asset_name = first_ta.asset.name if first_ta.asset else first_ta.asset_description
         else:
-            any_ta = t.ticket_assets.first()
-            asset_name = any_ta.asset_description if any_ta else ""
+            asset_name = t.asset.name if t.asset else (t.asset_description or "Unknown")
+        sr = t.service_reports.order_by("-created_at").first()
         return {
             "id": str(t.id),
+            "ticket_number": t.ticket_number,
             "store_name": t.store.name if t.store else "",
             "asset_name": asset_name,
+            "symptom_code": t.symptom_code,
+            "tech_notes": sr.tech_notes if sr else "",
+            "formatted_report": sr.formatted_report if sr else "",
             "status": t.status,
         }
 
@@ -426,6 +473,7 @@ class CloseTicketSerializer(serializers.Serializer):
     invoice_email    = serializers.EmailField(required=False, allow_blank=True)
     tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
     formatted_report = serializers.CharField(required=False, allow_blank=True, default="")
+    manager_on_site  = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class SaveProgressSerializer(serializers.Serializer):
@@ -438,6 +486,7 @@ class SaveProgressSerializer(serializers.Serializer):
     parts_needed     = PartRequestInputSerializer(many=True, required=False, default=list)
     tech_notes       = serializers.CharField(required=False, allow_blank=True, default="")
     formatted_report = serializers.CharField(required=False, allow_blank=True, default="")
+    manager_on_site  = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class GenerateInvoiceSerializer(serializers.Serializer):

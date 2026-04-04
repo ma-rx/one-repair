@@ -156,6 +156,7 @@ export default function TechWorkPage() {
   const [uploadingImg, setUploadingImg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [managerOnSite, setManagerOnSite]     = useState("");
   const [techNotes, setTechNotes]             = useState("");
   const [formattedReport, setFormattedReport] = useState("");
   const [aiLoading, setAiLoading]             = useState(false);
@@ -280,6 +281,7 @@ export default function TechWorkPage() {
         parts_needed,
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
+        manager_on_site: managerOnSite,
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -336,6 +338,7 @@ export default function TechWorkPage() {
         parts_needed,
         tech_notes: techNotes,
         formatted_report: reportAccepted ? formattedReport : techNotes,
+        manager_on_site: managerOnSite,
       });
       const alreadyComplete = ticket?.status === "COMPLETED" || ticket?.status === "CLOSED";
       if (!alreadyComplete && parts_needed.length === 0) {
@@ -493,6 +496,16 @@ export default function TechWorkPage() {
             {/* Service notes + AI */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Service Notes</p>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Manager on Site</label>
+                <input
+                  type="text"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Name of manager present during service"
+                  value={managerOnSite}
+                  onChange={(e) => setManagerOnSite(e.target.value)}
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   What did you do? <span className="text-slate-400 font-normal text-xs">(write naturally)</span>

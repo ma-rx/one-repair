@@ -136,6 +136,7 @@ export const api = {
     parts_needed?: PartRequestInput[];
     tech_notes?: string;
     formatted_report?: string;
+    manager_on_site?: string;
   }) =>
     request<ServiceReport>(`/tickets/${ticketId}/save-progress/`, {
       method: "POST",
@@ -270,6 +271,50 @@ export const api = {
   updatePartRequestDetails: (id: string, data: Record<string, unknown>) =>
     request<PartRequest>(`/part-requests/${id}/update-part-details/`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  // Parts Approvals (new grouped model)
+  listPartsApprovals: (params?: { status?: string; ticket?: string }) => {
+    const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v) as string[][]).toString() : "";
+    return request<PartsApproval[]>(`/parts-approvals/${qs}`);
+  },
+  getPartsApproval: (id: string) => request<PartsApproval>(`/parts-approvals/${id}/`),
+  approvePartsORS: (id: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/approve-ors/`, { method: "POST" }),
+  sendPartsToClient: (id: string, notes_for_client?: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/send-to-client/`, {
+      method: "POST",
+      body: JSON.stringify({ notes_for_client: notes_for_client ?? "" }),
+    }),
+  approvePartsClient: (id: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/approve-client/`, { method: "POST" }),
+  denyParts: (id: string, denied_reason: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/deny/`, {
+      method: "POST",
+      body: JSON.stringify({ denied_reason }),
+    }),
+  resubmitParts: (id: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/resubmit/`, { method: "POST" }),
+  markPartsOrdered: (id: string, tracking_number: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/mark-ordered/`, {
+      method: "POST",
+      body: JSON.stringify({ tracking_number }),
+    }),
+  markPartsDelivered: (id: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/mark-delivered/`, { method: "POST" }),
+  generatePartsFollowup: (id: string) =>
+    request<Ticket>(`/parts-approvals/${id}/generate-followup/`, { method: "POST" }),
+  addPartToApproval: (id: string, data: Record<string, unknown>) =>
+    request<PartsApproval>(`/parts-approvals/${id}/add-part/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  removePartFromApproval: (id: string, partRequestId: string) =>
+    request<PartsApproval>(`/parts-approvals/${id}/remove-part/${partRequestId}/`, { method: "DELETE" }),
+  updatePartInApproval: (id: string, partRequestId: string, data: Record<string, unknown>) =>
+    request<PartsApproval>(`/parts-approvals/${id}/update-part/${partRequestId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
   deleteTicket: (id: string) =>
     request<void>(`/tickets/${id}/`, { method: "DELETE" }),
 
@@ -379,6 +424,8 @@ export interface Organization {
   address: string;
   plan: string;
   is_active: boolean;
+  code: string;
+  nte_limit: string;
   store_count: number;
   created_at: string;
 }
@@ -500,13 +547,8 @@ export interface TicketAsset {
 
 export interface PartRequest {
   id: string;
+  parts_approval: string | null;
   ticket: string;
-  ticket_summary: {
-    id: string;
-    store_name: string;
-    asset_name: string;
-    status: string;
-  };
   part: string | null;
   part_name_display: string;
   part_name: string;
@@ -520,10 +562,57 @@ export interface PartRequest {
   quantity_needed: number;
   urgency: string;
   notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartsApprovalPartRequest {
+  id: string;
+  parts_approval: string | null;
+  ticket: string;
+  part: string | null;
+  part_name_display: string;
+  part_name: string;
+  sku: string;
+  asset_category: string;
+  make: string;
+  model_number: string;
+  vendor: string;
+  cost_price: string | null;
+  selling_price: string | null;
+  quantity_needed: number;
+  urgency: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartsApprovalTicketDetail {
+  id: string;
+  ticket_number: string;
+  store_name: string;
+  asset_name: string;
+  symptom_code: string;
+  tech_notes: string;
+  formatted_report: string;
   status: string;
+}
+
+export interface PartsApproval {
+  id: string;
+  ticket: string;
+  ticket_detail: PartsApprovalTicketDetail;
+  status: string;
+  notes_for_client: string;
+  denied_reason: string;
   tracking_number: string;
-  approved_by_ors_at: string | null;
-  approved_by_client_at: string | null;
+  total_selling_price: string;
+  nte_limit: string;
+  requires_client_approval: boolean;
+  part_requests: PartsApprovalPartRequest[];
+  sent_at: string | null;
+  approved_at: string | null;
+  denied_at: string | null;
   ordered_at: string | null;
   delivered_at: string | null;
   created_at: string;
@@ -547,6 +636,7 @@ export interface PartRequestInput {
 
 export interface Ticket {
   id: string;
+  ticket_number: string;
   asset: string | null;
   asset_name: string;
   asset_description: string;
@@ -573,6 +663,7 @@ export interface ServiceReport {
   resolution_code: string;
   tech_notes: string;
   formatted_report: string;
+  manager_on_site: string;
   labor_cost: string;
   invoice_email: string;
   draft_parts: Array<{ part_id: string; quantity: number }>;

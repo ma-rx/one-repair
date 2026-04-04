@@ -18,7 +18,7 @@ from rest_framework.parsers import MultiPartParser
 
 from .models import (
     Asset, AssetStatus, EquipmentModel, KnowledgeEntry, Organization, Part,
-    PartRequest, PartRequestStatus, PartUsed, PricingConfig, ResolutionCodeEntry,
+    PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, ResolutionCodeEntry,
     ServiceReport, Store, Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole,
     WorkImage, SymptomCodeEntry,
 )
@@ -27,7 +27,7 @@ from .serializers import (
     AssetSerializer, AssignTechSerializer, CloseTicketSerializer,
     CreateUserSerializer, EquipmentModelSerializer, GenerateInvoiceSerializer,
     KnowledgeEntrySerializer,
-    OrganizationSerializer, PartRequestSerializer, PartSerializer,
+    OrganizationSerializer, PartsApprovalSerializer, PartRequestSerializer, PartSerializer,
     PricingConfigSerializer, ResolutionCodeEntrySerializer, SaveProgressSerializer,
     ServiceReportSerializer,
     StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
@@ -371,7 +371,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         store = serializer.validated_data.get("store")
         if asset and not store:
             store = asset.store
-        serializer.save(store=store)
+        instance = serializer.save(store=store)
+        instance.assign_ticket_number()
+        instance.save(update_fields=["ticket_number"])
 
     @action(detail=True, methods=["patch"], url_path="assign")
     def assign(self, request, pk=None):
@@ -523,31 +525,43 @@ class TicketViewSet(viewsets.ModelViewSet):
                 part.quantity_on_hand -= pu_input["quantity"]
                 part.save(update_fields=["quantity_on_hand", "updated_at"])
 
-            for pn_input in data.get("parts_needed", []):
-                pr_kwargs = {
-                    "ticket": ticket,
-                    "quantity_needed": pn_input.get("quantity_needed", 1),
-                    "urgency": pn_input.get("urgency", "NEXT_VISIT"),
-                    "notes": pn_input.get("notes", ""),
-                }
-                if pn_input.get("part_id"):
-                    try:
-                        part_obj = Part.objects.get(pk=pn_input["part_id"])
-                        pr_kwargs["part"] = part_obj
-                    except Part.DoesNotExist:
-                        pass
-                else:
-                    pr_kwargs.update({
-                        "part_name": pn_input.get("part_name", ""),
-                        "sku": pn_input.get("sku", ""),
-                        "asset_category": pn_input.get("asset_category", ""),
-                        "make": pn_input.get("make", ""),
-                        "model_number": pn_input.get("model_number", ""),
-                        "vendor": pn_input.get("vendor", ""),
-                        "cost_price": pn_input.get("cost_price"),
-                        "selling_price": pn_input.get("selling_price"),
-                    })
-                PartRequest.objects.create(**pr_kwargs)
+            close_parts_needed = data.get("parts_needed", [])
+            if close_parts_needed:
+                approval, created = PartsApproval.objects.get_or_create(
+                    ticket=ticket,
+                    status=PartsApprovalStatus.PENDING,
+                    defaults={"created_by": request.user},
+                )
+                if not created:
+                    approval.part_requests.all().delete()
+                for pn_input in close_parts_needed:
+                    pr_kwargs = {
+                        "ticket": ticket,
+                        "parts_approval": approval,
+                        "quantity_needed": pn_input.get("quantity_needed", 1),
+                        "urgency": pn_input.get("urgency", "NEXT_VISIT"),
+                        "notes": pn_input.get("notes", ""),
+                    }
+                    if pn_input.get("part_id"):
+                        try:
+                            part_obj = Part.objects.get(pk=pn_input["part_id"])
+                            pr_kwargs["part"] = part_obj
+                            pr_kwargs["selling_price"] = part_obj.selling_price
+                            pr_kwargs["cost_price"] = part_obj.unit_price
+                        except Part.DoesNotExist:
+                            pass
+                    else:
+                        pr_kwargs.update({
+                            "part_name": pn_input.get("part_name", ""),
+                            "sku": pn_input.get("sku", ""),
+                            "asset_category": pn_input.get("asset_category", ""),
+                            "make": pn_input.get("make", ""),
+                            "model_number": pn_input.get("model_number", ""),
+                            "vendor": pn_input.get("vendor", ""),
+                            "cost_price": pn_input.get("cost_price"),
+                            "selling_price": pn_input.get("selling_price"),
+                        })
+                    PartRequest.objects.create(**pr_kwargs)
 
             ticket.status = TicketStatus.CLOSED
             ticket.closed_at = timezone.now()
@@ -610,36 +624,52 @@ class TicketViewSet(viewsets.ModelViewSet):
                     "labor_cost": labor_cost_val,
                     "tech_notes": data.get("tech_notes", ""),
                     "formatted_report": data.get("formatted_report", ""),
+                    "manager_on_site": data.get("manager_on_site", ""),
                     "draft_parts": draft_parts,
                 },
             )
 
-            # Create part requests (idempotent-ish — may create duplicates if called multiple times)
-            for pn_input in data.get("parts_needed", []):
-                pr_kwargs = {
-                    "ticket": ticket,
-                    "quantity_needed": pn_input.get("quantity_needed", 1),
-                    "urgency": pn_input.get("urgency", "NEXT_VISIT"),
-                    "notes": pn_input.get("notes", ""),
-                }
-                if pn_input.get("part_id"):
-                    try:
-                        part_obj = Part.objects.get(pk=pn_input["part_id"])
-                        pr_kwargs["part"] = part_obj
-                    except Part.DoesNotExist:
-                        pass
-                else:
-                    pr_kwargs.update({
-                        "part_name": pn_input.get("part_name", ""),
-                        "sku": pn_input.get("sku", ""),
-                        "asset_category": pn_input.get("asset_category", ""),
-                        "make": pn_input.get("make", ""),
-                        "model_number": pn_input.get("model_number", ""),
-                        "vendor": pn_input.get("vendor", ""),
-                        "cost_price": pn_input.get("cost_price"),
-                        "selling_price": pn_input.get("selling_price"),
-                    })
-                PartRequest.objects.create(**pr_kwargs)
+            # Handle parts needed — create/update PartsApproval group
+            parts_needed_data = data.get("parts_needed", [])
+            if parts_needed_data:
+                # Get or create a PENDING PartsApproval for this ticket
+                approval, created = PartsApproval.objects.get_or_create(
+                    ticket=ticket,
+                    status=PartsApprovalStatus.PENDING,
+                    defaults={"created_by": request.user},
+                )
+                if not created:
+                    # Clear existing part requests on this pending approval to replace with new ones
+                    approval.part_requests.all().delete()
+
+                for pn_input in parts_needed_data:
+                    pr_kwargs = {
+                        "ticket": ticket,
+                        "parts_approval": approval,
+                        "quantity_needed": pn_input.get("quantity_needed", 1),
+                        "urgency": pn_input.get("urgency", "NEXT_VISIT"),
+                        "notes": pn_input.get("notes", ""),
+                    }
+                    if pn_input.get("part_id"):
+                        try:
+                            part_obj = Part.objects.get(pk=pn_input["part_id"])
+                            pr_kwargs["part"] = part_obj
+                            pr_kwargs["selling_price"] = part_obj.selling_price
+                            pr_kwargs["cost_price"] = part_obj.unit_price
+                        except Part.DoesNotExist:
+                            pass
+                    else:
+                        pr_kwargs.update({
+                            "part_name": pn_input.get("part_name", ""),
+                            "sku": pn_input.get("sku", ""),
+                            "asset_category": pn_input.get("asset_category", ""),
+                            "make": pn_input.get("make", ""),
+                            "model_number": pn_input.get("model_number", ""),
+                            "vendor": pn_input.get("vendor", ""),
+                            "cost_price": pn_input.get("cost_price"),
+                            "selling_price": pn_input.get("selling_price"),
+                        })
+                    PartRequest.objects.create(**pr_kwargs)
 
             # Update ticket status
             has_pending_parts = bool(data.get("parts_needed"))
@@ -752,6 +782,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             report.invoice_email = data.get("invoice_email", "")
             report.tech_notes = data.get("tech_notes", "")
             report.formatted_report = data.get("formatted_report", "")
+            report.manager_on_site = data.get("manager_on_site", "")
             report.tax_rate = tax_rate_val
             report.draft_parts = []
             report.save()
@@ -814,116 +845,165 @@ class PartRequestViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        qs = PartRequest.objects.select_related(
-            "ticket__store", "part", "ticket"
-        ).prefetch_related("ticket__ticket_assets__asset")
+        qs = PartRequest.objects.select_related("ticket__store", "part", "parts_approval")
         user = self.request.user
         profile = getattr(user, "profile", None)
         if profile and profile.role == UserRole.ORS_ADMIN:
             pass
-        elif profile and profile.role == UserRole.CLIENT_ADMIN:
-            org = profile.organization
-            qs = qs.filter(
-                ticket__store__organization=org,
-                status__in=[
-                    PartRequestStatus.SENT_TO_CLIENT,
-                    PartRequestStatus.APPROVED_CLIENT,
-                    PartRequestStatus.DENIED,
-                    PartRequestStatus.ORDERED,
-                    PartRequestStatus.DELIVERED,
-                ],
-            )
         elif profile and profile.role == UserRole.TECH:
             qs = qs.filter(ticket__assigned_tech=user)
         else:
             qs = qs.none()
-
         ticket_id = self.request.query_params.get("ticket")
         if ticket_id:
             qs = qs.filter(ticket_id=ticket_id)
+        return qs
+
+
+# ── Parts Approvals ───────────────────────────────────────────────────────────
+
+class PartsApprovalViewSet(viewsets.ModelViewSet):
+    serializer_class = PartsApprovalSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = PartsApproval.objects.select_related(
+            "ticket__store__organization", "ticket__asset", "created_by"
+        ).prefetch_related(
+            "part_requests__part",
+            "ticket__ticket_assets__asset",
+            "ticket__service_reports",
+        )
+        user = self.request.user
+        profile = getattr(user, "profile", None)
+        if profile and profile.role == UserRole.ORS_ADMIN:
+            pass
+        elif profile and profile.role in [UserRole.CLIENT_ADMIN, UserRole.CLIENT_MANAGER]:
+            org = profile.organization
+            qs = qs.filter(
+                ticket__store__organization=org,
+                status__in=[
+                    PartsApprovalStatus.SENT_TO_CLIENT,
+                    PartsApprovalStatus.APPROVED,
+                    PartsApprovalStatus.DENIED,
+                    PartsApprovalStatus.ORDERED,
+                    PartsApprovalStatus.DELIVERED,
+                ],
+            )
+        else:
+            qs = qs.none()
         status_filter = self.request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+        ticket_id = self.request.query_params.get("ticket")
+        if ticket_id:
+            qs = qs.filter(ticket_id=ticket_id)
         return qs
 
     @action(detail=True, methods=["post"], url_path="approve-ors")
     def approve_ors(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        pr.status = PartRequestStatus.APPROVED_ORS
-        pr.approved_by_ors_at = timezone.now()
-        pr.save(update_fields=["status", "approved_by_ors_at", "updated_at"])
-        return Response(PartRequestSerializer(pr).data)
+        pa.status = PartsApprovalStatus.APPROVED
+        pa.approved_at = timezone.now()
+        pa.save(update_fields=["status", "approved_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="send-to-client")
     def send_to_client(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        pr.status = PartRequestStatus.SENT_TO_CLIENT
-        pr.save(update_fields=["status", "updated_at"])
-        return Response(PartRequestSerializer(pr).data)
+        notes = request.data.get("notes_for_client", pa.notes_for_client)
+        pa.status = PartsApprovalStatus.SENT_TO_CLIENT
+        pa.notes_for_client = notes
+        pa.sent_at = timezone.now()
+        pa.save(update_fields=["status", "notes_for_client", "sent_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="approve-client")
     def approve_client(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         role = getattr(request.user.profile, "role", None)
-        if role not in [UserRole.ORS_ADMIN, UserRole.CLIENT_ADMIN]:
+        if role not in [UserRole.ORS_ADMIN, UserRole.CLIENT_ADMIN, UserRole.CLIENT_MANAGER]:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        pr.status = PartRequestStatus.APPROVED_CLIENT
-        pr.approved_by_client_at = timezone.now()
-        pr.save(update_fields=["status", "approved_by_client_at", "updated_at"])
-        return Response(PartRequestSerializer(pr).data)
+        pa.status = PartsApprovalStatus.APPROVED
+        pa.approved_at = timezone.now()
+        pa.save(update_fields=["status", "approved_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="deny")
     def deny(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         role = getattr(request.user.profile, "role", None)
-        if role not in [UserRole.ORS_ADMIN, UserRole.CLIENT_ADMIN]:
+        if role not in [UserRole.ORS_ADMIN, UserRole.CLIENT_ADMIN, UserRole.CLIENT_MANAGER]:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        pr.status = PartRequestStatus.DENIED
-        pr.save(update_fields=["status", "updated_at"])
-        return Response(PartRequestSerializer(pr).data)
+        denied_reason = request.data.get("denied_reason", "")
+        pa.status = PartsApprovalStatus.DENIED
+        pa.denied_reason = denied_reason
+        pa.denied_at = timezone.now()
+        pa.save(update_fields=["status", "denied_reason", "denied_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
+
+    @action(detail=True, methods=["post"], url_path="resubmit")
+    def resubmit(self, request, pk=None):
+        pa = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        pa.status = PartsApprovalStatus.PENDING
+        pa.denied_reason = ""
+        pa.denied_at = None
+        pa.save(update_fields=["status", "denied_reason", "denied_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="mark-ordered")
     def mark_ordered(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        pr.status = PartRequestStatus.ORDERED
-        pr.tracking_number = request.data.get("tracking_number", "")
-        pr.ordered_at = timezone.now()
-        pr.save(update_fields=["status", "tracking_number", "ordered_at", "updated_at"])
-        return Response(PartRequestSerializer(pr).data)
+        pa.status = PartsApprovalStatus.ORDERED
+        pa.tracking_number = request.data.get("tracking_number", "")
+        pa.ordered_at = timezone.now()
+        pa.save(update_fields=["status", "tracking_number", "ordered_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="mark-delivered")
     def mark_delivered(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        pr.status = PartRequestStatus.DELIVERED
-        pr.delivered_at = timezone.now()
-        pr.save(update_fields=["status", "delivered_at", "updated_at"])
-        return Response(PartRequestSerializer(pr).data)
+        pa.status = PartsApprovalStatus.DELIVERED
+        pa.delivered_at = timezone.now()
+        pa.save(update_fields=["status", "delivered_at", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="generate-followup")
     def generate_followup(self, request, pk=None):
-        pr = self.get_object()
+        pa = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-        if pr.status != PartRequestStatus.DELIVERED:
+        if pa.status != PartsApprovalStatus.DELIVERED:
             return Response({"detail": "Parts must be delivered first."}, status=status.HTTP_400_BAD_REQUEST)
-        orig = pr.ticket
+        orig = pa.ticket
+        part_names = ", ".join(
+            pr.part.name if pr.part else pr.part_name
+            for pr in pa.part_requests.all()
+        )
         new_ticket = Ticket.objects.create(
             store=orig.store,
             asset=orig.asset,
             asset_description=orig.asset_description,
-            description=f"Follow-up: parts delivered for original ticket. Part: {pr.part.name if pr.part else pr.part_name}",
+            description=f"Follow-up: parts delivered. Parts: {part_names}",
             priority=orig.priority,
             status=TicketStatus.OPEN,
             opened_by=request.user,
         )
+        new_ticket.assign_ticket_number()
+        new_ticket.save(update_fields=["ticket_number"])
         for ta in orig.ticket_assets.all():
             TicketAsset.objects.create(
                 ticket=new_ticket,
@@ -932,34 +1012,72 @@ class PartRequestViewSet(viewsets.ModelViewSet):
             )
         return Response(TicketSerializer(new_ticket).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["patch"], url_path="update-part-details")
-    def update_part_details(self, request, pk=None):
-        pr = self.get_object()
+    @action(detail=True, methods=["post"], url_path="add-part")
+    def add_part(self, request, pk=None):
+        pa = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        if pa.status != PartsApprovalStatus.PENDING:
+            return Response({"detail": "Can only edit parts on a PENDING approval."}, status=status.HTTP_400_BAD_REQUEST)
+        data = request.data
+        pr_kwargs = {
+            "ticket": pa.ticket,
+            "parts_approval": pa,
+            "quantity_needed": data.get("quantity_needed", 1),
+            "urgency": data.get("urgency", "NEXT_VISIT"),
+            "notes": data.get("notes", ""),
+        }
+        if data.get("part_id"):
+            try:
+                part_obj = Part.objects.get(pk=data["part_id"])
+                pr_kwargs["part"] = part_obj
+                pr_kwargs["selling_price"] = part_obj.selling_price
+                pr_kwargs["cost_price"] = part_obj.unit_price
+            except Part.DoesNotExist:
+                pass
+        else:
+            pr_kwargs.update({
+                "part_name": data.get("part_name", ""),
+                "sku": data.get("sku", ""),
+                "asset_category": data.get("asset_category", ""),
+                "make": data.get("make", ""),
+                "model_number": data.get("model_number", ""),
+                "vendor": data.get("vendor", ""),
+                "cost_price": data.get("cost_price"),
+                "selling_price": data.get("selling_price"),
+            })
+        PartRequest.objects.create(**pr_kwargs)
+        pa.refresh_from_db()
+        return Response(PartsApprovalSerializer(pa).data)
 
-        fields = ["part_name", "sku", "asset_category", "make", "model_number", "vendor", "cost_price", "selling_price"]
-        for field in fields:
+    @action(detail=True, methods=["delete"], url_path="remove-part/(?P<pr_pk>[^/.]+)")
+    def remove_part(self, request, pk=None, pr_pk=None):
+        pa = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        if pa.status != PartsApprovalStatus.PENDING:
+            return Response({"detail": "Can only edit parts on a PENDING approval."}, status=status.HTTP_400_BAD_REQUEST)
+        PartRequest.objects.filter(pk=pr_pk, parts_approval=pa).delete()
+        pa.refresh_from_db()
+        return Response(PartsApprovalSerializer(pa).data)
+
+    @action(detail=True, methods=["patch"], url_path="update-part/(?P<pr_pk>[^/.]+)")
+    def update_part(self, request, pk=None, pr_pk=None):
+        pa = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        if pa.status != PartsApprovalStatus.PENDING:
+            return Response({"detail": "Can only edit parts on a PENDING approval."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            pr = PartRequest.objects.get(pk=pr_pk, parts_approval=pa)
+        except PartRequest.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        for field in ["part_name", "sku", "asset_category", "make", "model_number", "vendor", "cost_price", "selling_price", "quantity_needed", "urgency", "notes"]:
             if field in request.data:
                 setattr(pr, field, request.data[field])
         pr.save()
-
-        if request.data.get("promote_to_inventory"):
-            new_part = Part.objects.create(
-                name=pr.part_name,
-                sku=pr.sku,
-                asset_category=pr.asset_category or "OTHER",
-                make=pr.make,
-                model_number=pr.model_number,
-                vendor=pr.vendor,
-                unit_price=pr.cost_price or 0,
-                selling_price=pr.selling_price or 0,
-                quantity_on_hand=0,
-            )
-            pr.part = new_part
-            pr.save(update_fields=["part"])
-
-        return Response(PartRequestSerializer(pr).data)
+        pa.refresh_from_db()
+        return Response(PartsApprovalSerializer(pa).data)
 
 
 # ── Service Reports ───────────────────────────────────────────────────────────

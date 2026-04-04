@@ -13,7 +13,7 @@ const PLAN_STYLES: Record<string, string> = {
 };
 
 const EMPTY: Partial<Organization> = {
-  name: "", email: "", phone: "", address: "", plan: "STARTER", is_active: true,
+  name: "", email: "", phone: "", address: "", plan: "STARTER", is_active: true, code: "", nte_limit: "500",
 };
 
 export default function OrganizationsPage() {
@@ -44,7 +44,7 @@ export default function OrganizationsPage() {
 
   function openEdit(org: Organization) {
     setEditing(org);
-    setForm({ name: org.name, email: org.email, phone: org.phone, address: org.address, plan: org.plan, is_active: org.is_active });
+    setForm({ name: org.name, email: org.email, phone: org.phone, address: org.address, plan: org.plan, is_active: org.is_active, code: org.code ?? "", nte_limit: org.nte_limit ?? "500" });
     setFormError(null);
     setModalOpen(true);
   }
@@ -123,6 +123,8 @@ export default function OrganizationsPage() {
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Name</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Email</th>
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Code</th>
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">NTE</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Plan</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Stores</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Status</th>
@@ -134,6 +136,8 @@ export default function OrganizationsPage() {
                   <tr key={org.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-800">{org.name}</td>
                     <td className="px-6 py-4 text-slate-500">{org.email || "—"}</td>
+                    <td className="px-6 py-4 text-slate-700 font-mono text-xs">{org.code || "—"}</td>
+                    <td className="px-6 py-4 text-slate-500">${org.nte_limit || "500"}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${PLAN_STYLES[org.plan]}`}>
                         {org.plan}
@@ -182,6 +186,31 @@ export default function OrganizationsPage() {
           </div>
 
           {field("address", "Address")}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Ticket Code</label>
+              <input
+                type="text"
+                maxLength={2}
+                placeholder="DD"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                value={(form.code as string) ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().slice(0, 2) }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">NTE Limit ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={(form.nte_limit as string) ?? "500"}
+                onChange={(e) => setForm((f) => ({ ...f, nte_limit: e.target.value }))}
+              />
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>

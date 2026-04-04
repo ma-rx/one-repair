@@ -2,36 +2,49 @@
 
 import { useEffect, useState } from "react";
 import PortalShell from "@/components/PortalShell";
-import { api, PartRequest } from "@/lib/api";
-import { PartRequestUrgencyLabels } from "@/types/enums";
+import { api, PartsApproval } from "@/lib/api";
 import { AlertCircle, CheckCircle2, Loader2, Package, X } from "lucide-react";
 
 const statusBadge: Record<string, string> = {
-  SENT_TO_CLIENT:  "bg-purple-100 text-purple-700",
-  APPROVED_CLIENT: "bg-emerald-100 text-emerald-700",
-  DENIED:          "bg-red-100 text-red-700",
-  ORDERED:         "bg-cyan-100 text-cyan-700",
-  DELIVERED:       "bg-green-100 text-green-700",
+  SENT_TO_CLIENT: "bg-purple-100 text-purple-700",
+  APPROVED:       "bg-emerald-100 text-emerald-700",
+  DENIED:         "bg-red-100 text-red-700",
+  ORDERED:        "bg-cyan-100 text-cyan-700",
+  DELIVERED:      "bg-green-100 text-green-700",
 };
 
 const statusLabel: Record<string, string> = {
-  SENT_TO_CLIENT:  "Pending Approval",
-  APPROVED_CLIENT: "Approved",
-  DENIED:          "Denied",
-  ORDERED:         "Ordered",
-  DELIVERED:       "Delivered",
+  SENT_TO_CLIENT: "Pending Approval",
+  APPROVED:       "Approved",
+  DENIED:         "Denied",
+  ORDERED:        "Ordered",
+  DELIVERED:      "Delivered",
 };
 
+function fmt(val: string | null | undefined) {
+  if (!val) return "—";
+  const n = parseFloat(val);
+  return isNaN(n) ? val : `$${n.toFixed(2)}`;
+}
+
+function lineTotal(selling_price: string | null, qty: number) {
+  if (!selling_price) return "—";
+  const n = parseFloat(selling_price);
+  return isNaN(n) ? "—" : `$${(n * qty).toFixed(2)}`;
+}
+
 export default function PortalPartsPage() {
-  const [partRequests, setPartRequests] = useState<PartRequest[]>([]);
+  const [approvals, setApprovals] = useState<PartsApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [denyingId, setDenyingId] = useState<string | null>(null);
+  const [denyReason, setDenyReason] = useState("");
 
   useEffect(() => {
-    api.listPartRequests()
-      .then(setPartRequests)
-      .catch(() => setError("Failed to load part requests."))
+    api.listPartsApprovals()
+      .then(setApprovals)
+      .catch(() => setError("Failed to load parts approvals."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -42,8 +55,8 @@ export default function PortalPartsPage() {
   async function handleApprove(id: string) {
     setLoaderFor(id, true);
     try {
-      const updated = await api.approvePartRequestClient(id);
-      setPartRequests((prev) => prev.map((p) => p.id === id ? updated : p));
+      const updated = await api.approvePartsClient(id);
+      setApprovals((prev) => prev.map((a) => a.id === id ? updated : a));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to approve.");
     } finally {
@@ -51,11 +64,13 @@ export default function PortalPartsPage() {
     }
   }
 
-  async function handleDeny(id: string) {
+  async function handleDenyConfirm(id: string) {
     setLoaderFor(id, true);
     try {
-      const updated = await api.denyPartRequest(id);
-      setPartRequests((prev) => prev.map((p) => p.id === id ? updated : p));
+      const updated = await api.denyParts(id, denyReason);
+      setApprovals((prev) => prev.map((a) => a.id === id ? updated : a));
+      setDenyingId(null);
+      setDenyReason("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to deny.");
     } finally {
@@ -63,8 +78,8 @@ export default function PortalPartsPage() {
     }
   }
 
-  const pending = partRequests.filter((p) => p.status === "SENT_TO_CLIENT");
-  const history = partRequests.filter((p) => p.status !== "SENT_TO_CLIENT");
+  const pending = approvals.filter((a) => a.status === "SENT_TO_CLIENT");
+  const history = approvals.filter((a) => a.status !== "SENT_TO_CLIENT");
 
   return (
     <PortalShell>
@@ -97,48 +112,116 @@ export default function PortalPartsPage() {
                   <p className="text-slate-400 text-sm">No pending approvals</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {pending.map((pr) => {
-                    const loading_ = actionLoading[pr.id];
+                <div className="space-y-4">
+                  {pending.map((pa) => {
+                    const busy = actionLoading[pa.id];
+                    const td = pa.ticket_detail;
+                    const total = parseFloat(pa.total_selling_price) || 0;
+                    const isDenying = denyingId === pa.id;
+
                     return (
-                      <div key={pr.id} className="bg-white rounded-xl border border-slate-200 p-5">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-semibold text-slate-800">{pr.part_name_display}</p>
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${pr.urgency === "ASAP" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`}>
-                                {PartRequestUrgencyLabels[pr.urgency] ?? pr.urgency}
-                              </span>
-                            </div>
-                            <p className="text-sm text-slate-500">
-                              {pr.ticket_summary.store_name}
-                              {pr.ticket_summary.asset_name && ` · ${pr.ticket_summary.asset_name}`}
-                            </p>
-                            <div className="flex gap-4 mt-2 text-xs text-slate-400">
-                              <span>Qty: {pr.quantity_needed}</span>
-                              {pr.selling_price && <span>Est. cost: ${pr.selling_price}</span>}
-                            </div>
-                            {pr.notes && <p className="mt-2 text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{pr.notes}</p>}
+                      <div key={pa.id} className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                        {/* Header */}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-sm">
+                              {td.ticket_number || td.id.slice(0, 8)}
+                            </span>
+                            <span className="text-slate-400 text-xs">·</span>
+                            <span className="text-slate-700 text-sm">{td.store_name}</span>
+                            {td.asset_name && (
+                              <>
+                                <span className="text-slate-400 text-xs">·</span>
+                                <span className="text-slate-600 text-sm">{td.asset_name}</span>
+                              </>
+                            )}
                           </div>
-                          <div className="flex gap-2 shrink-0">
+                          {(td.tech_notes || td.formatted_report) && (
+                            <p className="text-sm text-slate-500 mt-1 line-clamp-3">
+                              {td.formatted_report || td.tech_notes}
+                            </p>
+                          )}
+                          {pa.notes_for_client && (
+                            <p className="text-sm text-slate-700 mt-2 bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
+                              <span className="font-medium">Note from ORS:</span> {pa.notes_for_client}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Parts table */}
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-xs text-slate-400 border-b border-slate-100">
+                              <th className="text-left pb-2 font-medium">Part Name</th>
+                              <th className="text-center pb-2 font-medium">Qty</th>
+                              <th className="text-right pb-2 font-medium">Unit Price</th>
+                              <th className="text-right pb-2 font-medium">Line Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {pa.part_requests.map((pr) => (
+                              <tr key={pr.id}>
+                                <td className="py-1.5 text-slate-800 font-medium">{pr.part_name_display}</td>
+                                <td className="py-1.5 text-center text-slate-700">{pr.quantity_needed}</td>
+                                <td className="py-1.5 text-right text-slate-700">{fmt(pr.selling_price)}</td>
+                                <td className="py-1.5 text-right text-slate-700">{lineTotal(pr.selling_price, pr.quantity_needed)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-slate-200">
+                              <td colSpan={3} className="pt-2 text-right font-semibold text-slate-700">Grand Total</td>
+                              <td className="pt-2 text-right font-bold text-slate-900">${total.toFixed(2)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+
+                        {/* Actions */}
+                        {!isDenying ? (
+                          <div className="flex gap-3">
                             <button
-                              onClick={() => handleApprove(pr.id)}
-                              disabled={loading_}
+                              onClick={() => handleApprove(pa.id)}
+                              disabled={busy}
                               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
                             >
-                              {loading_ ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                              Approve
+                              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                              Approve All
                             </button>
                             <button
-                              onClick={() => handleDeny(pr.id)}
-                              disabled={loading_}
+                              onClick={() => { setDenyingId(pa.id); setDenyReason(""); }}
+                              disabled={busy}
                               className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
                             >
-                              {loading_ ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                              Deny
+                              <X className="w-3.5 h-3.5" /> Deny
                             </button>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <label className="block text-xs font-medium text-slate-600">Reason for denial</label>
+                            <input
+                              autoFocus
+                              className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+                              placeholder="Please explain why you are denying this request..."
+                              value={denyReason}
+                              onChange={(e) => setDenyReason(e.target.value)}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleDenyConfirm(pa.id)}
+                                disabled={busy || !denyReason.trim()}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                              >
+                                {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Confirm Denial"}
+                              </button>
+                              <button
+                                onClick={() => setDenyingId(null)}
+                                className="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm hover:bg-slate-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -150,33 +233,58 @@ export default function PortalPartsPage() {
             {history.length > 0 && (
               <div>
                 <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3">History</h2>
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Part</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Location</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Qty</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {history.map((pr) => (
-                        <tr key={pr.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-800">{pr.part_name_display}</td>
-                          <td className="px-4 py-3 text-slate-600">{pr.ticket_summary.store_name}</td>
-                          <td className="px-4 py-3 text-slate-600">{pr.quantity_needed}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge[pr.status] ?? "bg-slate-100 text-slate-600"}`}>
-                              {statusLabel[pr.status] ?? pr.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-400 text-xs">{new Date(pr.updated_at).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-3">
+                  {history.map((pa) => {
+                    const td = pa.ticket_detail;
+                    const total = parseFloat(pa.total_selling_price) || 0;
+                    return (
+                      <div key={pa.id} className="bg-white rounded-xl border border-slate-200 p-4 opacity-80">
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-slate-800 text-sm">
+                                {td.ticket_number || td.id.slice(0, 8)}
+                              </span>
+                              <span className="text-slate-400 text-xs">·</span>
+                              <span className="text-slate-600 text-sm">{td.store_name}</span>
+                              {td.asset_name && (
+                                <>
+                                  <span className="text-slate-400 text-xs">·</span>
+                                  <span className="text-slate-500 text-sm">{td.asset_name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge[pa.status] ?? "bg-slate-100 text-slate-600"}`}>
+                            {statusLabel[pa.status] ?? pa.status}
+                          </span>
+                        </div>
+                        {pa.status === "DENIED" && pa.denied_reason && (
+                          <p className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded mb-3">
+                            Denied: {pa.denied_reason}
+                          </p>
+                        )}
+                        <table className="w-full text-xs">
+                          <tbody className="divide-y divide-slate-50">
+                            {pa.part_requests.map((pr) => (
+                              <tr key={pr.id}>
+                                <td className="py-1 text-slate-700">{pr.part_name_display}</td>
+                                <td className="py-1 text-center text-slate-500">x{pr.quantity_needed}</td>
+                                <td className="py-1 text-right text-slate-700">{lineTotal(pr.selling_price, pr.quantity_needed)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-slate-100">
+                              <td colSpan={2} className="pt-1 text-right font-medium text-slate-600">Total</td>
+                              <td className="pt-1 text-right font-bold text-slate-800">${total.toFixed(2)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                        <p className="text-xs text-slate-400 mt-2">{new Date(pa.updated_at).toLocaleDateString()}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

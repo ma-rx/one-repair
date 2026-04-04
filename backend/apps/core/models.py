@@ -235,6 +235,8 @@ class Organization(models.Model):
     address   = models.CharField(max_length=500, blank=True)
     plan      = models.CharField(max_length=20, choices=OrgPlan.choices, default=OrgPlan.STARTER)
     is_active = models.BooleanField(default=True)
+    code      = models.CharField(max_length=2, blank=True, default="", help_text="2-letter prefix for ticket numbers (e.g. DD, CB)")
+    nte_limit = models.DecimalField(max_digits=10, decimal_places=2, default=500, help_text="Not-to-exceed limit for parts approval")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -243,6 +245,15 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class TicketCounter(models.Model):
+    organization = models.OneToOneField(
+        Organization, null=True, blank=True, on_delete=models.CASCADE, related_name="ticket_counter"
+    )
+    last_number = models.PositiveIntegerField(default=0)
+    class Meta:
+        ordering = []
 
 
 class UserProfile(models.Model):
@@ -347,6 +358,7 @@ class Part(models.Model):
 
 class Ticket(models.Model):
     id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket_number = models.CharField(max_length=20, blank=True, default="", db_index=True)
     asset         = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL, related_name="tickets")
     store         = models.ForeignKey("Store", null=True, blank=True, on_delete=models.SET_NULL, related_name="tickets")
     asset_description = models.CharField(max_length=200, blank=True, default="")
@@ -372,7 +384,34 @@ class Ticket(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Ticket {self.id} — {self.symptom_code} ({self.status})"
+        return f"Ticket {self.ticket_number or self.id} — {self.symptom_code} ({self.status})"
+
+    def assign_ticket_number(self):
+        if self.ticket_number:
+            return
+        from django.db import transaction
+        org = None
+        if self.store_id:
+            try:
+                from .models import Store
+                store = Store.objects.select_related("organization").get(pk=self.store_id)
+                org = store.organization
+            except Exception:
+                pass
+        if org is None and self.asset_id:
+            try:
+                from .models import Asset
+                asset = Asset.objects.select_related("store__organization").get(pk=self.asset_id)
+                if asset.store:
+                    org = asset.store.organization
+            except Exception:
+                pass
+        prefix = (org.code.upper() if org and org.code else "ORS")
+        with transaction.atomic():
+            counter, _ = TicketCounter.objects.select_for_update().get_or_create(organization=org)
+            counter.last_number += 1
+            counter.save(update_fields=["last_number"])
+        self.ticket_number = f"{prefix}{counter.last_number:06d}"
 
 
 class TicketAsset(models.Model):
@@ -430,6 +469,7 @@ class ServiceReport(models.Model):
     invoice_email    = models.EmailField(blank=True)
     tech_notes       = models.TextField(blank=True)
     formatted_report = models.TextField(blank=True)
+    manager_on_site  = models.CharField(max_length=255, blank=True, default="")
     draft_parts      = models.JSONField(default=list)   # [{"part_id": "uuid", "quantity": N}]
     tax_rate         = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     created_at       = models.DateTimeField(auto_now_add=True)
@@ -471,8 +511,63 @@ class PartUsed(models.Model):
         return f"{self.quantity}x {self.part.name} on {self.service_report.id}"
 
 
+class PartsApprovalStatus(models.TextChoices):
+    PENDING        = "PENDING",        "Pending ORS Review"
+    SENT_TO_CLIENT = "SENT_TO_CLIENT", "Sent to Client"
+    APPROVED       = "APPROVED",       "Approved"
+    DENIED         = "DENIED",         "Denied by Client"
+    ORDERED        = "ORDERED",        "Ordered"
+    DELIVERED      = "DELIVERED",      "Delivered"
+
+
+class PartsApproval(models.Model):
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket           = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="parts_approvals")
+    status           = models.CharField(max_length=30, choices=PartsApprovalStatus.choices, default=PartsApprovalStatus.PENDING)
+    notes_for_client = models.TextField(blank=True, default="")
+    denied_reason    = models.TextField(blank=True, default="")
+    tracking_number  = models.CharField(max_length=200, blank=True, default="")
+    created_by       = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="created_parts_approvals")
+    sent_at          = models.DateTimeField(null=True, blank=True)
+    approved_at      = models.DateTimeField(null=True, blank=True)
+    denied_at        = models.DateTimeField(null=True, blank=True)
+    ordered_at       = models.DateTimeField(null=True, blank=True)
+    delivered_at     = models.DateTimeField(null=True, blank=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def total_selling_price(self):
+        from decimal import Decimal
+        return sum(
+            (pr.selling_price or Decimal("0")) * pr.quantity_needed
+            for pr in self.part_requests.all()
+        )
+
+    @property
+    def nte_limit(self):
+        try:
+            return self.ticket.store.organization.nte_limit
+        except Exception:
+            from decimal import Decimal
+            return Decimal("500")
+
+    @property
+    def requires_client_approval(self):
+        return self.total_selling_price > self.nte_limit
+
+    def __str__(self):
+        return f"PartsApproval {self.id} ({self.status})"
+
+
 class PartRequest(models.Model):
     id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    parts_approval = models.ForeignKey(
+        "PartsApproval", null=True, blank=True, on_delete=models.SET_NULL, related_name="part_requests"
+    )
     ticket         = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="part_requests")
     part           = models.ForeignKey(Part, null=True, blank=True, on_delete=models.SET_NULL, related_name="requests")
     part_name      = models.CharField(max_length=255, blank=True)
@@ -486,21 +581,15 @@ class PartRequest(models.Model):
     quantity_needed = models.PositiveIntegerField(default=1)
     urgency         = models.CharField(max_length=20, choices=PartRequestUrgency.choices, default=PartRequestUrgency.NEXT_VISIT)
     notes           = models.TextField(blank=True)
-    status          = models.CharField(max_length=30, choices=PartRequestStatus.choices, default=PartRequestStatus.PENDING)
-    tracking_number = models.CharField(max_length=200, blank=True)
-    approved_by_ors_at    = models.DateTimeField(null=True, blank=True)
-    approved_by_client_at = models.DateTimeField(null=True, blank=True)
-    ordered_at            = models.DateTimeField(null=True, blank=True)
-    delivered_at          = models.DateTimeField(null=True, blank=True)
-    created_at            = models.DateTimeField(auto_now_add=True)
-    updated_at            = models.DateTimeField(auto_now=True)
+    created_at      = models.DateTimeField(auto_now_add=True)
+    updated_at      = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         name = self.part.name if self.part else self.part_name
-        return f"PartRequest: {name} x{self.quantity_needed} ({self.status})"
+        return f"PartRequest: {name} x{self.quantity_needed}"
 
 
 class KnowledgeEntry(models.Model):

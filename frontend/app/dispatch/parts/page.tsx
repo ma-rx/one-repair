@@ -2,179 +2,93 @@
 
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
-import { api, PartRequest } from "@/lib/api";
-import { PartRequestStatusLabels, PartRequestUrgencyLabels } from "@/types/enums";
+import { api, PartsApproval } from "@/lib/api";
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink,
-  Loader2, Package, Truck,
+  Loader2, Package, Pencil, Truck, X,
 } from "lucide-react";
 
 const STATUS_TABS = [
   { label: "All", value: "" },
   { label: "Pending", value: "PENDING" },
-  { label: "Approved (ORS)", value: "APPROVED_ORS" },
   { label: "Sent to Client", value: "SENT_TO_CLIENT" },
-  { label: "Approved (Client)", value: "APPROVED_CLIENT" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Denied", value: "DENIED" },
   { label: "Ordered", value: "ORDERED" },
   { label: "Delivered", value: "DELIVERED" },
 ];
 
 const statusBadge: Record<string, string> = {
-  PENDING:         "bg-amber-100 text-amber-700",
-  APPROVED_ORS:    "bg-blue-100 text-blue-700",
-  SENT_TO_CLIENT:  "bg-purple-100 text-purple-700",
-  APPROVED_CLIENT: "bg-emerald-100 text-emerald-700",
-  DENIED:          "bg-red-100 text-red-700",
-  ORDERED:         "bg-cyan-100 text-cyan-700",
-  DELIVERED:       "bg-green-100 text-green-700",
+  PENDING:        "bg-amber-100 text-amber-700",
+  SENT_TO_CLIENT: "bg-purple-100 text-purple-700",
+  APPROVED:       "bg-emerald-100 text-emerald-700",
+  DENIED:         "bg-red-100 text-red-700",
+  ORDERED:        "bg-cyan-100 text-cyan-700",
+  DELIVERED:      "bg-green-100 text-green-700",
 };
 
-function EditDetailsModal({
-  pr,
-  onClose,
-  onSave,
-}: {
-  pr: PartRequest;
-  onClose: () => void;
-  onSave: (updated: PartRequest) => void;
-}) {
-  const [fields, setFields] = useState({
-    part_name: pr.part_name,
-    sku: pr.sku,
-    make: pr.make,
-    model_number: pr.model_number,
-    vendor: pr.vendor,
-    cost_price: pr.cost_price ?? "",
-    selling_price: pr.selling_price ?? "",
-  });
-  const [promote, setPromote] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+const statusLabel: Record<string, string> = {
+  PENDING:        "Pending ORS Review",
+  SENT_TO_CLIENT: "Sent to Client",
+  APPROVED:       "Approved",
+  DENIED:         "Denied by Client",
+  ORDERED:        "Ordered",
+  DELIVERED:      "Delivered",
+};
 
-  async function handleSave() {
-    setSaving(true); setError("");
-    try {
-      const updated = await api.updatePartRequestDetails(pr.id, { ...fields, promote_to_inventory: promote });
-      onSave(updated);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
-        <h3 className="font-semibold text-slate-800 text-lg">Edit Part Details</h3>
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        <div className="space-y-3">
-          {(["part_name", "sku", "make", "model_number", "vendor"] as const).map((field) => (
-            <div key={field}>
-              <label className="block text-xs text-slate-500 mb-1 capitalize">{field.replace("_", " ")}</label>
-              <input
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={fields[field]}
-                onChange={(e) => setFields((f) => ({ ...f, [field]: e.target.value }))}
-              />
-            </div>
-          ))}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Cost Price</label>
-              <input type="number" step="0.01"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={fields.cost_price}
-                onChange={(e) => setFields((f) => ({ ...f, cost_price: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Selling Price</label>
-              <input type="number" step="0.01"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={fields.selling_price}
-                onChange={(e) => setFields((f) => ({ ...f, selling_price: e.target.value }))}
-              />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-            <input type="checkbox" checked={promote} onChange={(e) => setPromote(e.target.checked)} className="rounded" />
-            Also add to inventory
-          </label>
-        </div>
-        <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+function fmt(val: string | null | undefined) {
+  if (!val) return "—";
+  const n = parseFloat(val);
+  return isNaN(n) ? val : `$${n.toFixed(2)}`;
 }
 
-function TrackingModal({
-  onClose,
-  onConfirm,
-}: {
-  onClose: () => void;
-  onConfirm: (tracking: string) => void;
-}) {
-  const [tracking, setTracking] = useState("");
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
-        <h3 className="font-semibold text-slate-800">Mark as Ordered</h3>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Tracking Number (optional)</label>
-          <input
-            autoFocus
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g. 1Z999AA1..."
-            value={tracking}
-            onChange={(e) => setTracking(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50">Cancel</button>
-          <button onClick={() => onConfirm(tracking)}
-            className="flex-1 bg-cyan-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-cyan-700">
-            Confirm Order
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+function lineTotal(selling_price: string | null, qty: number) {
+  if (!selling_price) return "—";
+  const n = parseFloat(selling_price);
+  return isNaN(n) ? "—" : `$${(n * qty).toFixed(2)}`;
 }
 
 export default function DispatchPartsPage() {
-  const [partRequests, setPartRequests] = useState<PartRequest[]>([]);
+  const [approvals, setApprovals] = useState<PartsApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("");
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [editingPr, setEditingPr] = useState<PartRequest | null>(null);
-  const [orderingPr, setOrderingPr] = useState<PartRequest | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
+  // Inline UI state
+  const [sendNotesId, setSendNotesId] = useState<string | null>(null);
+  const [sendNotes, setSendNotes] = useState("");
+  const [trackingId, setTrackingId] = useState<string | null>(null);
+  const [trackingVal, setTrackingVal] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   useEffect(() => {
-    setLoading(true);
-    api.listPartRequests(activeTab ? { status: activeTab } : {})
-      .then(setPartRequests)
-      .catch(() => setError("Failed to load part requests."))
-      .finally(() => setLoading(false));
+    load();
   }, [activeTab]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await api.listPartsApprovals(activeTab ? { status: activeTab } : {});
+      setApprovals(data);
+    } catch {
+      setError("Failed to load parts approvals.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function setLoaderFor(id: string, val: boolean) {
     setActionLoading((prev) => ({ ...prev, [id]: val }));
   }
 
-  async function doAction(id: string, fn: () => Promise<PartRequest>) {
+  async function doAction(id: string, fn: () => Promise<PartsApproval>) {
     setLoaderFor(id, true);
     try {
       const updated = await fn();
-      setPartRequests((prev) => prev.map((p) => p.id === id ? updated : p));
+      setApprovals((prev) => prev.map((a) => a.id === id ? updated : a));
+      setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Action failed.");
     } finally {
@@ -185,7 +99,7 @@ export default function DispatchPartsPage() {
   async function handleGenerateFollowup(id: string) {
     setLoaderFor(id, true);
     try {
-      await api.generateFollowupTicket(id);
+      await api.generatePartsFollowup(id);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to generate follow-up.");
@@ -194,8 +108,8 @@ export default function DispatchPartsPage() {
     }
   }
 
-  function toggleRow(id: string) {
-    setExpandedRows((prev) => {
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -203,14 +117,12 @@ export default function DispatchPartsPage() {
     });
   }
 
-  const displayed = partRequests;
-
   return (
     <DashboardShell>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Parts Needed</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Manage part requests from technicians</p>
+          <h1 className="text-2xl font-bold text-slate-900">Parts Approvals</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Manage parts approval requests from technicians</p>
         </div>
 
         {error && (
@@ -236,183 +148,285 @@ export default function DispatchPartsPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
           </div>
-        ) : displayed.length === 0 ? (
+        ) : approvals.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 py-16 text-center">
             <Package className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">No part requests found</p>
+            <p className="text-slate-400 text-sm">No parts approvals found</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Part</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Ticket</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Qty</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Urgency</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Actions</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {displayed.map((pr) => {
-                  const expanded = expandedRows.has(pr.id);
-                  const loading_ = actionLoading[pr.id];
-                  return (
-                    <>
-                      <tr key={pr.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-800">{pr.part_name_display}</p>
-                          {!pr.part && <p className="text-xs text-amber-600 mt-0.5">New part</p>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="text-slate-700">{pr.ticket_summary.store_name}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">{pr.ticket_summary.asset_name}</p>
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{pr.quantity_needed}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${pr.urgency === "ASAP" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`}>
-                            {PartRequestUrgencyLabels[pr.urgency] ?? pr.urgency}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge[pr.status] ?? "bg-slate-100 text-slate-600"}`}>
-                            {PartRequestStatusLabels[pr.status] ?? pr.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {pr.status === "PENDING" && (
-                              <>
+          <div className="space-y-4">
+            {approvals.map((pa) => {
+              const expanded = expandedIds.has(pa.id);
+              const busy = actionLoading[pa.id];
+              const td = pa.ticket_detail;
+              const total = parseFloat(pa.total_selling_price) || 0;
+              const nte = parseFloat(pa.nte_limit) || 500;
+              const overNte = pa.requires_client_approval;
+              const isSending = sendNotesId === pa.id;
+              const isTracking = trackingId === pa.id;
+              const isEditing = editingId === pa.id;
+
+              return (
+                <div key={pa.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  {/* Header */}
+                  <div className="px-5 py-4 flex items-start gap-4 border-b border-slate-100">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 text-sm">
+                          {td.ticket_number || td.id.slice(0, 8)}
+                        </span>
+                        <span className="text-slate-400 text-xs">·</span>
+                        <span className="text-slate-700 text-sm">{td.store_name}</span>
+                        <span className="text-slate-400 text-xs">·</span>
+                        <span className="text-slate-600 text-sm">{td.asset_name}</span>
+                        {td.symptom_code && (
+                          <>
+                            <span className="text-slate-400 text-xs">·</span>
+                            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{td.symptom_code}</span>
+                          </>
+                        )}
+                      </div>
+                      {td.tech_notes && (
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{td.tech_notes}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge[pa.status] ?? "bg-slate-100 text-slate-600"}`}>
+                        {statusLabel[pa.status] ?? pa.status}
+                      </span>
+                      <button onClick={() => toggleExpand(pa.id)} className="text-slate-400 hover:text-slate-600 ml-1">
+                        {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Parts table */}
+                  <div className="px-5 py-3">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-slate-400 border-b border-slate-100">
+                          <th className="text-left pb-2 font-medium">Part Name</th>
+                          <th className="text-left pb-2 font-medium">SKU</th>
+                          <th className="text-center pb-2 font-medium">Qty</th>
+                          <th className="text-right pb-2 font-medium">Unit Price</th>
+                          <th className="text-right pb-2 font-medium">Line Total</th>
+                          {isEditing && <th className="pb-2" />}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {pa.part_requests.map((pr) => (
+                          <tr key={pr.id}>
+                            <td className="py-1.5 text-slate-800 font-medium">{pr.part_name_display}</td>
+                            <td className="py-1.5 text-slate-500">{pr.sku || "—"}</td>
+                            <td className="py-1.5 text-center text-slate-700">{pr.quantity_needed}</td>
+                            <td className="py-1.5 text-right text-slate-700">{fmt(pr.selling_price)}</td>
+                            <td className="py-1.5 text-right text-slate-700">{lineTotal(pr.selling_price, pr.quantity_needed)}</td>
+                            {isEditing && (
+                              <td className="py-1.5 pl-3">
                                 <button
-                                  onClick={() => doAction(pr.id, () => api.approvePartRequestORS(pr.id))}
-                                  disabled={loading_}
-                                  className="px-2.5 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                                  onClick={() => doAction(pa.id, () => api.removePartFromApproval(pa.id, pr.id))}
+                                  className="text-red-400 hover:text-red-600"
                                 >
-                                  {loading_ ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                                  Approve (ORS)
+                                  <X className="w-3.5 h-3.5" />
                                 </button>
-                                <button
-                                  onClick={() => doAction(pr.id, () => api.sendPartRequestToClient(pr.id))}
-                                  disabled={loading_}
-                                  className="px-2.5 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:opacity-50"
-                                >
-                                  Send to Client
-                                </button>
-                              </>
+                              </td>
                             )}
-                            {pr.status === "APPROVED_ORS" && (
-                              <>
-                                <button
-                                  onClick={() => setOrderingPr(pr)}
-                                  disabled={loading_}
-                                  className="px-2.5 py-1 bg-cyan-600 text-white rounded text-xs font-medium hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-1"
-                                >
-                                  <Truck className="w-3 h-3" /> Mark Ordered
-                                </button>
-                                <button
-                                  onClick={() => doAction(pr.id, () => api.sendPartRequestToClient(pr.id))}
-                                  disabled={loading_}
-                                  className="px-2.5 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:opacity-50"
-                                >
-                                  Send to Client
-                                </button>
-                              </>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t border-slate-200">
+                          <td colSpan={isEditing ? 4 : 3} className="pt-2 text-xs text-slate-400">
+                            NTE Limit: ${nte.toFixed(2)}
+                          </td>
+                          <td className="pt-2 text-right font-bold text-slate-900">
+                            ${total.toFixed(2)}
+                          </td>
+                          {isEditing && <td />}
+                        </tr>
+                        <tr>
+                          <td colSpan={isEditing ? 5 : 4} className="pb-1">
+                            {overNte ? (
+                              <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                                Requires Client Approval (over NTE)
+                              </span>
+                            ) : (
+                              <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+                                Under NTE — Direct Approval
+                              </span>
                             )}
-                            {pr.status === "SENT_TO_CLIENT" && (
-                              <span className="text-xs text-slate-400 italic">Awaiting client response</span>
-                            )}
-                            {pr.status === "APPROVED_CLIENT" && (
-                              <button
-                                onClick={() => setOrderingPr(pr)}
-                                disabled={loading_}
-                                className="px-2.5 py-1 bg-cyan-600 text-white rounded text-xs font-medium hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Truck className="w-3 h-3" /> Mark Ordered
-                              </button>
-                            )}
-                            {pr.status === "ORDERED" && (
-                              <button
-                                onClick={() => doAction(pr.id, () => api.markPartRequestDelivered(pr.id))}
-                                disabled={loading_}
-                                className="px-2.5 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {loading_ ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                                Mark Delivered
-                              </button>
-                            )}
-                            {pr.status === "DELIVERED" && (
-                              <button
-                                onClick={() => handleGenerateFollowup(pr.id)}
-                                disabled={loading_}
-                                className="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {loading_ ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
-                                Generate Follow-up
-                              </button>
-                            )}
-                            {!pr.part && (
-                              <button
-                                onClick={() => setEditingPr(pr)}
-                                className="px-2.5 py-1 border border-slate-300 text-slate-600 rounded text-xs hover:bg-slate-50"
-                              >
-                                Edit Details
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => toggleRow(pr.id)} className="text-slate-400 hover:text-slate-600">
-                            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
-                        </td>
-                      </tr>
-                      {expanded && (
-                        <tr key={`${pr.id}-expanded`} className="bg-slate-50">
-                          <td colSpan={7} className="px-4 py-4">
-                            <div className="grid grid-cols-3 gap-4 text-sm">
-                              {pr.sku && <div><p className="text-xs text-slate-400">SKU</p><p className="text-slate-700">{pr.sku}</p></div>}
-                              {pr.make && <div><p className="text-xs text-slate-400">Make</p><p className="text-slate-700">{pr.make}</p></div>}
-                              {pr.model_number && <div><p className="text-xs text-slate-400">Model</p><p className="text-slate-700">{pr.model_number}</p></div>}
-                              {pr.vendor && <div><p className="text-xs text-slate-400">Vendor</p><p className="text-slate-700">{pr.vendor}</p></div>}
-                              {pr.cost_price && <div><p className="text-xs text-slate-400">Cost</p><p className="text-slate-700">${pr.cost_price}</p></div>}
-                              {pr.selling_price && <div><p className="text-xs text-slate-400">Sell Price</p><p className="text-slate-700">${pr.selling_price}</p></div>}
-                              {pr.tracking_number && <div><p className="text-xs text-slate-400">Tracking</p><p className="text-slate-700">{pr.tracking_number}</p></div>}
-                              {pr.notes && <div className="col-span-3"><p className="text-xs text-slate-400">Notes</p><p className="text-slate-700">{pr.notes}</p></div>}
-                            </div>
                           </td>
                         </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                    {pa.status === "PENDING" && (
+                      <>
+                        {!overNte && (
+                          <button
+                            onClick={() => doAction(pa.id, () => api.approvePartsORS(pa.id))}
+                            disabled={busy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                            Approve & Order
+                          </button>
+                        )}
+                        {overNte && (
+                          <button
+                            onClick={() => doAction(pa.id, () => api.approvePartsORS(pa.id))}
+                            disabled={busy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 text-white rounded-lg text-xs font-medium hover:bg-slate-700 disabled:opacity-50"
+                          >
+                            Approve Anyway
+                          </button>
+                        )}
+                        {!isSending ? (
+                          <button
+                            onClick={() => { setSendNotesId(pa.id); setSendNotes(""); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700"
+                          >
+                            Send to Client
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-2 w-full mt-1">
+                            <textarea
+                              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
+                              rows={2}
+                              placeholder="Notes for client (optional)..."
+                              value={sendNotes}
+                              onChange={(e) => setSendNotes(e.target.value)}
+                            />
+                            <button
+                              onClick={() => {
+                                setSendNotesId(null);
+                                doAction(pa.id, () => api.sendPartsToClient(pa.id, sendNotes));
+                              }}
+                              disabled={busy}
+                              className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50"
+                            >
+                              Confirm
+                            </button>
+                            <button onClick={() => setSendNotesId(null)} className="px-2 py-1.5 text-slate-500 text-xs hover:text-slate-700">Cancel</button>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setEditingId(isEditing ? null : pa.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-xs hover:bg-white"
+                        >
+                          <Pencil className="w-3 h-3" /> {isEditing ? "Done Editing" : "Edit Parts"}
+                        </button>
+                      </>
+                    )}
+
+                    {pa.status === "SENT_TO_CLIENT" && (
+                      <span className="text-xs text-slate-400 italic">Awaiting client approval...</span>
+                    )}
+
+                    {pa.status === "APPROVED" && (
+                      <>
+                        {!isTracking ? (
+                          <button
+                            onClick={() => { setTrackingId(pa.id); setTrackingVal(""); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs font-medium hover:bg-cyan-700"
+                          >
+                            <Truck className="w-3 h-3" /> Mark Ordered
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <input
+                              autoFocus
+                              className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                              placeholder="Tracking number (optional)"
+                              value={trackingVal}
+                              onChange={(e) => setTrackingVal(e.target.value)}
+                            />
+                            <button
+                              onClick={() => {
+                                setTrackingId(null);
+                                doAction(pa.id, () => api.markPartsOrdered(pa.id, trackingVal));
+                              }}
+                              disabled={busy}
+                              className="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs font-medium hover:bg-cyan-700 disabled:opacity-50"
+                            >
+                              Confirm
+                            </button>
+                            <button onClick={() => setTrackingId(null)} className="text-slate-400 hover:text-slate-600 text-xs">Cancel</button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {pa.status === "DENIED" && (
+                      <>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex-1">
+                          <X className="w-3 h-3 shrink-0" />
+                          <span><strong>Denied:</strong> {pa.denied_reason || "No reason provided"}</span>
+                        </div>
+                        <button
+                          onClick={() => doAction(pa.id, () => api.resubmitParts(pa.id))}
+                          disabled={busy}
+                          className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 disabled:opacity-50"
+                        >
+                          Resubmit
+                        </button>
+                      </>
+                    )}
+
+                    {pa.status === "ORDERED" && (
+                      <div className="flex items-center gap-3 w-full">
+                        {pa.tracking_number && (
+                          <span className="text-xs text-slate-500">
+                            Tracking: <span className="font-medium text-slate-700">{pa.tracking_number}</span>
+                          </span>
+                        )}
+                        <button
+                          onClick={() => doAction(pa.id, () => api.markPartsDelivered(pa.id))}
+                          disabled={busy}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                          Mark Delivered
+                        </button>
+                      </div>
+                    )}
+
+                    {pa.status === "DELIVERED" && (
+                      <button
+                        onClick={() => handleGenerateFollowup(pa.id)}
+                        disabled={busy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                        Generate Follow-up Ticket
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Expanded details */}
+                  {expanded && (
+                    <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 text-xs text-slate-500 space-y-1">
+                      {pa.notes_for_client && (
+                        <p><span className="font-medium text-slate-700">Notes for client:</span> {pa.notes_for_client}</p>
                       )}
-                    </>
-                  );
-                })}
-              </tbody>
-            </table>
+                      {td.formatted_report && (
+                        <div>
+                          <p className="font-medium text-slate-700 mb-0.5">Service report:</p>
+                          <p className="text-slate-600 whitespace-pre-wrap">{td.formatted_report}</p>
+                        </div>
+                      )}
+                      <p>Created: {new Date(pa.created_at).toLocaleDateString()}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
-
-      {editingPr && (
-        <EditDetailsModal
-          pr={editingPr}
-          onClose={() => setEditingPr(null)}
-          onSave={(updated) => {
-            setPartRequests((prev) => prev.map((p) => p.id === updated.id ? updated : p));
-            setEditingPr(null);
-          }}
-        />
-      )}
-
-      {orderingPr && (
-        <TrackingModal
-          onClose={() => setOrderingPr(null)}
-          onConfirm={async (tracking) => {
-            setOrderingPr(null);
-            await doAction(orderingPr.id, () => api.markPartRequestOrdered(orderingPr.id, tracking));
-          }}
-        />
-      )}
     </DashboardShell>
   );
 }
