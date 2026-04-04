@@ -9,7 +9,7 @@ import DashboardShell from "@/components/DashboardShell";
 import TicketDetail from "@/components/TicketDetail";
 import DiagnosticAssist from "@/components/DiagnosticAssist";
 import { SymptomCodeLabels, ResolutionCodeLabels } from "@/types/enums";
-import { Loader2, UserCheck, FileText, Brain, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
+import { Loader2, UserCheck, Brain, CheckCircle2, AlertCircle, Trash2, Receipt } from "lucide-react";
 
 function toLocalDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -94,10 +94,10 @@ export default function DispatchTicketDetailPage() {
     }
   }
 
-  const canAssign = ticket && (ticket.status === "OPEN" || ticket.status === "DISPATCHED");
-  const canClose  = ticket && (ticket.status === "IN_PROGRESS" || ticket.status === "PENDING_PARTS" || ticket.status === "DISPATCHED");
-  const canReviewInvoice = ticket && ticket.status === "COMPLETED";
-  const isClosed  = ticket?.status === "CLOSED";
+  const canAssign    = ticket && ticket.status === "OPEN";
+  const canReassign  = ticket && (ticket.status === "DISPATCHED" || ticket.status === "IN_PROGRESS" || ticket.status === "PENDING_PARTS");
+  const canInvoice   = ticket && ticket.status === "COMPLETED" && ticket.has_service_report;
+  const isClosed     = ticket?.status === "CLOSED" || ticket?.status === "PAID";
 
   return (
     <DashboardShell>
@@ -120,25 +120,25 @@ export default function DispatchTicketDetailPage() {
                 {canAssign && (
                   <Link
                     href={`/dispatch/${id}/assign`}
-                    className="flex-1 flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors text-sm"
-                  >
-                    <UserCheck className="w-4 h-4" /> Assign / Reschedule
-                  </Link>
-                )}
-                {canClose && (
-                  <Link
-                    href={`/dispatch/${id}/close`}
                     className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
                   >
-                    <FileText className="w-4 h-4" /> Service Report
+                    <UserCheck className="w-4 h-4" /> Assign
                   </Link>
                 )}
-                {canReviewInvoice && (
+                {canReassign && (
                   <Link
-                    href={`/dispatch/${id}/close`}
+                    href={`/dispatch/${id}/assign`}
+                    className="flex-1 flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    <UserCheck className="w-4 h-4" /> Reassign
+                  </Link>
+                )}
+                {canInvoice && (
+                  <Link
+                    href={`/dispatch/${id}/invoice`}
                     className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
                   >
-                    <FileText className="w-4 h-4" /> Review &amp; Invoice
+                    <Receipt className="w-4 h-4" /> Invoice
                   </Link>
                 )}
               </div>

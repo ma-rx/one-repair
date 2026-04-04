@@ -738,7 +738,8 @@ class TicketViewSet(viewsets.ModelViewSet):
             active_entry.save(update_fields=["clocked_out_at", "total_minutes"])
 
         ticket.status = TicketStatus.COMPLETED
-        ticket.save(update_fields=["status", "updated_at"])
+        ticket.completed_at = timezone.now()
+        ticket.save(update_fields=["status", "completed_at", "updated_at"])
 
         return Response(TicketSerializer(ticket).data)
 
@@ -1010,6 +1011,34 @@ class PartsApprovalViewSet(viewsets.ModelViewSet):
         pa.tracking_number = request.data.get("tracking_number", "")
         pa.ordered_at = timezone.now()
         pa.save(update_fields=["status", "tracking_number", "ordered_at", "updated_at"])
+
+        # Auto-generate follow-up ticket if one doesn't already exist
+        if not pa.followup_ticket_id:
+            orig = pa.ticket
+            part_names = ", ".join(
+                pr.part.name if pr.part else pr.part_name
+                for pr in pa.part_requests.all()
+            )
+            new_ticket = Ticket.objects.create(
+                store=orig.store,
+                asset=orig.asset,
+                asset_description=orig.asset_description,
+                description=f"Parts on order — install when delivered. Parts: {part_names}",
+                priority=orig.priority,
+                status=TicketStatus.OPEN,
+                opened_by=request.user,
+            )
+            new_ticket.assign_ticket_number()
+            new_ticket.save(update_fields=["ticket_number"])
+            for ta in orig.ticket_assets.all():
+                TicketAsset.objects.create(
+                    ticket=new_ticket,
+                    asset=ta.asset,
+                    asset_description=ta.asset_description,
+                )
+            pa.followup_ticket = new_ticket
+            pa.save(update_fields=["followup_ticket", "updated_at"])
+
         return Response(PartsApprovalSerializer(pa).data)
 
     @action(detail=True, methods=["post"], url_path="mark-delivered")

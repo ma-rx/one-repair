@@ -7,7 +7,7 @@ import { api, Ticket } from "@/lib/api";
 import { SymptomCodeLabels } from "@/types/enums";
 import {
   ClipboardList, Clock, AlertTriangle, Plus,
-  UserCheck, FileText, Loader2, RefreshCw, Brain,
+  UserCheck, Loader2, RefreshCw, Brain, Receipt,
 } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
@@ -15,8 +15,10 @@ const statusStyle: Record<string, string> = {
   DISPATCHED:    "bg-purple-100 text-purple-700",
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
+  COMPLETED:     "bg-green-100 text-green-700",
   RESOLVED:      "bg-green-100 text-green-700",
   CLOSED:        "bg-slate-100 text-slate-500",
+  PAID:          "bg-emerald-100 text-emerald-700",
   CANCELLED:     "bg-slate-100 text-slate-400",
 };
 
@@ -38,7 +40,7 @@ const priorityDot: Record<string, string> = {
   CRITICAL: "bg-red-500",
 };
 
-const STATUS_TABS = ["ALL", "OPEN", "DISPATCHED", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED"];
+const STATUS_TABS = ["ALL", "OPEN", "DISPATCHED", "IN_PROGRESS", "PENDING_PARTS", "COMPLETED", "CLOSED", "PAID"];
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
@@ -165,6 +167,7 @@ export default function DispatchPage() {
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Priority</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Status</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Tech</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Scheduled</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Opened</th>
                 <th className="px-6 py-3 text-slate-500 font-medium text-right">Actions</th>
               </tr>
@@ -225,11 +228,16 @@ export default function DispatchPage() {
                     {t.assigned_tech_name ?? <span className="text-slate-300">Unassigned</span>}
                   </td>
                   <td className="px-6 py-4 text-slate-400 text-xs">
+                    {t.scheduled_date
+                      ? new Date(t.scheduled_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                      : <span className="text-slate-200">—</span>}
+                  </td>
+                  <td className="px-6 py-4 text-slate-400 text-xs">
                     {new Date(t.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      {(t.status === "OPEN" || t.status === "DISPATCHED") && (
+                      {t.status === "OPEN" && (
                         <Link
                           href={`/dispatch/${t.id}/assign`}
                           className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
@@ -237,17 +245,20 @@ export default function DispatchPage() {
                           <UserCheck className="w-3.5 h-3.5" /> Assign
                         </Link>
                       )}
-                      {(t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS" || t.status === "DISPATCHED") && (
+                      {(t.status === "DISPATCHED" || t.status === "IN_PROGRESS" || t.status === "PENDING_PARTS") && (
                         <Link
-                          href={`/dispatch/${t.id}/close`}
-                          className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-                            t.parts_approval_status === "DELIVERED"
-                              ? "text-white bg-green-600 hover:bg-green-700"
-                              : "text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
-                          }`}
+                          href={`/dispatch/${t.id}/assign`}
+                          className="flex items-center gap-1 text-xs font-medium text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
-                          <FileText className="w-3.5 h-3.5" />
-                          {t.parts_approval_status === "DELIVERED" ? "Complete" : "Report"}
+                          <UserCheck className="w-3.5 h-3.5" /> Reassign
+                        </Link>
+                      )}
+                      {t.status === "COMPLETED" && t.has_service_report && (
+                        <Link
+                          href={`/dispatch/${t.id}/invoice`}
+                          className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Receipt className="w-3.5 h-3.5" /> Invoice
                         </Link>
                       )}
                     </div>

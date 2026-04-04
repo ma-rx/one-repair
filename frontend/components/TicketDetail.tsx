@@ -9,8 +9,10 @@ export const statusStyle: Record<string, string> = {
   DISPATCHED:    "bg-purple-100 text-purple-700",
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
+  COMPLETED:     "bg-green-100 text-green-700",
   RESOLVED:      "bg-green-100 text-green-700",
   CLOSED:        "bg-slate-100 text-slate-500",
+  PAID:          "bg-emerald-100 text-emerald-700",
   CANCELLED:     "bg-slate-100 text-slate-400",
 };
 
@@ -154,6 +156,25 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
               {new Date(ticket.created_at).toLocaleDateString()}
             </p>
           </div>
+
+          {ticket.completed_at && (
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Completed</p>
+              <p className="flex items-center gap-1.5 text-slate-700">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                {new Date(ticket.completed_at).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+
+          {ticket.total_labor_minutes > 0 && (
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Total Labor</p>
+              <p className="text-slate-700">
+                {Math.floor(ticket.total_labor_minutes / 60)}h {ticket.total_labor_minutes % 60}m
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -174,14 +195,33 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
 
       {/* Service reports */}
       {ticket.service_reports?.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-3">Service Report</p>
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Service Report</p>
           {ticket.service_reports.map((r) => (
-            <div key={r.id} className="space-y-2 text-sm">
+            <div key={r.id} className="space-y-3 text-sm">
               {r.formatted_report && (
                 <p className="text-slate-700 whitespace-pre-line">{r.formatted_report}</p>
               )}
-              <div className="flex gap-4 text-slate-500 text-xs pt-1 border-t border-slate-100">
+              {r.tech_notes && (
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Tech Notes</p>
+                  <p className="text-slate-600 whitespace-pre-line text-sm">{r.tech_notes}</p>
+                </div>
+              )}
+              {r.parts_used?.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-2">Parts Used</p>
+                  <div className="space-y-1">
+                    {r.parts_used.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-700">{p.part_name} × {p.quantity}</span>
+                        <span className="text-slate-500">${p.line_total}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-4 text-slate-500 text-xs pt-2 border-t border-slate-100">
                 <span>Labor: ${r.labor_cost}</span>
                 <span>Parts: ${r.parts_total}</span>
                 <span className="font-semibold text-slate-800">Total: ${r.grand_total}</span>

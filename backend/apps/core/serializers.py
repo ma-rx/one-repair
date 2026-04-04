@@ -293,6 +293,8 @@ class TicketSerializer(serializers.ModelSerializer):
     assets                       = TicketAssetSerializer(source="ticket_assets", many=True, read_only=True)
     needs_coding                 = serializers.SerializerMethodField()
     parts_approval_status        = serializers.SerializerMethodField()
+    has_service_report           = serializers.SerializerMethodField()
+    total_labor_minutes          = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -304,8 +306,9 @@ class TicketSerializer(serializers.ModelSerializer):
             "symptom_code", "description", "priority", "status", "scheduled_date",
             "route_order",
             "opened_by", "assigned_tech", "assigned_tech_name",
-            "sla_due_at", "closed_at",
+            "sla_due_at", "completed_at", "closed_at",
             "assets", "needs_coding", "parts_approval_status",
+            "has_service_report", "total_labor_minutes",
             "service_reports", "created_at", "updated_at",
         ]
 
@@ -382,6 +385,15 @@ class TicketSerializer(serializers.ModelSerializer):
         """Returns the status of the most recent active (non-PENDING) parts approval."""
         pa = obj.parts_approvals.exclude(status="PENDING").order_by("-updated_at").first()
         return pa.status if pa else None
+
+    def get_has_service_report(self, obj):
+        return obj.service_reports.exists()
+
+    def get_total_labor_minutes(self, obj):
+        total = obj.time_entries.filter(clocked_out_at__isnull=False).aggregate(
+            s=models.Sum("total_minutes")
+        )["s"]
+        return total or 0
 
 
 # ── PartRequest ───────────────────────────────────────────────────────────────

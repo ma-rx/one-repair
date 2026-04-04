@@ -742,6 +742,9 @@ export interface Ticket {
   assets: TicketAsset[];
   needs_coding: boolean;
   parts_approval_status: string | null;
+  has_service_report: boolean;
+  total_labor_minutes: number;
+  completed_at: string | null;
   service_reports: ServiceReport[];
   created_at: string;
 }

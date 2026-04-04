@@ -66,6 +66,7 @@ class TicketStatus(models.TextChoices):
     COMPLETED     = "COMPLETED",     "Completed"
     RESOLVED      = "RESOLVED",      "Resolved"
     CLOSED        = "CLOSED",        "Closed"
+    PAID          = "PAID",          "Paid"
     CANCELLED     = "CANCELLED",     "Cancelled"
 
 
@@ -396,6 +397,7 @@ class Ticket(models.Model):
     scheduled_date = models.DateField(null=True, blank=True)
     route_order    = models.PositiveIntegerField(null=True, blank=True)
     sla_due_at     = models.DateTimeField(null=True, blank=True)
+    completed_at   = models.DateTimeField(null=True, blank=True)
     closed_at      = models.DateTimeField(null=True, blank=True)
     embedding      = VectorField(dimensions=1024, null=True, blank=True)
     created_at   = models.DateTimeField(auto_now_add=True)
