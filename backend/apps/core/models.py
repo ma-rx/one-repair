@@ -662,3 +662,14 @@ class RepairDocument(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class RepairDocumentChunk(models.Model):
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    document    = models.ForeignKey(RepairDocument, on_delete=models.CASCADE, related_name="chunks")
+    chunk_index = models.PositiveIntegerField()
+    content     = models.TextField()
+    embedding   = VectorField(dimensions=1024, null=True, blank=True)
+
+    class Meta:
+        ordering = ["chunk_index"]

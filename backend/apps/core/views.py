@@ -19,8 +19,8 @@ from rest_framework.parsers import MultiPartParser
 from .models import (
     Asset, AssetStatus, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part,
     PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, RepairDocument,
-    ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset, TicketStatus, TimeEntry,
-    UserRole, WorkImage, SymptomCodeEntry,
+    RepairDocumentChunk, ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset,
+    TicketStatus, TimeEntry, UserRole, WorkImage, SymptomCodeEntry,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
@@ -1944,21 +1944,24 @@ class DiagnosticChatView(APIView):
                         line += f" | Common parts: {k.parts_commonly_used}"
                     rag_lines.append(line)
 
-                # Repair documents (Plaud summaries, tech support transcripts)
-                doc_results = (
-                    RepairDocument.objects
+                # Repair document chunks (Plaud summaries, tech support transcripts)
+                chunk_results = (
+                    RepairDocumentChunk.objects
+                    .select_related("document")
                     .filter(embedding__isnull=False)
                     .annotate(distance=CosineDistance("embedding", query_vec))
-                    .order_by("distance")[:3]
+                    .order_by("distance")[:4]
                 )
-                for doc in doc_results:
-                    if float(doc.distance) > 0.45:
+                seen_chunks = set()
+                for chunk in chunk_results:
+                    if float(chunk.distance) > 0.45:
                         continue
-                    # Truncate long documents to avoid bloating the prompt
-                    snippet = doc.content[:600].strip()
-                    if len(doc.content) > 600:
-                        snippet += "…"
-                    rag_lines.append(f"Support transcript ({doc.title}): {snippet}")
+                    # Dedupe: skip if we already have a chunk from this document with similar content
+                    key = (chunk.document_id, chunk.chunk_index)
+                    if key in seen_chunks:
+                        continue
+                    seen_chunks.add(key)
+                    rag_lines.append(f"Support transcript ({chunk.document.title}): {chunk.content.strip()}")
 
         equipment_info = " ".join(filter(None, [make, model_number])) or asset_name or "unknown equipment"
 
@@ -2208,11 +2211,8 @@ class RepairDocumentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         doc = serializer.save(uploaded_by=self.request.user)
         try:
-            from .services.embeddings import get_embedding
-            vec = get_embedding(doc.content, input_type="document")
-            if vec:
-                doc.embedding = vec
-                doc.save(update_fields=["embedding"])
+            from .services.embeddings import embed_repair_document
+            embed_repair_document(doc)
         except Exception:
             pass
 
@@ -2222,7 +2222,7 @@ class RepairDocumentViewSet(viewsets.ModelViewSet):
         if not documents or not isinstance(documents, list):
             return Response({"detail": "documents list required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        from .services.embeddings import get_embedding
+        from .services.embeddings import embed_repair_document
 
         created = []
         errors  = []
@@ -2238,10 +2238,7 @@ class RepairDocumentViewSet(viewsets.ModelViewSet):
                 uploaded_by=request.user,
             )
             try:
-                vec = get_embedding(content, input_type="document")
-                if vec:
-                    doc.embedding = vec
-                    doc.save(update_fields=["embedding"])
+                embed_repair_document(doc)
             except Exception:
                 pass
             created.append(RepairDocumentSerializer(doc).data)

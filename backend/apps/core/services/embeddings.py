@@ -98,6 +98,51 @@ def embed_ticket(ticket) -> bool:
     return True
 
 
+CHUNK_SIZE    = 3000
+CHUNK_OVERLAP = 300
+
+
+def chunk_text(text: str) -> list[str]:
+    chunks = []
+    start  = 0
+    while start < len(text):
+        end = start + CHUNK_SIZE
+        chunks.append(text[start:end])
+        if end >= len(text):
+            break
+        start = end - CHUNK_OVERLAP
+    return chunks
+
+
+def embed_repair_document(doc) -> int:
+    """Chunk a RepairDocument and embed each chunk. Returns number of chunks embedded."""
+    from ..models import RepairDocumentChunk
+
+    doc.chunks.all().delete()
+
+    chunks   = chunk_text(doc.content)
+    embedded = 0
+    for i, chunk in enumerate(chunks):
+        vec = get_embedding(chunk, input_type="document")
+        RepairDocumentChunk.objects.create(
+            document=doc,
+            chunk_index=i,
+            content=chunk,
+            embedding=vec,
+        )
+        if vec:
+            embedded += 1
+
+    # Store first chunk's embedding on the document as the is_embedded sentinel
+    if embedded > 0:
+        first = doc.chunks.filter(embedding__isnull=False).order_by("chunk_index").first()
+        if first:
+            doc.embedding = first.embedding
+            doc.save(update_fields=["embedding"])
+
+    return embedded
+
+
 def embed_knowledge_entry(entry) -> bool:
     text = build_knowledge_text(entry)
     if not text:

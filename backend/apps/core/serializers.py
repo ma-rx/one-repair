@@ -554,7 +554,7 @@ class RepairDocumentSerializer(serializers.ModelSerializer):
         return None
 
     def get_is_embedded(self, obj):
-        return obj.embedding is not None
+        return obj.chunks.filter(embedding__isnull=False).exists()
 
 
 class CloseTicketSerializer(serializers.Serializer):
