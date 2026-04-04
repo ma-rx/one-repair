@@ -710,3 +710,19 @@ class RepairImage(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class TechDayStatus(models.Model):
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tech           = models.ForeignKey(User, on_delete=models.CASCADE, related_name="day_statuses")
+    date           = models.DateField()
+    checked_in_at  = models.DateTimeField(null=True, blank=True)
+    checked_out_at = models.DateTimeField(null=True, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["tech", "date"]
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.tech} — {self.date}"

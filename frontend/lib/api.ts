@@ -475,6 +475,13 @@ export const api = {
     request<void>(`/repair-images/${id}/`, { method: "DELETE" }),
   searchRepairImages: (q: string) =>
     request<RepairImage[]>(`/repair-images/search/?q=${encodeURIComponent(q)}`),
+
+  // Tech day check-in / check-out
+  getTechDayStatus: () => request<TechDayStatus | null>("/tech-day-status/"),
+  techCheckIn: () =>
+    request<TechDayStatus>("/tech-day-status/", { method: "POST", body: JSON.stringify({ action: "check_in" }) }),
+  techCheckOut: () =>
+    request<TechDayStatus>("/tech-day-status/", { method: "POST", body: JSON.stringify({ action: "check_out" }) }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -995,4 +1002,11 @@ export interface RepairImage {
   uploaded_by: number | null;
   uploaded_by_name: string | null;
   created_at: string;
+}
+
+export interface TechDayStatus {
+  id: string;
+  date: string;
+  checked_in_at: string | null;
+  checked_out_at: string | null;
 }

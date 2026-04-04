@@ -6,7 +6,8 @@ from .views import (
     InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
     PartsApprovalViewSet, PartRequestViewSet, PartViewSet, PricingConfigView, RepairDocumentViewSet,
     RepairImageViewSet, ResolutionCodeEntryViewSet, ServiceReportViewSet, StoreViewSet, SuggestCodesView,
-    SymptomCodeEntryViewSet, TicketViewSet, TimeEntryView, UserViewSet, VerifiedAnswerViewSet, WorkImageView,
+    SymptomCodeEntryViewSet, TechDayStatusView, TicketViewSet, TimeEntryView, UserViewSet,
+    VerifiedAnswerViewSet, WorkImageView,
 )
 
 router = DefaultRouter()
@@ -41,4 +42,5 @@ urlpatterns = router.urls + [
     path("import/bulk-tickets/", BulkImportTicketsView.as_view()),
     path("diagnostic-search/", DiagnosticSearchView.as_view()),
     path("diagnostic-chat/", DiagnosticChatView.as_view()),
+    path("tech-day-status/", TechDayStatusView.as_view()),
 ]

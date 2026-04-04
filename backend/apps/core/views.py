@@ -23,8 +23,8 @@ from rest_framework.parsers import MultiPartParser
 from .models import (
     Asset, AssetStatus, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part,
     PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, RepairDocument,
-    RepairDocumentChunk, RepairImage, ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset,
-    TicketStatus, TimeEntry, UserRole, VerifiedAnswer, WorkImage, SymptomCodeEntry,
+    RepairDocumentChunk, RepairImage, ResolutionCodeEntry, ServiceReport, Store, TechDayStatus,
+    Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole, VerifiedAnswer, WorkImage, SymptomCodeEntry,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
@@ -34,7 +34,7 @@ from .serializers import (
     OrganizationSerializer, PartsApprovalSerializer, PartRequestSerializer, PartSerializer,
     PricingConfigSerializer, RepairDocumentSerializer, RepairImageSerializer, ResolutionCodeEntrySerializer,
     SaveProgressSerializer, ServiceReportSerializer,
-    StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
+    StoreSerializer, SymptomCodeEntrySerializer, TechDayStatusSerializer, TicketAssetSerializer,
     TicketSerializer, TimeEntrySerializer, UserSerializer, VerifiedAnswerSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
@@ -2500,3 +2500,46 @@ class RepairImageViewSet(viewsets.ModelViewSet):
             DQ(title__icontains=q) | DQ(tags__icontains=q)
         )[:5]
         return Response(RepairImageSerializer(results, many=True).data)
+
+
+# ── Tech Day Status (check-in / check-out) ────────────────────────────────────
+
+class TechDayStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.utils import timezone
+        today = timezone.localdate()
+        try:
+            record = TechDayStatus.objects.get(tech=request.user, date=today)
+            return Response(TechDayStatusSerializer(record).data)
+        except TechDayStatus.DoesNotExist:
+            return Response(None)
+
+    def post(self, request):
+        from django.utils import timezone
+        action = request.data.get("action")
+        today = timezone.localdate()
+        now = timezone.now()
+
+        if action == "check_in":
+            record, _ = TechDayStatus.objects.get_or_create(
+                tech=request.user, date=today,
+                defaults={"checked_in_at": now},
+            )
+            if not record.checked_in_at:
+                record.checked_in_at = now
+                record.checked_out_at = None
+                record.save(update_fields=["checked_in_at", "checked_out_at"])
+            return Response(TechDayStatusSerializer(record).data)
+
+        if action == "check_out":
+            try:
+                record = TechDayStatus.objects.get(tech=request.user, date=today)
+            except TechDayStatus.DoesNotExist:
+                return Response({"detail": "Not checked in."}, status=status.HTTP_400_BAD_REQUEST)
+            record.checked_out_at = now
+            record.save(update_fields=["checked_out_at"])
+            return Response(TechDayStatusSerializer(record).data)
+
+        return Response({"detail": "action must be check_in or check_out."}, status=status.HTTP_400_BAD_REQUEST)
