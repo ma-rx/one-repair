@@ -40,11 +40,18 @@ const priorityDot: Record<string, string> = {
 
 const STATUS_TABS = ["ALL", "OPEN", "DISPATCHED", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED"];
 
+const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+
+const priorityLabel: Record<string, string> = {
+  LOW: "Low", MEDIUM: "Medium", HIGH: "High", CRITICAL: "Critical",
+};
+
 export default function DispatchPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [tab, setTab] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [priorityLoading, setPriorityLoading] = useState<Record<string, boolean>>({});
 
   function load(status: string) {
     setLoading(true);
@@ -56,6 +63,18 @@ export default function DispatchPage() {
   }
 
   useEffect(() => { load(tab); }, [tab]);
+
+  async function handlePriorityChange(id: string, priority: string) {
+    setPriorityLoading((prev) => ({ ...prev, [id]: true }));
+    try {
+      const updated = await api.patchTicketPriority(id, priority);
+      setTickets((prev) => prev.map((t) => t.id === id ? { ...t, priority: updated.priority } : t));
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setPriorityLoading((prev) => ({ ...prev, [id]: false }));
+    }
+  }
 
   // Stats always from full list when on ALL tab
   const open        = tickets.filter((t) => t.status === "OPEN").length;
@@ -167,11 +186,23 @@ export default function DispatchPage() {
                   <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
                     {t.description || (t.symptom_code ? (SymptomCodeLabels[t.symptom_code] ?? t.symptom_code) : "—")}
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="flex items-center gap-1.5 text-slate-600">
-                      <span className={`w-2 h-2 rounded-full ${priorityDot[t.priority] ?? "bg-slate-300"}`} />
-                      {t.priority}
-                    </span>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDot[t.priority] ?? "bg-slate-300"}`} />
+                      {priorityLoading[t.id] ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                      ) : (
+                        <select
+                          value={t.priority}
+                          onChange={(e) => handlePriorityChange(t.id, e.target.value)}
+                          className="text-xs text-slate-600 bg-transparent border-none outline-none cursor-pointer hover:text-slate-900 pr-1"
+                        >
+                          {PRIORITIES.map((p) => (
+                            <option key={p} value={p}>{priorityLabel[p]}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     {(() => {

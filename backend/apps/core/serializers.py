@@ -391,12 +391,14 @@ class PartsApprovalSerializer(serializers.ModelSerializer):
     nte_limit                = serializers.SerializerMethodField()
     requires_client_approval = serializers.SerializerMethodField()
     ticket_detail            = serializers.SerializerMethodField()
+    followup_ticket_number   = serializers.SerializerMethodField()
 
     class Meta:
         model = PartsApproval
         fields = [
             "id", "ticket", "ticket_detail", "status",
             "notes_for_client", "denied_reason", "tracking_number",
+            "followup_ticket", "followup_ticket_number",
             "total_selling_price", "nte_limit", "requires_client_approval",
             "part_requests",
             "sent_at", "approved_at", "denied_at", "ordered_at", "delivered_at",
@@ -426,6 +428,11 @@ class PartsApprovalSerializer(serializers.ModelSerializer):
             return total > nte
         except Exception:
             return False
+
+    def get_followup_ticket_number(self, obj):
+        if obj.followup_ticket:
+            return obj.followup_ticket.ticket_number or str(obj.followup_ticket.id)[:8]
+        return None
 
     def get_ticket_detail(self, obj):
         t = obj.ticket

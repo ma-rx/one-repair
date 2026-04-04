@@ -99,7 +99,8 @@ export default function DispatchPartsPage() {
   async function handleGenerateFollowup(id: string) {
     setLoaderFor(id, true);
     try {
-      await api.generatePartsFollowup(id);
+      const updated = await api.generatePartsFollowup(id);
+      setApprovals((prev) => prev.map((a) => a.id === id ? { ...a, followup_ticket: updated.followup_ticket, followup_ticket_number: updated.followup_ticket_number } : a));
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to generate follow-up.");
@@ -400,14 +401,21 @@ export default function DispatchPartsPage() {
                     )}
 
                     {pa.status === "DELIVERED" && (
-                      <button
-                        onClick={() => handleGenerateFollowup(pa.id)}
-                        disabled={busy}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
-                        Generate Follow-up Ticket
-                      </button>
+                      pa.followup_ticket_number ? (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Follow-up Ticket Generated: {pa.followup_ticket_number}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleGenerateFollowup(pa.id)}
+                          disabled={busy}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                          Generate Follow-up Ticket
+                        </button>
+                      )
                     )}
                   </div>
 

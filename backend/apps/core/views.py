@@ -1038,7 +1038,9 @@ class PartsApprovalViewSet(viewsets.ModelViewSet):
                 asset=ta.asset,
                 asset_description=ta.asset_description,
             )
-        return Response(TicketSerializer(new_ticket).data, status=status.HTTP_201_CREATED)
+        pa.followup_ticket = new_ticket
+        pa.save(update_fields=["followup_ticket", "updated_at"])
+        return Response(PartsApprovalSerializer(pa).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="add-part")
     def add_part(self, request, pk=None):

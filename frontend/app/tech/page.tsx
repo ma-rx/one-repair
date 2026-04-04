@@ -71,14 +71,19 @@ export default function TechPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
 
+  const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
   useEffect(() => {
     setLoading(true);
     setError("");
     api.listTicketsByDate(date)
       .then((all) => {
         const active = all.filter((t) => t.status !== "CANCELLED");
-        setTickets(active);
-        setOrder(active.map((t) => t.id));
+        const sorted = [...active].sort(
+          (a, b) => (PRIORITY_RANK[a.priority] ?? 99) - (PRIORITY_RANK[b.priority] ?? 99)
+        );
+        setTickets(sorted);
+        setOrder(sorted.map((t) => t.id));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));

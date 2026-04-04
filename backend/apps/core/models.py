@@ -549,6 +549,10 @@ class PartsApproval(models.Model):
     notes_for_client = models.TextField(blank=True, default="")
     denied_reason    = models.TextField(blank=True, default="")
     tracking_number  = models.CharField(max_length=200, blank=True, default="")
+    followup_ticket  = models.ForeignKey(
+        Ticket, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="sourced_from_parts_approval"
+    )
     created_by       = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="created_parts_approvals")
     sent_at          = models.DateTimeField(null=True, blank=True)
     approved_at      = models.DateTimeField(null=True, blank=True)

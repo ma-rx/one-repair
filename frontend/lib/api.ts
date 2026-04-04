@@ -112,6 +112,8 @@ export const api = {
     request<Ticket[]>(`/tickets/${ticketStatus ? `?status=${ticketStatus}` : ""}`),
   getTicket: (id: string) =>
     request<Ticket>(`/tickets/${id}/`),
+  patchTicketPriority: (id: string, priority: string) =>
+    request<Ticket>(`/tickets/${id}/`, { method: "PATCH", body: JSON.stringify({ priority }) }),
   assignTech: (id: string, tech_id: number, scheduled_date?: string) =>
     request<Ticket>(`/tickets/${id}/assign/`, {
       method: "PATCH",
@@ -312,7 +314,7 @@ export const api = {
   markPartsDelivered: (id: string) =>
     request<PartsApproval>(`/parts-approvals/${id}/mark-delivered/`, { method: "POST" }),
   generatePartsFollowup: (id: string) =>
-    request<Ticket>(`/parts-approvals/${id}/generate-followup/`, { method: "POST" }),
+    request<PartsApproval>(`/parts-approvals/${id}/generate-followup/`, { method: "POST" }),
   addPartToApproval: (id: string, data: Record<string, unknown>) =>
     request<PartsApproval>(`/parts-approvals/${id}/add-part/`, {
       method: "POST",
@@ -632,6 +634,8 @@ export interface PartsApproval {
   notes_for_client: string;
   denied_reason: string;
   tracking_number: string;
+  followup_ticket: string | null;
+  followup_ticket_number: string | null;
   total_selling_price: string;
   nte_limit: string;
   requires_client_approval: boolean;
