@@ -1904,7 +1904,7 @@ class DiagnosticChatView(APIView):
                     .order_by("distance")[:3]
                 )
                 for t in ticket_results:
-                    if float(t.distance) > 0.45:
+                    if float(t.distance) > 0.55:
                         continue
                     report = t.service_reports.first()
                     line = f"Past repair — {t.asset_description}"
@@ -1978,10 +1978,12 @@ Current job:
 - Store: {store_name or "unknown"}
 
 Guidelines:
-- Ask ONE focused diagnostic question at a time — never multiple questions at once
-- Keep every response SHORT — the tech is on their phone in the field
+- If the tech asks a direct question, ANSWER IT — pull from the knowledge base and support documents, do not respond with another question
+- Only ask a clarifying question when you genuinely cannot help without more information
+- Never ask more than one question at a time
+- Keep responses SHORT — the tech is on their phone in the field
 - Be direct and practical, no filler phrases
-- When you have enough information, give clear numbered repair steps and list any parts needed with SKUs if known
+- When diagnosing, give clear numbered steps and list any parts needed with SKUs if known
 - Mention safety cautions when relevant"""
 
         if rag_lines:
