@@ -90,12 +90,15 @@ function NewTicketForm() {
     setError(null);
     try {
       const firstRow = assetRows[0];
+      const isTech = user?.role === "TECH";
+      const todayStr = new Date().toISOString().slice(0, 10);
       const ticket = await api.createTicket({
         ...(firstRow.assetId !== OTHER_ASSET ? { asset: firstRow.assetId } : {}),
         ...(firstRow.assetId === OTHER_ASSET ? { asset_description: firstRow.customAsset.trim(), store: storeId } : {}),
         description: description.trim(),
         priority,
         opened_by: user?.id,
+        ...(isTech ? { assigned_tech: user?.id, scheduled_date: todayStr, status: "DISPATCHED" } : {}),
       });
 
       // Add additional assets
@@ -442,7 +445,9 @@ function NewTicketForm() {
               <p className="text-slate-500 text-sm mt-1">
                 ID: <span className="font-mono">{ticketId?.slice(0, 8).toUpperCase()}</span>
               </p>
-              <p className="text-slate-400 text-xs mt-1">An admin will assign a technician shortly.</p>
+              {user?.role !== "TECH" && (
+                <p className="text-slate-400 text-xs mt-1">An admin will assign a technician shortly.</p>
+              )}
             </div>
             <div className="flex gap-3 justify-center">
               <button
