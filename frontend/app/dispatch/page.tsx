@@ -212,7 +212,7 @@ export default function DispatchPage() {
                       const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null);
                       return (
                         <div className="flex flex-col gap-1 items-start">
-                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${style}`}>
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${style}`}>
                             {label}
                           </span>
                           {t.needs_coding && (
