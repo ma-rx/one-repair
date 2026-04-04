@@ -79,9 +79,13 @@ export default function TechPage() {
     api.listTicketsByDate(date)
       .then((all) => {
         const active = all.filter((t) => t.status !== "CANCELLED");
-        const sorted = [...active].sort(
-          (a, b) => (PRIORITY_RANK[a.priority] ?? 99) - (PRIORITY_RANK[b.priority] ?? 99)
-        );
+        const isComplete = (t: Ticket) => t.status === "COMPLETED" || t.status === "CLOSED";
+        const sorted = [...active].sort((a, b) => {
+          const aDone = isComplete(a) ? 1 : 0;
+          const bDone = isComplete(b) ? 1 : 0;
+          if (aDone !== bDone) return aDone - bDone;
+          return (PRIORITY_RANK[a.priority] ?? 99) - (PRIORITY_RANK[b.priority] ?? 99);
+        });
         setTickets(sorted);
         setOrder(sorted.map((t) => t.id));
       })
@@ -276,6 +280,13 @@ export default function TechPage() {
                         ) : (
                           <p className="flex items-center gap-1.5 mt-2 text-slate-400 text-xs">
                             <MapPin className="w-3.5 h-3.5 shrink-0" /> No address on file
+                          </p>
+                        )}
+
+                        {/* Store hours */}
+                        {t.store_hours && (
+                          <p className="mt-1.5 text-xs text-slate-400">
+                            Hours: {t.store_hours}
                           </p>
                         )}
 
