@@ -236,7 +236,7 @@ function DocumentsTab() {
           new Promise<{ title: string; content: string }>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve({
-              title: file.name.replace(/\.txt$/i, ""),
+              title: file.name.replace(/\.(txt|md)$/i, ""),
               content: reader.result as string,
             });
             reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
@@ -273,13 +273,13 @@ function DocumentsTab() {
     <div>
       <div className="flex items-center justify-between mb-5">
         <p className="text-sm text-slate-500">
-          Upload Plaud summary transcripts (.txt). The AI diagnostic tool will reference these when techs ask questions in the field.
+          Upload Plaud summary transcripts (.txt or .md). The AI diagnostic tool will reference these when techs ask questions in the field.
         </p>
         <div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt"
+            accept=".txt,.md"
             multiple
             className="hidden"
             onChange={handleFiles}
@@ -292,7 +292,7 @@ function DocumentsTab() {
             {uploading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
             ) : (
-              <><Upload className="w-4 h-4" /> Upload .txt Files</>
+              <><Upload className="w-4 h-4" /> Upload .txt / .md Files</>
             )}
           </button>
         </div>
