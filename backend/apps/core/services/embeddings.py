@@ -1,4 +1,8 @@
+import logging
+
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 _client = None
 
@@ -25,7 +29,8 @@ def get_embedding(text: str, input_type: str = "document") -> list[float] | None
         client = _get_client()
         result = client.embed([text], model="voyage-3", input_type=input_type)
         return result.embeddings[0]
-    except Exception:
+    except Exception as e:
+        logger.error("Voyage embedding failed (len=%d): %s", len(text), e)
         return None
 
 

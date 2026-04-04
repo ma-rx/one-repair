@@ -1,4 +1,8 @@
+import logging
+
 from django.contrib.auth.models import User
+
+logger = logging.getLogger(__name__)
 from django.db import transaction
 from django.db.models import Avg, Count, F, Q, Sum
 from django.db.models.functions import TruncMonth
@@ -2213,8 +2217,8 @@ class RepairDocumentViewSet(viewsets.ModelViewSet):
         try:
             from .services.embeddings import embed_repair_document
             embed_repair_document(doc)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("embed_repair_document failed for %s: %s", doc.title, e)
 
     @action(detail=False, methods=["post"], url_path="bulk-upload")
     def bulk_upload(self, request):
@@ -2239,8 +2243,8 @@ class RepairDocumentViewSet(viewsets.ModelViewSet):
             )
             try:
                 embed_repair_document(doc)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("embed_repair_document failed for %s: %s", doc.title, e)
             created.append(RepairDocumentSerializer(doc).data)
 
         return Response({"created": len(created), "errors": errors, "documents": created},
