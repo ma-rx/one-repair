@@ -10,21 +10,47 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def send_invoice_email(to_email: str, service_report, pdf_bytes: bytes) -> bool:
+def send_invoice_email(
+    to_email: str,
+    service_report,
+    pdf_bytes: bytes,
+    payment_url: str = "",
+    ors_settings=None,
+) -> bool:
     resend.api_key = settings.RESEND_API_KEY
 
-    ticket = service_report.ticket
-    asset = ticket.asset
-    invoice_number = f"SR-{str(service_report.id)[:8].upper()}"
+    ticket   = service_report.ticket
+    company_name = (ors_settings and ors_settings.company_name) or "One Repair Solutions"
+
+    # Best asset name
+    first_ta = ticket.ticket_assets.select_related("asset").first()
+    if first_ta:
+        asset_name = first_ta.asset.name if first_ta.asset else (first_ta.asset_description or "Service")
+    elif ticket.asset:
+        asset_name = ticket.asset.name
+    else:
+        asset_name = ticket.asset_description or "Service"
+
+    invoice_number = ticket.ticket_number or f"SR-{str(service_report.id)[:8].upper()}"
+
+    pay_button = ""
+    if payment_url:
+        pay_button = f"""
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="{payment_url}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">
+            Pay Now — ${service_report.grand_total:.2f}
+          </a>
+        </div>
+        """
 
     params = {
         "from": settings.RESEND_FROM_EMAIL,
         "to": [to_email],
-        "subject": f"Service Invoice {invoice_number} — {asset.name}",
+        "subject": f"Service Invoice {invoice_number} — {asset_name}",
         "html": f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
           <div style="background: #1e3a5f; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">One Repair Solutions</h1>
+            <h1 style="color: white; margin: 0; font-size: 20px;">{company_name}</h1>
             <p style="color: #93c5fd; margin: 4px 0 0; font-size: 13px;">Field Service Management</p>
           </div>
           <div style="background: #f8fafc; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
@@ -36,21 +62,14 @@ def send_invoice_email(to_email: str, service_report, pdf_bytes: bytes) -> bool:
               </tr>
               <tr>
                 <td style="padding: 8px 0; color: #64748b; font-size: 13px;">Asset</td>
-                <td style="padding: 8px 0; font-size: 13px;">{asset.name}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #64748b; font-size: 13px;">Symptom</td>
-                <td style="padding: 8px 0; font-size: 13px;">{ticket.symptom_code.replace('_', ' ').title()}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #64748b; font-size: 13px;">Resolution</td>
-                <td style="padding: 8px 0; font-size: 13px;">{service_report.resolution_code.replace('_', ' ').title()}</td>
+                <td style="padding: 8px 0; font-size: 13px;">{asset_name}</td>
               </tr>
               <tr style="border-top: 2px solid #e2e8f0;">
                 <td style="padding: 12px 0 0; font-size: 15px; font-weight: bold;">Total Due</td>
                 <td style="padding: 12px 0 0; font-size: 15px; font-weight: bold; color: #2563eb;">${service_report.grand_total:.2f}</td>
               </tr>
             </table>
+            {pay_button}
             <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
               The full PDF invoice is attached to this email.
             </p>

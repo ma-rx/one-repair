@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 from apps.core.auth_views import LoginView, MeView, RefreshView
+from apps.core.views import StripeWebhookView
 
 def health(request):
     return JsonResponse({"status": "ok"})
@@ -29,4 +30,5 @@ urlpatterns = [
     path("api/auth/refresh/", RefreshView.as_view()),
     path("api/auth/me/", MeView.as_view()),
     path("api/", include("apps.core.urls")),
+    path("webhooks/stripe/", StripeWebhookView.as_view()),
 ]

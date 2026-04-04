@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.contrib.auth.models import User
 
 logger = logging.getLogger(__name__)
@@ -851,11 +852,12 @@ class TicketViewSet(viewsets.ModelViewSet):
                     ta.asset.save(update_fields=["status", "updated_at"])
 
         # Generate and optionally send PDF
-        pdf_bytes = generate_invoice_pdf(report)
+        ors_settings = PricingConfig.objects.first()
+        pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings)
         email = data.get("invoice_email", "")
         if email:
             try:
-                send_invoice_email(email, report, pdf_bytes)
+                send_invoice_email(email, report, pdf_bytes, ors_settings=ors_settings)
                 report.invoice_sent = True
                 report.save(update_fields=["invoice_sent"])
             except Exception as exc:
@@ -875,6 +877,100 @@ class TicketViewSet(viewsets.ModelViewSet):
 
         report = ServiceReport.objects.prefetch_related("parts_used__part").get(pk=report.pk)
         return Response(ServiceReportSerializer(report).data)
+
+    @action(detail=True, methods=["post"], url_path="send-invoice")
+    def send_invoice(self, request, pk=None):
+        """
+        Send invoice to the org's invoice_emails.
+        Optionally creates a Stripe Checkout Session for online payment.
+        Sets ticket status to CLOSED.
+        """
+        ticket = self.get_object()
+        if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
+            return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        report = ticket.service_reports.prefetch_related("parts_used__part").order_by("-created_at").first()
+        if not report:
+            return Response({"detail": "No service report found for this ticket."}, status=status.HTTP_400_BAD_REQUEST)
+
+        store = ticket.store
+        org   = store.organization if store else None
+        if not org:
+            return Response({"detail": "Ticket has no organization."}, status=status.HTTP_400_BAD_REQUEST)
+
+        invoice_emails = list(org.invoice_emails or [])
+        extra_emails   = request.data.get("extra_emails", [])
+        if isinstance(extra_emails, list):
+            invoice_emails.extend(e for e in extra_emails if e)
+        invoice_emails = list(dict.fromkeys(invoice_emails))  # deduplicate
+
+        if not invoice_emails:
+            return Response(
+                {"detail": "No invoice emails configured for this organization. Add them in the organization settings."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ors_settings = PricingConfig.objects.first()
+
+        # Optional Stripe Checkout Session
+        payment_url      = ""
+        stripe_session_id = ""
+        stripe_key = getattr(settings, "STRIPE_SECRET_KEY", "")
+        if stripe_key:
+            try:
+                import stripe as _stripe
+                _stripe.api_key = stripe_key
+                frontend_url = getattr(settings, "FRONTEND_URL", "")
+                amount_cents = max(1, int(report.grand_total * 100))
+                session = _stripe.checkout.Session.create(
+                    payment_method_types=["card"],
+                    line_items=[{
+                        "price_data": {
+                            "currency": "usd",
+                            "product_data": {
+                                "name": f"Service Invoice — Ticket {ticket.ticket_number or str(ticket.id)[:8]}",
+                            },
+                            "unit_amount": amount_cents,
+                        },
+                        "quantity": 1,
+                    }],
+                    mode="payment",
+                    metadata={"service_report_id": str(report.id), "ticket_id": str(ticket.id)},
+                    success_url=f"{frontend_url}/dispatch/{ticket.id}?invoice_paid=1" if frontend_url else "https://onerepairsolutions.com",
+                    cancel_url=f"{frontend_url}/dispatch/{ticket.id}/invoice" if frontend_url else "https://onerepairsolutions.com",
+                )
+                payment_url       = session.url
+                stripe_session_id = session.id
+            except Exception as exc:
+                logger.warning("Stripe session creation failed: %s", exc)
+
+        pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings, payment_url=payment_url)
+
+        sent_to = []
+        for email in invoice_emails:
+            try:
+                send_invoice_email(email, report, pdf_bytes, payment_url=payment_url, ors_settings=ors_settings)
+                sent_to.append(email)
+            except Exception as exc:
+                logger.error("Failed to send invoice email to %s: %s", email, exc)
+
+        if not sent_to:
+            return Response({"detail": "Failed to send invoice emails."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        report.invoice_sent      = True
+        report.stripe_session_id  = stripe_session_id
+        report.stripe_payment_url = payment_url
+        report.save(update_fields=["invoice_sent", "stripe_session_id", "stripe_payment_url", "updated_at"])
+
+        ticket.status    = TicketStatus.CLOSED
+        ticket.closed_at = timezone.now()
+        ticket.save(update_fields=["status", "closed_at", "updated_at"])
+
+        return Response({
+            "sent_to": sent_to,
+            "payment_url": payment_url,
+            "ticket": TicketSerializer(ticket).data,
+        })
 
 
 # ── Part Requests ─────────────────────────────────────────────────────────────
@@ -2259,10 +2355,56 @@ class InvoicePDFView(APIView):
             if not org or report.ticket.asset.store.organization != org:
                 return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        pdf_bytes = generate_invoice_pdf(report)
+        ors_settings = PricingConfig.objects.first()
+        pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings, payment_url=report.stripe_payment_url or "")
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="invoice-{str(report.id)[:8]}.pdf"'
         return response
+
+
+# ── Stripe Webhook ────────────────────────────────────────────────────────────
+
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+@method_decorator(csrf_exempt, name="dispatch")
+class StripeWebhookView(APIView):
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        webhook_secret = getattr(settings, "STRIPE_WEBHOOK_SECRET", "")
+        stripe_key     = getattr(settings, "STRIPE_SECRET_KEY", "")
+        if not stripe_key:
+            return HttpResponse(status=400)
+
+        try:
+            import stripe as _stripe
+            _stripe.api_key = stripe_key
+            payload   = request.body
+            sig_header = request.META.get("HTTP_STRIPE_SIGNATURE", "")
+            if webhook_secret:
+                event = _stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+            else:
+                import json
+                event = _stripe.Event.construct_from(json.loads(payload), stripe_key)
+        except Exception as exc:
+            logger.warning("Stripe webhook error: %s", exc)
+            return HttpResponse(status=400)
+
+        if event["type"] == "checkout.session.completed":
+            session  = event["data"]["object"]
+            ticket_id = session.get("metadata", {}).get("ticket_id")
+            if ticket_id:
+                try:
+                    t = Ticket.objects.get(pk=ticket_id)
+                    t.status = TicketStatus.PAID
+                    t.save(update_fields=["status", "updated_at"])
+                    logger.info("Ticket %s marked PAID via Stripe webhook", ticket_id)
+                except Ticket.DoesNotExist:
+                    logger.warning("Stripe webhook: ticket %s not found", ticket_id)
+
+        return HttpResponse(status=200)
 
 
 # ── KnowledgeEntry ─────────────────────────────────────────────────────────────

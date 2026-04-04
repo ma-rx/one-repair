@@ -201,10 +201,17 @@ export const api = {
     URL.revokeObjectURL(url);
   },
 
-  // Pricing config
+  // Pricing config / ORS Settings
   getPricing: () => request<PricingConfig>("/pricing/"),
   updatePricing: (body: Partial<PricingConfig>) =>
     request<PricingConfig>("/pricing/", { method: "PATCH", body: JSON.stringify(body) }),
+
+  // Invoice
+  sendInvoice: (ticketId: string, extraEmails: string[] = []) =>
+    request<{ sent_to: string[]; payment_url: string; ticket: Ticket }>(
+      `/tickets/${ticketId}/send-invoice/`,
+      { method: "POST", body: JSON.stringify({ extra_emails: extraEmails }) },
+    ),
 
   // Time tracking
   getTimeEntry: (ticketId: string) =>
@@ -490,6 +497,8 @@ export interface Organization {
   is_active: boolean;
   code: string;
   nte_limit: string;
+  payment_terms: string;
+  invoice_emails: string[];
   store_count: number;
   created_at: string;
 }
@@ -536,6 +545,7 @@ export interface Store {
   district_manager_name: string | null;
   district_manager_phone: string | null;
   district_manager_email: string | null;
+  tax_rate: string | null;
   is_active: boolean;
   asset_count: number;
   created_at: string;
@@ -765,6 +775,8 @@ export interface ServiceReport {
   parts_total: string;
   grand_total: string;
   invoice_sent: boolean;
+  stripe_session_id: string;
+  stripe_payment_url: string;
   parts_used: PartUsed[];
 }
 
@@ -802,6 +814,11 @@ export interface PricingConfig {
   hourly_rate: string;
   min_hours: string;
   tax_rate: string;
+  company_name: string;
+  company_address: string;
+  company_phone: string;
+  company_email: string;
+  logo_url: string;
   updated_at: string;
 }
 

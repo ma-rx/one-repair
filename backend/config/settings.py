@@ -152,6 +152,12 @@ SIMPLE_JWT = {
 RESEND_API_KEY    = config("RESEND_API_KEY", default="")
 RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="invoices@onerepairsolutions.com")
 
+# ── Stripe ────────────────────────────────────────────────────────────────────
+
+STRIPE_SECRET_KEY     = config("STRIPE_SECRET_KEY", default="")
+STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET", default="")
+FRONTEND_URL          = config("FRONTEND_URL", default="")
+
 # ── OpenAI (embeddings) ───────────────────────────────────────────────────────
 
 ANTHROPIC_API_KEY = config("ANTHROPIC_API_KEY", default="")

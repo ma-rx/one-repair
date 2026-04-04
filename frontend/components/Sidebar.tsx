@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 import {
   Wrench,
   ClipboardList,
@@ -57,16 +59,33 @@ export default function Sidebar() {
     ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || "?"
     : "?";
 
+  const [logoUrl, setLogoUrl]         = useState("");
+  const [companyName, setCompanyName] = useState("One Repair");
+
+  useEffect(() => {
+    if (user?.role === "ORS_ADMIN") {
+      api.getPricing().then((c) => {
+        if (c.logo_url)      setLogoUrl(c.logo_url);
+        if (c.company_name)  setCompanyName(c.company_name);
+      }).catch(() => {});
+    }
+  }, [user]);
+
   return (
     <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 flex flex-col z-10">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700/60">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-500">
-          <Wrench className="w-5 h-5 text-white" />
-        </div>
+        {logoUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={logoUrl} alt="Logo" className="h-9 w-9 rounded-lg object-contain bg-white p-0.5" />
+        ) : (
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-500">
+            <Wrench className="w-5 h-5 text-white" />
+          </div>
+        )}
         <div>
-          <p className="text-white font-semibold text-sm leading-tight">One Repair</p>
-          <p className="text-slate-400 text-xs">Solutions</p>
+          <p className="text-white font-semibold text-sm leading-tight">{companyName.split(" ").slice(0, 2).join(" ")}</p>
+          <p className="text-slate-400 text-xs">{companyName.split(" ").slice(2).join(" ") || "Solutions"}</p>
         </div>
       </div>
 
@@ -100,10 +119,19 @@ export default function Sidebar() {
           <Bell className="w-4.5 h-4.5 shrink-0" />
           Notifications
         </button>
-        <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors">
-          <Settings className="w-4.5 h-4.5 shrink-0" />
-          Settings
-        </button>
+        {user?.role === "ORS_ADMIN" && (
+          <Link
+            href="/settings"
+            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              pathname.startsWith("/settings")
+                ? "bg-blue-500/20 text-blue-400"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            }`}
+          >
+            <Settings className="w-4.5 h-4.5 shrink-0" />
+            Settings
+          </Link>
+        )}
         <div className="flex items-center gap-3 px-3 py-3 mt-1">
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
             {initials}

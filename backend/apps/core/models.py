@@ -124,6 +124,13 @@ class ResolutionCode(models.TextChoices):
     OTHER                    = "OTHER",                    "Other"
 
 
+class PaymentTerms(models.TextChoices):
+    DUE_ON_RECEIPT = "DUE_ON_RECEIPT", "Due on Receipt"
+    NET_15         = "NET_15",         "Net 15"
+    NET_30         = "NET_30",         "Net 30"
+    NET_45         = "NET_45",         "Net 45"
+
+
 class PartRequestUrgency(models.TextChoices):
     ASAP       = "ASAP",       "ASAP"
     NEXT_VISIT = "NEXT_VISIT", "Next Visit"
@@ -213,13 +220,18 @@ class EquipmentModel(models.Model):
 
 
 class PricingConfig(models.Model):
-    """Singleton — one row stores global pricing rates."""
-    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    trip_charge = models.DecimalField(max_digits=8, decimal_places=2, default=95.00)
-    hourly_rate = models.DecimalField(max_digits=8, decimal_places=2, default=125.00)
-    min_hours   = models.DecimalField(max_digits=4, decimal_places=2, default=1.00)
-    tax_rate    = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    updated_at  = models.DateTimeField(auto_now=True)
+    """Singleton — one row stores global pricing rates and ORS company info."""
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    trip_charge     = models.DecimalField(max_digits=8, decimal_places=2, default=95.00)
+    hourly_rate     = models.DecimalField(max_digits=8, decimal_places=2, default=125.00)
+    min_hours       = models.DecimalField(max_digits=4, decimal_places=2, default=1.00)
+    tax_rate        = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    company_name    = models.CharField(max_length=255, default="One Repair Solutions")
+    company_address = models.CharField(max_length=500, blank=True, default="")
+    company_phone   = models.CharField(max_length=50, blank=True, default="")
+    company_email   = models.EmailField(blank=True, default="")
+    logo_url        = models.URLField(max_length=2000, blank=True, default="")
+    updated_at      = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name        = "Pricing Config"
@@ -237,9 +249,11 @@ class Organization(models.Model):
     plan      = models.CharField(max_length=20, choices=OrgPlan.choices, default=OrgPlan.STARTER)
     is_active = models.BooleanField(default=True)
     code      = models.CharField(max_length=2, blank=True, default="", help_text="2-letter prefix for ticket numbers (e.g. DD, CB)")
-    nte_limit = models.DecimalField(max_digits=10, decimal_places=2, default=500, help_text="Not-to-exceed limit for parts approval")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    nte_limit       = models.DecimalField(max_digits=10, decimal_places=2, default=500, help_text="Not-to-exceed limit for parts approval")
+    payment_terms   = models.CharField(max_length=20, choices=PaymentTerms.choices, default=PaymentTerms.NET_30)
+    invoice_emails  = models.JSONField(default=list, blank=True, help_text="List of email addresses to receive invoices")
+    created_at      = models.DateTimeField(auto_now_add=True)
+    updated_at      = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["name"]
@@ -316,6 +330,7 @@ class Store(models.Model):
         DistrictManager, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="stores"
     )
+    tax_rate  = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Store-level tax rate override. Overrides org/global default if set.")
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -494,10 +509,12 @@ class ServiceReport(models.Model):
     formatted_report = models.TextField(blank=True)
     manager_on_site      = models.CharField(max_length=255, blank=True, default="")
     manager_signature    = models.TextField(blank=True, default="")  # base64 PNG data URL
-    draft_parts      = models.JSONField(default=list)   # [{"part_id": "uuid", "quantity": N}]
-    tax_rate         = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    created_at       = models.DateTimeField(auto_now_add=True)
-    updated_at       = models.DateTimeField(auto_now=True)
+    draft_parts          = models.JSONField(default=list)   # [{"part_id": "uuid", "quantity": N}]
+    tax_rate             = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    stripe_session_id    = models.CharField(max_length=255, blank=True, default="")
+    stripe_payment_url   = models.URLField(max_length=2000, blank=True, default="")
+    created_at           = models.DateTimeField(auto_now_add=True)
+    updated_at           = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]

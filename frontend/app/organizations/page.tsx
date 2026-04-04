@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
 import { api, Organization } from "@/lib/api";
-import { Building2, Plus, Pencil, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { Building2, Plus, Pencil, CheckCircle2, XCircle, Loader2, AlertCircle, X } from "lucide-react";
 
 const PLAN_STYLES: Record<string, string> = {
   STARTER:      "bg-slate-100 text-slate-600",
@@ -14,6 +14,7 @@ const PLAN_STYLES: Record<string, string> = {
 
 const EMPTY: Partial<Organization> = {
   name: "", email: "", phone: "", address: "", plan: "STARTER", is_active: true, code: "", nte_limit: "500",
+  payment_terms: "NET_30", invoice_emails: [],
 };
 
 export default function OrganizationsPage() {
@@ -44,7 +45,7 @@ export default function OrganizationsPage() {
 
   function openEdit(org: Organization) {
     setEditing(org);
-    setForm({ name: org.name, email: org.email, phone: org.phone, address: org.address, plan: org.plan, is_active: org.is_active, code: org.code ?? "", nte_limit: org.nte_limit ?? "500" });
+    setForm({ name: org.name, email: org.email, phone: org.phone, address: org.address, plan: org.plan, is_active: org.is_active, code: org.code ?? "", nte_limit: org.nte_limit ?? "500", payment_terms: org.payment_terms ?? "NET_30", invoice_emails: org.invoice_emails ?? [] });
     setFormError(null);
     setModalOpen(true);
   }
@@ -225,17 +226,76 @@ export default function OrganizationsPage() {
                 <option value="ENTERPRISE">Enterprise</option>
               </select>
             </div>
-            <div className="flex items-end pb-0.5">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 rounded accent-blue-600"
-                  checked={form.is_active ?? true}
-                  onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-                />
-                <span className="text-sm font-medium text-slate-700">Active</span>
-              </label>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Payment Terms</label>
+              <select
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.payment_terms ?? "NET_30"}
+                onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))}
+              >
+                <option value="DUE_ON_RECEIPT">Due on Receipt</option>
+                <option value="NET_15">Net 15</option>
+                <option value="NET_30">Net 30</option>
+                <option value="NET_45">Net 45</option>
+              </select>
             </div>
+          </div>
+
+          <div className="flex items-center pb-0.5">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded accent-blue-600"
+                checked={form.is_active ?? true}
+                onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+              />
+              <span className="text-sm font-medium text-slate-700">Active</span>
+            </label>
+          </div>
+
+          {/* Invoice emails */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Invoice Emails</label>
+            <div className="space-y-1.5 mb-2">
+              {((form.invoice_emails as string[]) ?? []).map((e) => (
+                <div key={e} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5 text-sm">
+                  <span className="flex-1 text-slate-700">{e}</span>
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, invoice_emails: ((f.invoice_emails as string[]) ?? []).filter((x) => x !== e) }))}>
+                    <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-500" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                id="new-invoice-email"
+                placeholder="Add invoice email…"
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const val = (e.target as HTMLInputElement).value.trim();
+                    if (val) {
+                      setForm((f) => ({ ...f, invoice_emails: [...((f.invoice_emails as string[]) ?? []), val] }));
+                      (e.target as HTMLInputElement).value = "";
+                    }
+                  }
+                }}
+              />
+              <button type="button"
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+                onClick={() => {
+                  const inp = document.getElementById("new-invoice-email") as HTMLInputElement;
+                  const val = inp?.value.trim();
+                  if (val) {
+                    setForm((f) => ({ ...f, invoice_emails: [...((f.invoice_emails as string[]) ?? []), val] }));
+                    inp.value = "";
+                  }
+                }}
+              >Add</button>
+            </div>
+            <p className="text-slate-400 text-xs mt-1">Invoices will be sent to all these addresses. Press Enter to add.</p>
           </div>
 
           <div className="flex gap-3 pt-2">

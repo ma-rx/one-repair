@@ -74,7 +74,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = [
             "id", "name", "email", "phone", "address",
-            "plan", "is_active", "code", "nte_limit", "store_count", "created_at", "updated_at",
+            "plan", "is_active", "code", "nte_limit",
+            "payment_terms", "invoice_emails",
+            "store_count", "created_at", "updated_at",
         ]
 
     def get_store_count(self, obj):
@@ -110,7 +112,7 @@ class StoreSerializer(serializers.ModelSerializer):
             "organization", "organization_name",
             "manager", "manager_name",
             "district_manager", "district_manager_name", "district_manager_phone", "district_manager_email",
-            "is_active", "asset_count",
+            "tax_rate", "is_active", "asset_count",
             "created_at", "updated_at",
         ]
 
@@ -222,7 +224,11 @@ class PartUsedInputSerializer(serializers.Serializer):
 class PricingConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = PricingConfig
-        fields = ["id", "trip_charge", "hourly_rate", "min_hours", "tax_rate", "updated_at"]
+        fields = [
+            "id", "trip_charge", "hourly_rate", "min_hours", "tax_rate",
+            "company_name", "company_address", "company_phone", "company_email", "logo_url",
+            "updated_at",
+        ]
 
 
 # ── TimeEntry ─────────────────────────────────────────────────────────────────
@@ -256,6 +262,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
             "draft_parts", "tax_rate", "sales_tax",
+            "stripe_session_id", "stripe_payment_url",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
 
