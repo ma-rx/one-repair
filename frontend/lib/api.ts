@@ -843,6 +843,12 @@ export interface ResolutionCodeEntry {
   updated_at: string;
 }
 
+export interface DiagnosticStep {
+  action: string;
+  finding: string;
+  next_action: string;
+}
+
 export interface KnowledgeEntry {
   id: string;
   equipment_model: string | null;
@@ -851,10 +857,10 @@ export interface KnowledgeEntry {
   make: string;
   model_number: string;
   symptom_code: string;
-  resolution_code: string;
+  symptom_description: string;
+  diagnostic_steps: DiagnosticStep[];
   difficulty: string;
   cause_summary: string;
-  procedure: string;
   parts_commonly_used: string;
   pro_tips: string;
   contributed_by: number | null;

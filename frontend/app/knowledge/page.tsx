@@ -3,19 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, EquipmentModel, KnowledgeEntry, Part } from "@/lib/api";
-import {
-  AssetCategoryLabels, KnowledgeDifficultyLabels,
-  SymptomCodeLabels, ResolutionCodeLabels,
-} from "@/types/enums";
+import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part } from "@/lib/api";
+import { AssetCategoryLabels, KnowledgeDifficultyLabels, SymptomCodeLabels } from "@/types/enums";
 import {
   BookOpen, Plus, Pencil, Loader2, CheckCircle2,
-  ShieldCheck, AlertCircle, ChevronDown, X,
+  ShieldCheck, AlertCircle, ChevronDown, X, ArrowUp, ArrowDown, GripVertical,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const ASSET_CATEGORIES = Object.keys(AssetCategoryLabels);
-
 const SYMPTOM_CODES = [
   "NO_POWER", "WONT_START", "OVERHEATING", "TEMPERATURE_INCONSISTENT",
   "UNUSUAL_NOISE", "LEAKING", "NOT_COOLING", "NOT_HEATING", "NOT_DISPENSING",
@@ -24,24 +20,21 @@ const SYMPTOM_CODES = [
   "ERROR_CODE_DISPLAYED", "CONNECTIVITY_ISSUE", "PHYSICAL_DAMAGE",
   "SLOW_PERFORMANCE", "CALIBRATION_NEEDED", "OTHER",
 ];
-
-const RESOLUTION_CODES = [
-  "REPLACED_COMPRESSOR", "REPLACED_THERMOSTAT", "REPLACED_PUMP",
-  "REPLACED_HEATING_ELEMENT", "REPLACED_IGNITER", "REPLACED_CONTROL_BOARD",
-  "REPLACED_SEAL_GASKET", "REPLACED_FILTER", "REPLACED_PART",
-  "REPAIRED_IN_FIELD", "DESCALED_CLEANED", "CLEANED_SERVICED",
-  "ADJUSTED_SETTINGS", "CALIBRATED", "REPROGRAMMED", "FIRMWARE_UPDATE",
-  "PREVENTIVE_MAINTENANCE", "TRAINED_STAFF", "AWAITING_PARTS",
-  "REFERRED_TO_VENDOR", "NO_FAULT_FOUND", "OTHER",
-];
-
 const DIFFICULTIES = ["EASY", "MEDIUM", "HARD", "ADVANCED"];
 
-function PartsMultiSelect({
-  parts,
-  selected,
-  onChange,
-}: {
+const difficultyStyle: Record<string, string> = {
+  EASY:     "bg-emerald-100 text-emerald-700",
+  MEDIUM:   "bg-blue-100 text-blue-700",
+  HARD:     "bg-orange-100 text-orange-700",
+  ADVANCED: "bg-red-100 text-red-700",
+};
+
+const inputClass = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const textareaClass = `${inputClass} resize-y`;
+
+// ── Parts multi-select ────────────────────────────────────────────────────────
+
+function PartsMultiSelect({ parts, selected, onChange }: {
   parts: Part[];
   selected: Part[];
   onChange: (parts: Part[]) => void;
@@ -60,20 +53,9 @@ function PartsMultiSelect({
 
   const selectedIds = new Set(selected.map((p) => p.id));
   const filtered = parts.filter(
-    (p) =>
-      !selectedIds.has(p.id) &&
-      (p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.sku.toLowerCase().includes(search.toLowerCase()))
+    (p) => !selectedIds.has(p.id) &&
+      (p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase()))
   );
-
-  function add(part: Part) {
-    onChange([...selected, part]);
-    setSearch("");
-  }
-
-  function remove(id: string) {
-    onChange(selected.filter((p) => p.id !== id));
-  }
 
   return (
     <div ref={ref} className="space-y-2">
@@ -82,7 +64,7 @@ function PartsMultiSelect({
           {selected.map((p) => (
             <span key={p.id} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2 py-1 rounded-full">
               {p.name}
-              <button type="button" onClick={() => remove(p.id)} className="hover:text-blue-900">
+              <button type="button" onClick={() => onChange(selected.filter((x) => x.id !== p.id))}>
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -109,11 +91,9 @@ function PartsMultiSelect({
               <p className="px-4 py-3 text-sm text-slate-400">{search ? "No matching parts" : "No more parts to add"}</p>
             ) : (
               filtered.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
+                <button key={p.id} type="button"
                   className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
-                  onClick={() => { add(p); setOpen(false); }}
+                  onClick={() => { onChange([...selected, p]); setSearch(""); setOpen(false); }}
                 >
                   <p className="font-medium text-slate-800">{p.name}</p>
                   {p.sku && <p className="text-xs text-slate-400 mt-0.5">SKU: {p.sku}</p>}
@@ -127,12 +107,105 @@ function PartsMultiSelect({
   );
 }
 
-const difficultyStyle: Record<string, string> = {
-  EASY:     "bg-emerald-100 text-emerald-700",
-  MEDIUM:   "bg-blue-100 text-blue-700",
-  HARD:     "bg-orange-100 text-orange-700",
-  ADVANCED: "bg-red-100 text-red-700",
-};
+// ── Step builder ──────────────────────────────────────────────────────────────
+
+function emptyStep(): DiagnosticStep {
+  return { action: "", finding: "", next_action: "" };
+}
+
+function StepBuilder({ steps, onChange }: {
+  steps: DiagnosticStep[];
+  onChange: (steps: DiagnosticStep[]) => void;
+}) {
+  function update(i: number, key: keyof DiagnosticStep, value: string) {
+    const next = steps.map((s, idx) => idx === i ? { ...s, [key]: value } : s);
+    onChange(next);
+  }
+
+  function move(i: number, dir: -1 | 1) {
+    const next = [...steps];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  }
+
+  function remove(i: number) {
+    onChange(steps.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div className="space-y-3">
+      {steps.map((step, i) => (
+        <div key={i} className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Step {i + 1}</span>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-20">
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === steps.length - 1}
+                className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-20">
+                <ArrowDown className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={() => remove(i)}
+                className="p-1 text-red-400 hover:text-red-600 ml-1">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Check / Action <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="e.g. Check if evaporator fan is spinning"
+              value={step.action}
+              onChange={(e) => update(i, "action", e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Finding / Observation</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="e.g. Fan not spinning"
+                value={step.finding}
+                onChange={(e) => update(i, "finding", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Next Action / Recommendation</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="e.g. Test motor windings, replace if open"
+                value={step.next_action}
+                onChange={(e) => update(i, "next_action", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => onChange([...steps, emptyStep()])}
+        className="flex items-center gap-2 w-full border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-xl py-3 text-sm font-medium transition-colors justify-center"
+      >
+        <Plus className="w-4 h-4" /> Add Diagnostic Step
+      </button>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 type EntryForm = {
   equipment_model: string | null;
@@ -140,10 +213,10 @@ type EntryForm = {
   make: string;
   model_number: string;
   symptom_code: string;
-  resolution_code: string;
+  symptom_description: string;
+  diagnostic_steps: DiagnosticStep[];
   difficulty: string;
   cause_summary: string;
-  procedure: string;
   parts_commonly_used: string;
   pro_tips: string;
 };
@@ -153,11 +226,11 @@ const emptyForm = (): EntryForm => ({
   asset_category:      "REFRIGERATION",
   make:                "",
   model_number:        "",
-  symptom_code:        "NOT_COOLING",
-  resolution_code:     "REPLACED_COMPRESSOR",
+  symptom_code:        "",
+  symptom_description: "",
+  diagnostic_steps:    [],
   difficulty:          "MEDIUM",
   cause_summary:       "",
-  procedure:           "",
   parts_commonly_used: "",
   pro_tips:            "",
 });
@@ -166,12 +239,12 @@ export default function KnowledgePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ORS_ADMIN";
 
-  const [entries, setEntries]         = useState<KnowledgeEntry[]>([]);
+  const [entries, setEntries]             = useState<KnowledgeEntry[]>([]);
   const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
-  const [allParts, setAllParts]       = useState<Part[]>([]);
+  const [allParts, setAllParts]           = useState<Part[]>([]);
   const [selectedParts, setSelectedParts] = useState<Part[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState("");
 
   const [filterCategory, setFilterCategory] = useState("");
   const [filterSymptom,  setFilterSymptom]  = useState("");
@@ -182,7 +255,6 @@ export default function KnowledgePage() {
   const [saving,    setSaving]    = useState(false);
   const [formError, setFormError] = useState("");
 
-  // Detail drawer
   const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
 
   useEffect(() => {
@@ -193,8 +265,8 @@ export default function KnowledgePage() {
   function load() {
     setLoading(true);
     api.listKnowledgeEntries({
-      asset_category:  filterCategory || undefined,
-      symptom_code:    filterSymptom  || undefined,
+      asset_category: filterCategory || undefined,
+      symptom_code:   filterSymptom  || undefined,
     })
       .then(setEntries)
       .catch((e) => setError(e.message))
@@ -219,14 +291,13 @@ export default function KnowledgePage() {
       make:                e.make,
       model_number:        e.model_number,
       symptom_code:        e.symptom_code,
-      resolution_code:     e.resolution_code,
+      symptom_description: e.symptom_description,
+      diagnostic_steps:    e.diagnostic_steps ?? [],
       difficulty:          e.difficulty,
       cause_summary:       e.cause_summary,
-      procedure:           e.procedure,
       parts_commonly_used: e.parts_commonly_used,
       pro_tips:            e.pro_tips,
     });
-    // Pre-select parts that match names stored in the field
     const storedNames = e.parts_commonly_used.split(",").map((n) => n.trim().toLowerCase()).filter(Boolean);
     setSelectedParts(allParts.filter((p) => storedNames.includes(p.name.toLowerCase())));
     setFormError("");
@@ -235,16 +306,20 @@ export default function KnowledgePage() {
 
   async function handleSave(ev: React.FormEvent) {
     ev.preventDefault();
+    if (!form.symptom_description.trim() && form.diagnostic_steps.length === 0) {
+      setFormError("Add a symptom description or at least one diagnostic step.");
+      return;
+    }
     setSaving(true);
     setFormError("");
-    const formWithParts = { ...form, parts_commonly_used: selectedParts.map((p) => p.name).join(", ") };
+    const payload = { ...form, parts_commonly_used: selectedParts.map((p) => p.name).join(", ") };
     try {
       if (editing) {
-        const updated = await api.updateKnowledgeEntry(editing.id, formWithParts);
+        const updated = await api.updateKnowledgeEntry(editing.id, payload);
         setEntries((prev) => prev.map((e) => e.id === updated.id ? updated : e));
         if (selected?.id === updated.id) setSelected(updated);
       } else {
-        const created = await api.createKnowledgeEntry(formWithParts);
+        const created = await api.createKnowledgeEntry(payload);
         setEntries((prev) => [created, ...prev]);
       }
       setModalOpen(false);
@@ -269,15 +344,12 @@ export default function KnowledgePage() {
     (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: ev.target.value }));
 
-  const inputClass = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
-  const textareaClass = `${inputClass} resize-y min-h-[80px]`;
-
   return (
     <DashboardShell>
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Knowledge Base</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Technician expertise for AI-assisted diagnostics</p>
+          <p className="text-slate-500 text-sm mt-0.5">Diagnostic pathways for AI-assisted field repairs</p>
         </div>
         <button
           onClick={openCreate}
@@ -305,17 +377,15 @@ export default function KnowledgePage() {
           value={filterSymptom}
           onChange={(e) => setFilterSymptom(e.target.value)}
         >
-          <option value="">All Symptoms</option>
+          <option value="">All Symptom Categories</option>
           {SYMPTOM_CODES.map((c) => (
             <option key={c} value={c}>{SymptomCodeLabels[c] ?? c}</option>
           ))}
         </select>
 
         {(filterCategory || filterSymptom) && (
-          <button
-            onClick={() => { setFilterCategory(""); setFilterSymptom(""); }}
-            className="text-sm text-slate-400 hover:text-slate-600"
-          >
+          <button onClick={() => { setFilterCategory(""); setFilterSymptom(""); }}
+            className="text-sm text-slate-400 hover:text-slate-600">
             Clear filters
           </button>
         )}
@@ -356,7 +426,7 @@ export default function KnowledgePage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
                         <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
                           {AssetCategoryLabels[entry.asset_category] ?? entry.asset_category}
                         </span>
@@ -374,29 +444,31 @@ export default function KnowledgePage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm font-medium text-slate-800">
-                        {SymptomCodeLabels[entry.symptom_code] ?? entry.symptom_code}
-                        {" → "}
-                        {ResolutionCodeLabels[entry.resolution_code] ?? entry.resolution_code}
-                      </p>
-                      {entry.equipment_model_display && (
-                        <p className="text-xs text-blue-600 font-mono mt-0.5">
-                          {entry.equipment_model_display.make} {entry.equipment_model_display.model_number}
-                          {entry.equipment_model_display.model_name ? ` — ${entry.equipment_model_display.model_name}` : ""}
-                        </p>
-                      )}
-                      {entry.cause_summary && (
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{entry.cause_summary}</p>
-                      )}
+
+                      {entry.symptom_description ? (
+                        <p className="text-sm font-medium text-slate-800 line-clamp-2">{entry.symptom_description}</p>
+                      ) : entry.symptom_code ? (
+                        <p className="text-sm font-medium text-slate-800">{SymptomCodeLabels[entry.symptom_code] ?? entry.symptom_code}</p>
+                      ) : null}
+
+                      <div className="flex items-center gap-3 mt-1.5">
+                        {entry.diagnostic_steps?.length > 0 && (
+                          <span className="text-xs text-slate-400 flex items-center gap-1">
+                            <GripVertical className="w-3 h-3" />
+                            {entry.diagnostic_steps.length} diagnostic step{entry.diagnostic_steps.length !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {entry.cause_summary && (
+                          <p className="text-xs text-slate-400 line-clamp-1">{entry.cause_summary}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEdit(entry); }}
-                        className="text-slate-400 hover:text-blue-600 transition-colors"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openEdit(entry); }}
+                      className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -407,9 +479,9 @@ export default function KnowledgePage() {
         {/* Detail panel */}
         {selected && (
           <div className="w-96 shrink-0">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-4 space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
+            <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-4 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
                       {AssetCategoryLabels[selected.asset_category] ?? selected.asset_category}
@@ -418,25 +490,21 @@ export default function KnowledgePage() {
                       {KnowledgeDifficultyLabels[selected.difficulty] ?? selected.difficulty}
                     </span>
                   </div>
-                  <h3 className="font-semibold text-slate-800 text-sm">
-                    {SymptomCodeLabels[selected.symptom_code] ?? selected.symptom_code}
-                    {" → "}
-                    {ResolutionCodeLabels[selected.resolution_code] ?? selected.resolution_code}
-                  </h3>
+                  {selected.symptom_description && (
+                    <p className="font-semibold text-slate-800 text-sm">{selected.symptom_description}</p>
+                  )}
                   {(selected.make || selected.model_number) && (
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {[selected.make, selected.model_number].filter(Boolean).join(" · ")}
-                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">{[selected.make, selected.model_number].filter(Boolean).join(" · ")}</p>
                   )}
                 </div>
                 {selected.is_verified ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded-full">
+                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded-full shrink-0">
                     <ShieldCheck className="w-3.5 h-3.5" /> Verified
                   </span>
                 ) : isAdmin ? (
                   <button
                     onClick={() => handleVerify(selected)}
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full transition-colors shrink-0"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" /> Verify
                   </button>
@@ -446,21 +514,38 @@ export default function KnowledgePage() {
               {selected.cause_summary && (
                 <section>
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Root Cause</p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{selected.cause_summary}</p>
+                  <p className="text-sm text-slate-700">{selected.cause_summary}</p>
                 </section>
               )}
 
-              {selected.procedure && (
+              {selected.diagnostic_steps?.length > 0 && (
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Procedure</p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{selected.procedure}</p>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Diagnostic Steps</p>
+                  <div className="space-y-3">
+                    {selected.diagnostic_steps.map((step, i) => (
+                      <div key={i} className="border-l-2 border-blue-200 pl-3">
+                        <p className="text-xs font-semibold text-slate-500 mb-0.5">Step {i + 1}</p>
+                        <p className="text-sm text-slate-800 font-medium">{step.action}</p>
+                        {step.finding && (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            <span className="font-medium text-amber-600">If:</span> {step.finding}
+                          </p>
+                        )}
+                        {step.next_action && (
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            <span className="font-medium text-blue-600">Then:</span> {step.next_action}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </section>
               )}
 
               {selected.parts_commonly_used && (
                 <section>
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Parts Commonly Used</p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{selected.parts_commonly_used}</p>
+                  <p className="text-sm text-slate-700">{selected.parts_commonly_used}</p>
                 </section>
               )}
 
@@ -471,7 +556,7 @@ export default function KnowledgePage() {
                 </section>
               )}
 
-              <p className="text-xs text-slate-400 pt-1">
+              <p className="text-xs text-slate-400 pt-1 border-t border-slate-100">
                 Added by {selected.contributed_by_name ?? "Unknown"} · {new Date(selected.created_at).toLocaleDateString()}
               </p>
             </div>
@@ -479,32 +564,35 @@ export default function KnowledgePage() {
         )}
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Modal */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editing ? "Edit Knowledge Entry" : "New Knowledge Entry"}
         width="max-w-2xl"
       >
-        <form onSubmit={handleSave} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-5">
           {formError && (
             <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-3 py-2.5 text-sm">
               <AlertCircle className="w-4 h-4 shrink-0" /> {formError}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+          {/* Equipment */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Equipment</p>
+
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Link to Equipment Model (recommended)</label>
               <select
                 className={inputClass}
                 value={form.equipment_model ?? ""}
                 onChange={(e) => {
-                  const selected = equipmentModels.find((m) => m.id === e.target.value);
+                  const m = equipmentModels.find((x) => x.id === e.target.value);
                   setForm((f) => ({
                     ...f,
                     equipment_model: e.target.value || null,
-                    ...(selected ? { asset_category: selected.category, make: selected.make, model_number: selected.model_number } : {}),
+                    ...(m ? { asset_category: m.category, make: m.make, model_number: m.model_number } : {}),
                   }));
                 }}
               >
@@ -513,105 +601,110 @@ export default function KnowledgePage() {
                   <option key={m.id} value={m.id}>{m.make} {m.model_number}{m.model_name ? ` — ${m.model_name}` : ""}</option>
                 ))}
               </select>
-              <p className="text-xs text-slate-400 mt-1">Linking makes this entry searchable by model for AI diagnostics.</p>
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Equipment Type <span className="text-red-500">*</span>
-              </label>
-              <select className={inputClass} value={form.asset_category} onChange={set("asset_category")} required>
-                {ASSET_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Equipment Type <span className="text-red-500">*</span></label>
+                <select className={inputClass} value={form.asset_category} onChange={set("asset_category")} required>
+                  {ASSET_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Make</label>
+                <input type="text" className={inputClass} value={form.make} onChange={set("make")} placeholder="e.g. True" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Model #</label>
+                <input type="text" className={inputClass} value={form.model_number} onChange={set("model_number")} placeholder="e.g. T-49-HC" />
+              </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Make (optional)</label>
-              <input type="text" className={inputClass} value={form.make} onChange={set("make")}
-                placeholder="e.g. True, Carrier, Hoshizaki" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Model Number (optional)</label>
-              <input type="text" className={inputClass} value={form.model_number} onChange={set("model_number")}
-                placeholder="e.g. T-49-HC" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Symptom <span className="text-red-500">*</span>
-              </label>
-              <select className={inputClass} value={form.symptom_code} onChange={set("symptom_code")} required>
-                {SYMPTOM_CODES.map((c) => (
-                  <option key={c} value={c}>{SymptomCodeLabels[c] ?? c}</option>
-                ))}
-              </select>
-            </div>
+          {/* Symptom */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Symptom</p>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Resolution <span className="text-red-500">*</span>
+                What is the unit doing? <span className="text-red-500">*</span>
               </label>
-              <select className={inputClass} value={form.resolution_code} onChange={set("resolution_code")} required>
-                {RESOLUTION_CODES.map((c) => (
-                  <option key={c} value={c}>{ResolutionCodeLabels[c] ?? c}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Difficulty</label>
-              <select className={inputClass} value={form.difficulty} onChange={set("difficulty")}>
-                {DIFFICULTIES.map((d) => (
-                  <option key={d} value={d}>{KnowledgeDifficultyLabels[d] ?? d}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Root Cause</label>
               <textarea
                 className={textareaClass}
+                rows={2}
+                required
+                placeholder="e.g. Unit is running but not producing cold air. Compressor is audible, evaporator fan spinning, but temperature stays at ambient."
+                value={form.symptom_description}
+                onChange={set("symptom_description")}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Symptom Category (for filtering)</label>
+                <select className={inputClass} value={form.symptom_code} onChange={set("symptom_code")}>
+                  <option value="">— none —</option>
+                  {SYMPTOM_CODES.map((c) => (
+                    <option key={c} value={c}>{SymptomCodeLabels[c] ?? c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Difficulty</label>
+                <select className={inputClass} value={form.difficulty} onChange={set("difficulty")}>
+                  {DIFFICULTIES.map((d) => (
+                    <option key={d} value={d}>{KnowledgeDifficultyLabels[d] ?? d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Most Likely Root Cause</label>
+              <textarea
+                className={textareaClass}
+                rows={2}
+                placeholder="e.g. Low refrigerant charge from a slow leak at the evaporator coil connections."
                 value={form.cause_summary}
                 onChange={set("cause_summary")}
-                placeholder="What typically causes this issue? e.g. Compressor fails due to refrigerant leak starving the motor of cooling..."
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Procedure</label>
-              <textarea
-                className={textareaClass}
-                rows={5}
-                value={form.procedure}
-                onChange={set("procedure")}
-                placeholder={"Step-by-step instructions:\n1. Recover refrigerant\n2. Check capacitor with multimeter\n3. ..."}
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Parts Commonly Used</label>
-              <PartsMultiSelect
-                parts={allParts}
-                selected={selectedParts}
-                onChange={setSelectedParts}
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Pro Tips & Gotchas</label>
-              <textarea
-                className={textareaClass}
-                value={form.pro_tips}
-                onChange={set("pro_tips")}
-                placeholder="Things to watch out for, shortcuts, common mistakes..."
               />
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          {/* Diagnostic steps */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Diagnostic Steps</p>
+            <p className="text-xs text-slate-500">
+              Add steps in order. Each step has a check to perform, what you might find, and what to do next.
+            </p>
+            <StepBuilder
+              steps={form.diagnostic_steps}
+              onChange={(steps) => setForm((f) => ({ ...f, diagnostic_steps: steps }))}
+            />
+          </div>
+
+          {/* Parts & tips */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Parts & Tips</p>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Parts Commonly Used</label>
+              <PartsMultiSelect parts={allParts} selected={selectedParts} onChange={setSelectedParts} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Pro Tips & Gotchas</label>
+              <textarea
+                className={textareaClass}
+                rows={2}
+                placeholder="Shortcuts, common mistakes, things experienced techs know…"
+                value={form.pro_tips}
+                onChange={set("pro_tips")}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-1">
             <button type="button" onClick={() => setModalOpen(false)}
               className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-50">
               Cancel

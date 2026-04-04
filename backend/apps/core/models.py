@@ -623,26 +623,26 @@ class KnowledgeEntry(models.Model):
     equipment_model     = models.ForeignKey(
         EquipmentModel, null=True, blank=True, on_delete=models.SET_NULL, related_name="knowledge_entries"
     )
-    asset_category      = models.CharField(max_length=30, choices=AssetCategory.choices)
-    make                = models.CharField(max_length=100, blank=True, default="")
-    model_number        = models.CharField(max_length=100, blank=True, default="")
-    symptom_code        = models.CharField(max_length=50, choices=SymptomCode.choices)
-    resolution_code     = models.CharField(max_length=50, choices=ResolutionCode.choices)
-    difficulty          = models.CharField(max_length=10, choices=KnowledgeDifficulty.choices, default=KnowledgeDifficulty.MEDIUM)
-    cause_summary       = models.TextField(blank=True, default="")
-    procedure           = models.TextField(blank=True, default="")
-    parts_commonly_used = models.TextField(blank=True, default="")
-    pro_tips            = models.TextField(blank=True, default="")
-    contributed_by      = models.ForeignKey(
+    asset_category       = models.CharField(max_length=30, choices=AssetCategory.choices)
+    make                 = models.CharField(max_length=100, blank=True, default="")
+    model_number         = models.CharField(max_length=100, blank=True, default="")
+    symptom_code         = models.CharField(max_length=50, choices=SymptomCode.choices, blank=True, default="")
+    symptom_description  = models.TextField(blank=True, default="")
+    diagnostic_steps     = models.JSONField(default=list, blank=True)
+    difficulty           = models.CharField(max_length=10, choices=KnowledgeDifficulty.choices, default=KnowledgeDifficulty.MEDIUM)
+    cause_summary        = models.TextField(blank=True, default="")
+    parts_commonly_used  = models.TextField(blank=True, default="")
+    pro_tips             = models.TextField(blank=True, default="")
+    contributed_by       = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name="knowledge_entries"
     )
-    is_verified         = models.BooleanField(default=False)
-    embedding           = VectorField(dimensions=1024, null=True, blank=True)
-    created_at          = models.DateTimeField(auto_now_add=True)
-    updated_at          = models.DateTimeField(auto_now=True)
+    is_verified          = models.BooleanField(default=False)
+    embedding            = VectorField(dimensions=1024, null=True, blank=True)
+    created_at           = models.DateTimeField(auto_now_add=True)
+    updated_at           = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"KnowledgeEntry: {self.symptom_code} → {self.resolution_code} ({self.asset_category})"
+        return f"KnowledgeEntry: {self.symptom_description or self.symptom_code or 'Entry'} ({self.asset_category})"

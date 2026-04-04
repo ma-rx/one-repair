@@ -509,8 +509,8 @@ class KnowledgeEntrySerializer(serializers.ModelSerializer):
         fields = [
             "id", "equipment_model", "equipment_model_display",
             "asset_category", "make", "model_number",
-            "symptom_code", "resolution_code", "difficulty",
-            "cause_summary", "procedure", "parts_commonly_used", "pro_tips",
+            "symptom_code", "symptom_description", "diagnostic_steps",
+            "difficulty", "cause_summary", "parts_commonly_used", "pro_tips",
             "contributed_by", "contributed_by_name", "is_verified",
             "created_at", "updated_at",
         ]

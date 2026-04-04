@@ -63,10 +63,21 @@ def build_knowledge_text(entry) -> str:
         parts.append(f"Equipment: {entry.make} {entry.model_number}".strip())
     if entry.asset_category:
         parts.append(f"Category: {entry.asset_category}")
+    if entry.symptom_description:
+        parts.append(f"Symptom: {entry.symptom_description}")
     if entry.cause_summary:
         parts.append(f"Cause: {entry.cause_summary}")
-    if entry.procedure:
-        parts.append(f"Procedure: {entry.procedure}")
+    if entry.diagnostic_steps:
+        for i, step in enumerate(entry.diagnostic_steps, 1):
+            action      = step.get("action", "")
+            finding     = step.get("finding", "")
+            next_action = step.get("next_action", "")
+            line = f"Step {i}: {action}"
+            if finding:
+                line += f" — If: {finding}"
+            if next_action:
+                line += f" → {next_action}"
+            parts.append(line)
     if entry.parts_commonly_used:
         parts.append(f"Parts: {entry.parts_commonly_used}")
     if entry.pro_tips:
