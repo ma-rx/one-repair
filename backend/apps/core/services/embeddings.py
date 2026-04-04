@@ -1,4 +1,5 @@
 import logging
+import time
 
 from django.conf import settings
 
@@ -17,21 +18,30 @@ def _get_client():
 
 def get_embedding(text: str, input_type: str = "document") -> list[float] | None:
     """
-    Generate a Voyage AI embedding.
+    Generate a Voyage AI embedding with retry on rate limit errors.
     Use input_type="document" when indexing records.
-    Use input_type="query" when embedding a search query — Voyage optimises
-    each vector for its role in retrieval, which meaningfully improves accuracy.
+    Use input_type="query" when embedding a search query.
     """
     text = text.strip()
     if not text or not settings.VOYAGE_API_KEY:
         return None
-    try:
-        client = _get_client()
-        result = client.embed([text], model="voyage-3", input_type=input_type)
-        return result.embeddings[0]
-    except Exception as e:
-        logger.error("Voyage embedding failed (len=%d): %s", len(text), e)
-        return None
+
+    delays = [5, 15, 30]
+    for attempt, delay in enumerate(delays + [None]):
+        try:
+            client = _get_client()
+            result = client.embed([text], model="voyage-3", input_type=input_type)
+            return result.embeddings[0]
+        except Exception as e:
+            err = str(e)
+            is_rate_limit = "rate limit" in err.lower() or "RPM" in err or "TPM" in err
+            if is_rate_limit and delay is not None:
+                logger.warning("Voyage rate limit hit (attempt %d), retrying in %ds", attempt + 1, delay)
+                time.sleep(delay)
+            else:
+                logger.error("Voyage embedding failed (len=%d): %s", len(text), e)
+                return None
+    return None
 
 
 def build_ticket_text(ticket) -> str:
@@ -128,6 +138,8 @@ def embed_repair_document(doc) -> int:
     chunks   = chunk_text(doc.content)
     embedded = 0
     for i, chunk in enumerate(chunks):
+        if i > 0:
+            time.sleep(1)  # stay well under rate limits between chunks
         vec = get_embedding(chunk, input_type="document")
         RepairDocumentChunk.objects.create(
             document=doc,
