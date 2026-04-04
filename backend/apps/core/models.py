@@ -673,3 +673,21 @@ class RepairDocumentChunk(models.Model):
 
     class Meta:
         ordering = ["chunk_index"]
+
+
+class VerifiedAnswer(models.Model):
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    question       = models.CharField(max_length=500)
+    answer         = models.TextField()
+    make           = models.CharField(max_length=100, blank=True, default="")
+    asset_category = models.CharField(max_length=100, blank=True, default="")
+    embedding      = VectorField(dimensions=1024, null=True, blank=True)
+    created_by     = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="verified_answers")
+    created_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["make", "question"]
+
+    def __str__(self):
+        return self.question

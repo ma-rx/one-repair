@@ -24,7 +24,7 @@ from .models import (
     Asset, AssetStatus, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part,
     PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, RepairDocument,
     RepairDocumentChunk, ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset,
-    TicketStatus, TimeEntry, UserRole, WorkImage, SymptomCodeEntry,
+    TicketStatus, TimeEntry, UserRole, VerifiedAnswer, WorkImage, SymptomCodeEntry,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
@@ -35,7 +35,7 @@ from .serializers import (
     PricingConfigSerializer, RepairDocumentSerializer, ResolutionCodeEntrySerializer,
     SaveProgressSerializer, ServiceReportSerializer,
     StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
-    TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
+    TicketSerializer, TimeEntrySerializer, UserSerializer, VerifiedAnswerSerializer, WorkImageSerializer,
 )
 from .services.email_service import send_invoice_email
 from .services.invoice import generate_invoice_pdf
@@ -1901,6 +1901,20 @@ class DiagnosticChatView(APIView):
         specific_query = f"{equipment_context} {latest_user}".strip()
         broad_query    = f"{equipment_context} {recent_all}".strip()
 
+        # Search ORS Verified Answers first — tight threshold, injected verbatim
+        verified_answer = None
+        specific_vec_for_qa = get_embedding(specific_query, input_type="query") if specific_query else None
+        if specific_vec_for_qa:
+            qa_result = (
+                VerifiedAnswer.objects
+                .filter(embedding__isnull=False)
+                .annotate(distance=CosineDistance("embedding", specific_vec_for_qa))
+                .order_by("distance")
+                .first()
+            )
+            if qa_result and float(qa_result.distance) <= 0.30:
+                verified_answer = qa_result
+
         def search_chunks(query_vec, threshold=0.55):
             results = (
                 RepairDocumentChunk.objects
@@ -1998,7 +2012,13 @@ Guidelines:
 - When diagnosing, give clear numbered steps and list any parts needed with SKUs if known
 - Mention safety cautions when relevant"""
 
-        if rag_lines:
+        if verified_answer:
+            system_prompt += (
+                f"\n\n⚠️ ORS VERIFIED ANSWER — repeat this answer verbatim, do not modify or add to it:\n"
+                f"Q: {verified_answer.question}\n"
+                f"A: {verified_answer.answer}"
+            )
+        elif rag_lines:
             system_prompt += "\n\nRelevant information from support documents, past repairs, and knowledge base — use this to answer the tech's question:\n" + "\n".join(rag_lines)
 
         valid_messages = [
@@ -2303,3 +2323,35 @@ class ResolutionCodeEntryViewSet(viewsets.ModelViewSet):
         if asset_category:
             qs = qs.filter(Q(asset_category="") | Q(asset_category=asset_category))
         return qs
+
+
+# ── Verified Answers ───────────────────────────────────────────────────────────
+
+class VerifiedAnswerViewSet(viewsets.ModelViewSet):
+    serializer_class   = VerifiedAnswerSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = VerifiedAnswer.objects.all()
+        category = self.request.query_params.get("asset_category")
+        if category:
+            qs = qs.filter(asset_category=category)
+        return qs
+
+    def perform_create(self, serializer):
+        entry = serializer.save(created_by=self.request.user)
+        self._embed(entry)
+
+    def perform_update(self, serializer):
+        entry = serializer.save()
+        self._embed(entry)
+
+    def _embed(self, entry):
+        try:
+            from .services.embeddings import get_embedding
+            vec = get_embedding(entry.question, input_type="document")
+            if vec:
+                entry.embedding = vec
+                entry.save(update_fields=["embedding"])
+        except Exception as e:
+            logger.error("VerifiedAnswer embedding failed for %s: %s", entry.id, e)

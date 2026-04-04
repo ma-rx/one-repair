@@ -557,6 +557,21 @@ class RepairDocumentSerializer(serializers.ModelSerializer):
         return obj.chunks.filter(embedding__isnull=False).exists()
 
 
+class VerifiedAnswerSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        from .models import VerifiedAnswer
+        model  = VerifiedAnswer
+        fields = ["id", "question", "answer", "make", "asset_category", "created_by", "created_by_name", "created_at", "updated_at"]
+        read_only_fields = ["created_by"]
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+
+
 class CloseTicketSerializer(serializers.Serializer):
     resolution_code  = serializers.ChoiceField(
         choices=ServiceReport._meta.get_field("resolution_code").choices,

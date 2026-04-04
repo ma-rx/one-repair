@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part, RepairDocument } from "@/lib/api";
+import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part, RepairDocument, VerifiedAnswer } from "@/lib/api";
 import { AssetCategoryLabels, KnowledgeDifficultyLabels, SymptomCodeLabels } from "@/types/enums";
 import {
   BookOpen, Plus, Pencil, Loader2, CheckCircle2,
   ShieldCheck, AlertCircle, ChevronDown, X, ArrowUp, ArrowDown, GripVertical,
-  FileText, Upload, Trash2,
+  FileText, Upload, Trash2, BadgeCheck, Send, MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -357,6 +357,322 @@ function DocumentsTab() {
   );
 }
 
+// ── ORS Verified Answers tab ──────────────────────────────────────────────────
+
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+function VerifiedAnswersTab() {
+  const [answers, setAnswers]         = useState<VerifiedAnswer[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState("");
+  const [selected, setSelected]       = useState<VerifiedAnswer | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+
+  // Builder state
+  const [messages, setMessages]       = useState<ChatMessage[]>([]);
+  const [input, setInput]             = useState("");
+  const [sending, setSending]         = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [saveForm, setSaveForm]       = useState<{ question: string; answer: string; make: string; asset_category: string } | null>(null);
+  const [deleting, setDeleting]       = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef    = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    api.listVerifiedAnswers()
+      .then(setAnswers)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || sending) return;
+    const updated: ChatMessage[] = [...messages, { role: "user", content: text }];
+    setMessages(updated);
+    setInput("");
+    setSending(true);
+    try {
+      const { reply } = await api.diagnosticChat(updated, { asset_name: "", asset_category: "", make: "", model_number: "", store_name: "" });
+      setMessages([...updated, { role: "assistant", content: reply }]);
+    } catch (e: unknown) {
+      setMessages([...updated, { role: "assistant", content: "Error — please try again." }]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function openSaveForm() {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const lastAI   = [...messages].reverse().find((m) => m.role === "assistant");
+    setSaveForm({
+      question:       lastUser?.content ?? "",
+      answer:         lastAI?.content  ?? "",
+      make:           "",
+      asset_category: "",
+    });
+  }
+
+  async function handleSave() {
+    if (!saveForm || !saveForm.question.trim() || !saveForm.answer.trim()) return;
+    setSaving(true);
+    try {
+      const created = await api.createVerifiedAnswer(saveForm);
+      setAnswers((prev) => [created, ...prev]);
+      setBuilderOpen(false);
+      setMessages([]);
+      setSaveForm(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this verified answer? The AI will no longer return it.")) return;
+    setDeleting(id);
+    try {
+      await api.deleteVerifiedAnswer(id);
+      setAnswers((prev) => prev.filter((a) => a.id !== id));
+      if (selected?.id === id) setSelected(null);
+    } catch {
+      setError("Delete failed.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  // Group by manufacturer
+  const grouped = answers.reduce<Record<string, VerifiedAnswer[]>>((acc, a) => {
+    const key = a.make.trim() || "General";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(a);
+    return acc;
+  }, {});
+  const manufacturers = Object.keys(grouped).sort((a, b) =>
+    a === "General" ? 1 : b === "General" ? -1 : a.localeCompare(b)
+  );
+
+  return (
+    <div className="flex gap-6 min-h-0">
+      {/* List */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-sm text-slate-500">
+            Curated answers built through AI conversation — returned verbatim when a tech asks a matching question.
+          </p>
+          <button
+            onClick={() => { setBuilderOpen(true); setMessages([]); setSaveForm(null); }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors shrink-0"
+          >
+            <Plus className="w-4 h-4" /> New Verified Answer
+          </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
+            <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+          </div>
+        ) : answers.length === 0 ? (
+          <div className="text-center py-20 text-slate-400">
+            <BadgeCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">No verified answers yet</p>
+            <p className="text-sm mt-1">Use the builder to create your first verified Q&A.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {manufacturers.map((mfr) => (
+              <div key={mfr}>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 px-1">{mfr}</h3>
+                <div className="space-y-2">
+                  {grouped[mfr].map((ans) => (
+                    <div
+                      key={ans.id}
+                      onClick={() => setSelected(selected?.id === ans.id ? null : ans)}
+                      className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${
+                        selected?.id === ans.id ? "border-blue-400 ring-1 ring-blue-200" : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <BadgeCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                            <p className="text-sm font-medium text-slate-800">{ans.question}</p>
+                          </div>
+                          {selected?.id !== ans.id && (
+                            <p className="text-xs text-slate-400 line-clamp-2 ml-6">{ans.answer}</p>
+                          )}
+                          {selected?.id === ans.id && (
+                            <p className="text-sm text-slate-700 mt-2 ml-6 whitespace-pre-wrap">{ans.answer}</p>
+                          )}
+                          {ans.asset_category && (
+                            <span className="ml-6 mt-2 inline-block text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
+                              {AssetCategoryLabels[ans.asset_category] ?? ans.asset_category}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(ans.id); }}
+                          disabled={deleting === ans.id}
+                          className="text-slate-400 hover:text-red-600 transition-colors shrink-0 p-1"
+                        >
+                          {deleting === ans.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Q&A Builder panel */}
+      {builderOpen && (
+        <div className="w-[420px] shrink-0 flex flex-col border border-slate-200 rounded-xl bg-white overflow-hidden" style={{ height: "70vh" }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-semibold text-slate-800">Q&A Builder</span>
+            </div>
+            <button onClick={() => { setBuilderOpen(false); setSaveForm(null); }} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {messages.length === 0 && (
+              <p className="text-sm text-slate-400 text-center mt-8">
+                Ask any technical question. Iterate until the answer is exactly right, then save it as a verified answer.
+              </p>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                  m.role === "user" ? "bg-blue-600 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"
+                }`}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1">
+                  {[0,1,2].map((i) => <span key={i} className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Save form */}
+          {saveForm ? (
+            <div className="border-t border-slate-100 p-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Save as Verified Answer</p>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Canonical Question</label>
+                <input
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={saveForm.question}
+                  onChange={(e) => setSaveForm((f) => f ? { ...f, question: e.target.value } : f)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Answer</label>
+                <textarea
+                  rows={3}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  value={saveForm.answer}
+                  onChange={(e) => setSaveForm((f) => f ? { ...f, answer: e.target.value } : f)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Manufacturer</label>
+                  <input
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. TurboChef"
+                    value={saveForm.make}
+                    onChange={(e) => setSaveForm((f) => f ? { ...f, make: e.target.value } : f)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+                  <select
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={saveForm.asset_category}
+                    onChange={(e) => setSaveForm((f) => f ? { ...f, asset_category: e.target.value } : f)}
+                  >
+                    <option value="">— any —</option>
+                    {Object.keys(AssetCategoryLabels).map((c) => (
+                      <option key={c} value={c}>{AssetCategoryLabels[c]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setSaveForm(null)} className="flex-1 border border-slate-300 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50">
+                  Back
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !saveForm.question.trim() || !saveForm.answer.trim()}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Save Verified Answer
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="border-t border-slate-100 p-3 space-y-2">
+              {messages.some((m) => m.role === "assistant") && (
+                <button
+                  onClick={openSaveForm}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+                >
+                  <BadgeCheck className="w-4 h-4" /> Save as Verified Answer
+                </button>
+              )}
+              <div className="flex gap-2">
+                <textarea
+                  ref={textareaRef}
+                  rows={2}
+                  className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  placeholder="Ask a technical question…"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }}}
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim() || sending}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-lg px-3 flex items-center justify-center"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type EntryForm = {
@@ -387,7 +703,7 @@ const emptyForm = (): EntryForm => ({
   pro_tips:            "",
 });
 
-type Tab = "entries" | "documents";
+type Tab = "entries" | "documents" | "verified";
 
 export default function KnowledgePage() {
   const { user } = useAuth();
@@ -508,10 +824,7 @@ export default function KnowledgePage() {
           <p className="text-slate-500 text-sm mt-0.5">Diagnostic pathways and support documents for AI-assisted field repairs</p>
         </div>
         {tab === "entries" && (
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-          >
+          <button onClick={openCreate} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
             <Plus className="w-4 h-4" /> Add Entry
           </button>
         )}
@@ -543,9 +856,23 @@ export default function KnowledgePage() {
             <FileText className="w-4 h-4" /> Support Documents
           </span>
         </button>
+        <button
+          onClick={() => setTab("verified")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            tab === "verified"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <BadgeCheck className="w-4 h-4" /> ORS Verified Answers
+          </span>
+        </button>
       </div>
 
-      {tab === "documents" ? (
+      {tab === "verified" ? (
+        <VerifiedAnswersTab />
+      ) : tab === "documents" ? (
         <DocumentsTab />
       ) : (
         <>

@@ -432,6 +432,16 @@ export const api = {
   ): Promise<{ reply: string }> =>
     request("/diagnostic-chat/", { method: "POST", body: JSON.stringify({ messages, context }) }),
 
+  // ORS Verified Answers
+  listVerifiedAnswers: (params?: { asset_category?: string }) =>
+    request<VerifiedAnswer[]>(`/verified-answers/${params?.asset_category ? `?asset_category=${params.asset_category}` : ""}`),
+  createVerifiedAnswer: (body: Partial<VerifiedAnswer>) =>
+    request<VerifiedAnswer>("/verified-answers/", { method: "POST", body: JSON.stringify(body) }),
+  updateVerifiedAnswer: (id: string, body: Partial<VerifiedAnswer>) =>
+    request<VerifiedAnswer>(`/verified-answers/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteVerifiedAnswer: (id: string) =>
+    request<void>(`/verified-answers/${id}/`, { method: "DELETE" }),
+
   // Repair Documents
   listRepairDocuments: () => request<RepairDocument[]>("/repair-documents/"),
   bulkUploadDocuments: (documents: { title: string; content: string }[]) =>
@@ -924,6 +934,18 @@ export interface DiagnosticSearchResult {
   diagnosis: Diagnosis | null;
   tickets: DiagnosticTicketResult[];
   knowledge: DiagnosticKnowledgeResult[];
+}
+
+export interface VerifiedAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  make: string;
+  asset_category: string;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RepairDocument {

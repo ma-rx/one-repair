@@ -6,7 +6,7 @@ from .views import (
     InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
     PartsApprovalViewSet, PartRequestViewSet, PartViewSet, PricingConfigView, RepairDocumentViewSet,
     ResolutionCodeEntryViewSet, ServiceReportViewSet, StoreViewSet, SuggestCodesView,
-    SymptomCodeEntryViewSet, TicketViewSet, TimeEntryView, UserViewSet, WorkImageView,
+    SymptomCodeEntryViewSet, TicketViewSet, TimeEntryView, UserViewSet, VerifiedAnswerViewSet, WorkImageView,
 )
 
 router = DefaultRouter()
@@ -23,6 +23,7 @@ router.register("part-requests", PartRequestViewSet, basename="part-request")
 router.register("parts-approvals", PartsApprovalViewSet, basename="parts-approval")
 router.register("knowledge", KnowledgeEntryViewSet, basename="knowledge")
 router.register("repair-documents", RepairDocumentViewSet, basename="repair-document")
+router.register("verified-answers", VerifiedAnswerViewSet, basename="verified-answer")
 router.register("symptom-codes", SymptomCodeEntryViewSet, basename="symptom-codes")
 router.register("resolution-codes", ResolutionCodeEntryViewSet, basename="resolution-codes")
 
