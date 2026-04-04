@@ -821,7 +821,7 @@ export default function TechWorkPage() {
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Save Progress
               </button>
-              <button type="button" onClick={handleMarkComplete} disabled={submitting || saving}
+              <button type="button" onClick={() => handleMarkComplete()} disabled={submitting || saving}
                 className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {ticket?.status === "COMPLETED" || ticket?.status === "CLOSED" ? "Update Report" : "Mark Complete"}
