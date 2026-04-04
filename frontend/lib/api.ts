@@ -932,5 +932,6 @@ export interface RepairDocument {
   content: string;
   uploaded_by: number | null;
   uploaded_by_name: string | null;
+  is_embedded: boolean;
   created_at: string;
 }

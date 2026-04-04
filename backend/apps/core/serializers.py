@@ -541,16 +541,20 @@ class ResolutionCodeEntrySerializer(serializers.ModelSerializer):
 
 class RepairDocumentSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.SerializerMethodField()
+    is_embedded = serializers.SerializerMethodField()
 
     class Meta:
         model = RepairDocument
-        fields = ["id", "title", "content", "uploaded_by", "uploaded_by_name", "created_at"]
+        fields = ["id", "title", "content", "uploaded_by", "uploaded_by_name", "is_embedded", "created_at"]
         read_only_fields = ["uploaded_by"]
 
     def get_uploaded_by_name(self, obj):
         if obj.uploaded_by:
             return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
         return None
+
+    def get_is_embedded(self, obj):
+        return obj.embedding is not None
 
 
 class CloseTicketSerializer(serializers.Serializer):

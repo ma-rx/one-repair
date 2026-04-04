@@ -320,7 +320,18 @@ function DocumentsTab() {
             <div key={doc.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-4">
               <FileText className="w-5 h-5 text-slate-400 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
+                  {doc.is_embedded ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">
+                      <CheckCircle2 className="w-3 h-3" /> AI Ready
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">
+                      <AlertCircle className="w-3 h-3" /> Not embedded
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {doc.content.length.toLocaleString()} characters
                   {doc.uploaded_by_name ? ` · Uploaded by ${doc.uploaded_by_name}` : ""}
