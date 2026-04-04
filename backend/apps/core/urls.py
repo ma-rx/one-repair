@@ -5,7 +5,7 @@ from .views import (
     DistrictManagerViewSet, EquipmentModelViewSet, FormatReportView,
     InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
     PartsApprovalViewSet, PartRequestViewSet, PartViewSet, PricingConfigView, RepairDocumentViewSet,
-    ResolutionCodeEntryViewSet, ServiceReportViewSet, StoreViewSet, SuggestCodesView,
+    RepairImageViewSet, ResolutionCodeEntryViewSet, ServiceReportViewSet, StoreViewSet, SuggestCodesView,
     SymptomCodeEntryViewSet, TicketViewSet, TimeEntryView, UserViewSet, VerifiedAnswerViewSet, WorkImageView,
 )
 
@@ -24,6 +24,7 @@ router.register("parts-approvals", PartsApprovalViewSet, basename="parts-approva
 router.register("knowledge", KnowledgeEntryViewSet, basename="knowledge")
 router.register("repair-documents", RepairDocumentViewSet, basename="repair-document")
 router.register("verified-answers", VerifiedAnswerViewSet, basename="verified-answer")
+router.register("repair-images", RepairImageViewSet, basename="repair-image")
 router.register("symptom-codes", SymptomCodeEntryViewSet, basename="symptom-codes")
 router.register("resolution-codes", ResolutionCodeEntryViewSet, basename="resolution-codes")
 

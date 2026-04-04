@@ -693,3 +693,20 @@ class VerifiedAnswer(models.Model):
 
     def __str__(self):
         return self.question
+
+
+class RepairImage(models.Model):
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title          = models.CharField(max_length=200)
+    url            = models.URLField(max_length=2000)
+    tags           = models.JSONField(default=list, blank=True)
+    make           = models.CharField(max_length=100, blank=True, default="")
+    asset_category = models.CharField(max_length=100, blank=True, default="")
+    uploaded_by    = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="repair_images")
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["make", "title"]
+
+    def __str__(self):
+        return self.title

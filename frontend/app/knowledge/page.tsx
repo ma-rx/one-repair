@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part, RepairDocument, VerifiedAnswer } from "@/lib/api";
+import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part, RepairDocument, RepairImage, VerifiedAnswer } from "@/lib/api";
 import { AssetCategoryLabels, KnowledgeDifficultyLabels, SymptomCodeLabels } from "@/types/enums";
 import {
   BookOpen, Plus, Pencil, Loader2, CheckCircle2,
   ShieldCheck, AlertCircle, ChevronDown, X, ArrowUp, ArrowDown, GripVertical,
-  FileText, Upload, Trash2, BadgeCheck, Send, MessageSquare,
+  FileText, Upload, Trash2, BadgeCheck, Send, MessageSquare, ImageIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -832,7 +832,286 @@ const emptyForm = (): EntryForm => ({
   pro_tips:            "",
 });
 
-type Tab = "entries" | "documents" | "verified";
+// ── Component Images tab ──────────────────────────────────────────────────────
+
+function ComponentImagesTab() {
+  const [images, setImages]       = useState<RepairImage[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]         = useState("");
+  const [deleting, setDeleting]   = useState<string | null>(null);
+  const [lightbox, setLightbox]   = useState<RepairImage | null>(null);
+  const [editing, setEditing]     = useState<RepairImage | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Upload form state
+  const [title, setTitle]               = useState("");
+  const [make, setMake]                 = useState("");
+  const [assetCategory, setAssetCategory] = useState("");
+  const [tagsInput, setTagsInput]       = useState("");
+
+  useEffect(() => {
+    api.listRepairImages()
+      .then(setImages)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !title.trim()) {
+      setError("Please enter a title before selecting an image.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setUploading(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("title", title.trim());
+      formData.append("make", make.trim());
+      formData.append("asset_category", assetCategory.trim());
+      formData.append("tags", tagsInput);
+      const created = await api.uploadRepairImage(formData);
+      setImages((prev) => [...prev, created]);
+      setTitle(""); setMake(""); setAssetCategory(""); setTagsInput("");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this image?")) return;
+    setDeleting(id);
+    try {
+      await api.deleteRepairImage(id);
+      setImages((prev) => prev.filter((img) => img.id !== id));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editing) return;
+    try {
+      const updated = await api.updateRepairImage(editing.id, {
+        title: editing.title,
+        make: editing.make,
+        asset_category: editing.asset_category,
+        tags: editing.tags,
+      });
+      setImages((prev) => prev.map((img) => img.id === updated.id ? updated : img));
+      setEditing(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    }
+  }
+
+  const grouped = images.reduce<Record<string, RepairImage[]>>((acc, img) => {
+    const key = img.make?.trim() || "General";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(img);
+    return acc;
+  }, {});
+  const manufacturers = Object.keys(grouped).sort((a, b) =>
+    a === "General" ? 1 : b === "General" ? -1 : a.localeCompare(b)
+  );
+
+  return (
+    <div>
+      {/* Upload form */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6">
+        <p className="text-sm font-medium text-slate-700 mb-3">Add Component Image</p>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <input
+            type="text"
+            placeholder="Title (e.g. TurboChef Triac Relay Board) *"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={inputClass}
+          />
+          <input
+            type="text"
+            placeholder="Tags — comma separated (relay, board, power)"
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            className={inputClass}
+          />
+          <input
+            type="text"
+            placeholder="Manufacturer (e.g. TurboChef)"
+            value={make}
+            onChange={(e) => setMake(e.target.value)}
+            className={inputClass}
+          />
+          <input
+            type="text"
+            placeholder="Equipment category (e.g. Conveyor Oven)"
+            value={assetCategory}
+            onChange={(e) => setAssetCategory(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+          <button
+            onClick={() => {
+              if (!title.trim()) { setError("Enter a title first."); return; }
+              setError("");
+              fileInputRef.current?.click();
+            }}
+            disabled={uploading}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</> : <><Upload className="w-4 h-4" /> Upload Image</>}
+          </button>
+          <p className="text-xs text-slate-400">JPG, PNG, WEBP. The AI will suggest tapping component names to view these images.</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
+          <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20 text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+        </div>
+      ) : images.length === 0 ? (
+        <div className="text-center py-20 text-slate-400">
+          <ImageIcon className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No component images yet</p>
+          <p className="text-sm mt-1">Upload images of boards, relays, sensors, and connectors so techs can identify them in the field.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {manufacturers.map((mfr) => (
+            <div key={mfr}>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2 px-1">{mfr}</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {grouped[mfr].map((img) => (
+                  <div key={img.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden group relative">
+                    <button
+                      className="w-full block"
+                      onClick={() => setLightbox(img)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt={img.title}
+                        className="w-full h-36 object-cover bg-slate-100"
+                      />
+                    </button>
+                    <div className="p-2.5">
+                      <p className="text-xs font-medium text-slate-800 truncate">{img.title}</p>
+                      {img.tags.length > 0 && (
+                        <p className="text-xs text-slate-400 truncate mt-0.5">{img.tags.join(", ")}</p>
+                      )}
+                    </div>
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => setEditing({ ...img })}
+                        className="bg-white rounded-lg shadow p-1 text-slate-500 hover:text-blue-600"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(img.id)}
+                        disabled={deleting === img.id}
+                        className="bg-white rounded-lg shadow p-1 text-slate-500 hover:text-red-600"
+                      >
+                        {deleting === img.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="bg-white rounded-2xl overflow-hidden max-w-lg w-full shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightbox.url} alt={lightbox.title} className="w-full max-h-96 object-contain bg-slate-100" />
+            <div className="p-4">
+              <p className="font-semibold text-slate-800">{lightbox.title}</p>
+              {lightbox.make && <p className="text-sm text-slate-500 mt-0.5">{lightbox.make}{lightbox.asset_category ? ` · ${lightbox.asset_category}` : ""}</p>}
+              {lightbox.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {lightbox.tags.map((t) => (
+                    <span key={t} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{t}</span>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setLightbox(null)} className="mt-4 text-sm text-slate-500 hover:text-slate-700">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-3">
+            <p className="font-semibold text-slate-800 mb-1">Edit Image</p>
+            <input
+              type="text"
+              value={editing.title}
+              onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+              placeholder="Title"
+              className={inputClass}
+            />
+            <input
+              type="text"
+              value={editing.make}
+              onChange={(e) => setEditing({ ...editing, make: e.target.value })}
+              placeholder="Manufacturer"
+              className={inputClass}
+            />
+            <input
+              type="text"
+              value={editing.asset_category}
+              onChange={(e) => setEditing({ ...editing, asset_category: e.target.value })}
+              placeholder="Equipment category"
+              className={inputClass}
+            />
+            <input
+              type="text"
+              value={editing.tags.join(", ")}
+              onChange={(e) => setEditing({ ...editing, tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })}
+              placeholder="Tags (comma separated)"
+              className={inputClass}
+            />
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setEditing(null)} className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2">Cancel</button>
+              <button onClick={handleSaveEdit} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Tab = "entries" | "documents" | "verified" | "images";
 
 export default function KnowledgePage() {
   const { user } = useAuth();
@@ -997,9 +1276,23 @@ export default function KnowledgePage() {
             <BadgeCheck className="w-4 h-4" /> ORS Verified Answers
           </span>
         </button>
+        <button
+          onClick={() => setTab("images")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            tab === "images"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" /> Component Images
+          </span>
+        </button>
       </div>
 
-      {tab === "verified" ? (
+      {tab === "images" ? (
+        <ComponentImagesTab />
+      ) : tab === "verified" ? (
         <VerifiedAnswersTab />
       ) : tab === "documents" ? (
         <DocumentsTab />

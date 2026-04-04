@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from .models import (
     Asset, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
-    PartsApproval, PartRequestUrgency, PartUsed, PricingConfig, RepairDocument,
+    PartsApproval, PartRequestUrgency, PartUsed, PricingConfig, RepairDocument, RepairImage,
     ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset, TimeEntry, UserProfile,
     WorkImage, SymptomCodeEntry,
 )
@@ -574,6 +574,20 @@ class VerifiedAnswerSerializer(serializers.ModelSerializer):
 
     def get_is_embedded(self, obj):
         return obj.embedding is not None
+
+
+class RepairImageSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = RepairImage
+        fields = ["id", "title", "url", "tags", "make", "asset_category", "uploaded_by", "uploaded_by_name", "created_at"]
+        read_only_fields = ["uploaded_by", "url"]
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return None
 
 
 class CloseTicketSerializer(serializers.Serializer):

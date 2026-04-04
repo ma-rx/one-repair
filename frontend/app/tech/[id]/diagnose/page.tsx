@@ -1,13 +1,71 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api, Ticket } from "@/lib/api";
-import { ArrowLeft, Bot, Send, Loader2 } from "lucide-react";
+import { api, RepairImage, Ticket } from "@/lib/api";
+import { ArrowLeft, Bot, Send, Loader2, X } from "lucide-react";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+// Cache of term → image (null means searched, no result)
+type ImageCache = Record<string, RepairImage | null>;
+
+function parseSegments(text: string): Array<{ type: "text" | "term"; value: string }> {
+  const segments: Array<{ type: "text" | "term"; value: string }> = [];
+  const regex = /\[\[([^\]]+)\]\]/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) segments.push({ type: "text", value: text.slice(last, m.index) });
+    segments.push({ type: "term", value: m[1] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ type: "text", value: text.slice(last) });
+  return segments;
+}
+
+function MessageBubble({
+  message,
+  imageCache,
+  onTermClick,
+}: {
+  message: ChatMessage;
+  imageCache: ImageCache;
+  onTermClick: (term: string) => void;
+}) {
+  if (message.role === "user") {
+    return <p className="whitespace-pre-wrap">{message.content}</p>;
+  }
+
+  const segments = parseSegments(message.content);
+  return (
+    <p className="whitespace-pre-wrap">
+      {segments.map((seg, i) => {
+        if (seg.type === "text") return <span key={i}>{seg.value}</span>;
+        const hasImage = imageCache[seg.value] !== undefined && imageCache[seg.value] !== null;
+        if (imageCache[seg.value] === undefined) {
+          // Still loading or not yet searched — render plain
+          return <span key={i}>{seg.value}</span>;
+        }
+        if (!hasImage) {
+          // Searched, no image found — render plain
+          return <span key={i}>{seg.value}</span>;
+        }
+        return (
+          <button
+            key={i}
+            onClick={() => onTermClick(seg.value)}
+            className="text-blue-600 underline underline-offset-2 font-medium hover:text-blue-800 transition-colors"
+          >
+            {seg.value}
+          </button>
+        );
+      })}
+    </p>
+  );
 }
 
 export default function DiagnoseChatPage() {
@@ -19,8 +77,33 @@ export default function DiagnoseChatPage() {
   const [input, setInput]     = useState("");
   const [sending, setSending] = useState(false);
   const [loadingTicket, setLoadingTicket] = useState(true);
+  const [imageCache, setImageCache] = useState<ImageCache>({});
+  const [lightboxImage, setLightboxImage] = useState<RepairImage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const lookupTerms = useCallback(async (text: string) => {
+    const terms = Array.from(new Set(
+      [...text.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1])
+    ));
+    if (terms.length === 0) return;
+    const uncached = terms.filter((t) => !(t in imageCache));
+    if (uncached.length === 0) return;
+
+    // Mark as "searching" (undefined → being looked up)
+    const results: ImageCache = {};
+    await Promise.all(
+      uncached.map(async (term) => {
+        try {
+          const found = await api.searchRepairImages(term);
+          results[term] = found.length > 0 ? found[0] : null;
+        } catch {
+          results[term] = null;
+        }
+      })
+    );
+    setImageCache((prev) => ({ ...prev, ...results }));
+  }, [imageCache]);
 
   useEffect(() => {
     api.getTicket(id)
@@ -58,7 +141,9 @@ export default function DiagnoseChatPage() {
         model_number:   ticket.asset_model_number,
         store_name:     ticket.store_name,
       });
-      setMessages([...updated, { role: "assistant", content: reply }]);
+      const assistantMsg: ChatMessage = { role: "assistant", content: reply };
+      setMessages([...updated, assistantMsg]);
+      lookupTerms(reply);
     } catch {
       setMessages([...updated, {
         role: "assistant",
@@ -130,7 +215,11 @@ export default function DiagnoseChatPage() {
                   : "bg-white text-slate-800 rounded-bl-sm border border-slate-200 shadow-sm"
               }`}
             >
-              <p className="whitespace-pre-wrap">{m.content}</p>
+              <MessageBubble
+                message={m}
+                imageCache={imageCache}
+                onTermClick={(term) => setLightboxImage(imageCache[term] ?? null)}
+              />
             </div>
           </div>
         ))}
@@ -176,6 +265,35 @@ export default function DiagnoseChatPage() {
         </div>
         <p className="text-xs text-slate-400 text-center mt-2">Enter to send · Shift+Enter for new line</p>
       </div>
+
+      {/* Image lightbox */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="bg-white rounded-2xl overflow-hidden max-w-sm w-full shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightboxImage.url} alt={lightboxImage.title} className="w-full max-h-72 object-contain bg-slate-100" />
+            <div className="p-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-800 text-sm">{lightboxImage.title}</p>
+                {(lightboxImage.make || lightboxImage.asset_category) && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {[lightboxImage.make, lightboxImage.asset_category].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setLightboxImage(null)} className="text-slate-400 hover:text-slate-600 shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -451,6 +451,30 @@ export const api = {
     }),
   deleteRepairDocument: (id: string) =>
     request<void>(`/repair-documents/${id}/`, { method: "DELETE" }),
+
+  // Repair Images
+  listRepairImages: (make?: string) =>
+    request<RepairImage[]>(`/repair-images/${make ? `?make=${encodeURIComponent(make)}` : ""}`),
+  uploadRepairImage: (formData: FormData) => {
+    const token = getAccessToken();
+    return fetch(`${BASE}/repair-images/upload/`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Upload failed: ${res.status}`);
+      }
+      return res.json() as Promise<RepairImage>;
+    });
+  },
+  updateRepairImage: (id: string, body: Partial<RepairImage>) =>
+    request<RepairImage>(`/repair-images/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteRepairImage: (id: string) =>
+    request<void>(`/repair-images/${id}/`, { method: "DELETE" }),
+  searchRepairImages: (q: string) =>
+    request<RepairImage[]>(`/repair-images/search/?q=${encodeURIComponent(q)}`),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -958,5 +982,17 @@ export interface RepairDocument {
   uploaded_by: number | null;
   uploaded_by_name: string | null;
   is_embedded: boolean;
+  created_at: string;
+}
+
+export interface RepairImage {
+  id: string;
+  title: string;
+  url: string;
+  tags: string[];
+  make: string;
+  asset_category: string;
+  uploaded_by: number | null;
+  uploaded_by_name: string | null;
   created_at: string;
 }

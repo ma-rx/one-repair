@@ -23,7 +23,7 @@ from rest_framework.parsers import MultiPartParser
 from .models import (
     Asset, AssetStatus, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part,
     PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, RepairDocument,
-    RepairDocumentChunk, ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset,
+    RepairDocumentChunk, RepairImage, ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset,
     TicketStatus, TimeEntry, UserRole, VerifiedAnswer, WorkImage, SymptomCodeEntry,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
@@ -32,7 +32,7 @@ from .serializers import (
     CreateUserSerializer, DistrictManagerSerializer, EquipmentModelSerializer, GenerateInvoiceSerializer,
     KnowledgeEntrySerializer,
     OrganizationSerializer, PartsApprovalSerializer, PartRequestSerializer, PartSerializer,
-    PricingConfigSerializer, RepairDocumentSerializer, ResolutionCodeEntrySerializer,
+    PricingConfigSerializer, RepairDocumentSerializer, RepairImageSerializer, ResolutionCodeEntrySerializer,
     SaveProgressSerializer, ServiceReportSerializer,
     StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
     TicketSerializer, TimeEntrySerializer, UserSerializer, VerifiedAnswerSerializer, WorkImageSerializer,
@@ -2014,7 +2014,8 @@ Guidelines:
 - Keep responses SHORT — the tech is on their phone in the field
 - Be direct and practical, no filler phrases
 - When diagnosing, give clear numbered steps and list any parts needed with SKUs if known
-- Mention safety cautions when relevant"""
+- Mention safety cautions when relevant
+- When you reference a physical component that a tech might need to visually identify (e.g. a board, relay, sensor, fuse, or connector), wrap its name in double square brackets like [[triac relay board]] so the tech can tap it to see an image"""
 
         if verified_answer:
             system_prompt += (
@@ -2394,3 +2395,77 @@ class VerifiedAnswerViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.warning("Alias generation failed for '%s': %s", question, e)
             return []
+
+
+# ── Repair Images ─────────────────────────────────────────────────────────────
+
+class RepairImageViewSet(viewsets.ModelViewSet):
+    serializer_class   = RepairImageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = RepairImage.objects.all()
+        make = self.request.query_params.get("make")
+        if make:
+            qs = qs.filter(make__iexact=make)
+        return qs
+
+    @action(detail=False, methods=["post"], url_path="upload", parser_classes=[MultiPartParser])
+    def upload(self, request):
+        image_file = request.FILES.get("image")
+        if not image_file:
+            return Response({"detail": "No image file provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        title          = request.data.get("title", "").strip()
+        make           = request.data.get("make", "").strip()
+        asset_category = request.data.get("asset_category", "").strip()
+        raw_tags       = request.data.get("tags", "")
+        tags = [t.strip() for t in raw_tags.split(",") if t.strip()] if raw_tags else []
+
+        if not title:
+            return Response({"detail": "title is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from decouple import config as env
+        supabase_url = env("SUPABASE_URL", default="")
+        service_key  = env("SUPABASE_SERVICE_KEY", default="")
+
+        if not supabase_url or not service_key:
+            return Response({"detail": "Image storage not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        ext  = image_file.name.rsplit(".", 1)[-1].lower() if "." in image_file.name else "jpg"
+        path = f"{uuid_module.uuid4()}.{ext}"
+
+        upload_resp = http_requests.post(
+            f"{supabase_url}/storage/v1/object/repair-images/{path}",
+            data=image_file.read(),
+            headers={
+                "Authorization": f"Bearer {service_key}",
+                "Content-Type": image_file.content_type or "image/jpeg",
+            },
+        )
+
+        if upload_resp.status_code not in (200, 201):
+            logger.error("Repair image upload failed: %s %s", upload_resp.status_code, upload_resp.text)
+            return Response({"detail": "Upload to storage failed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        public_url = f"{supabase_url}/storage/v1/object/public/repair-images/{path}"
+        image = RepairImage.objects.create(
+            title=title,
+            url=public_url,
+            tags=tags,
+            make=make,
+            asset_category=asset_category,
+            uploaded_by=request.user,
+        )
+        return Response(RepairImageSerializer(image).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"], url_path="search")
+    def search(self, request):
+        q = request.query_params.get("q", "").strip().lower()
+        if not q:
+            return Response([])
+        from django.db.models import Q as DQ
+        results = RepairImage.objects.filter(
+            DQ(title__icontains=q) | DQ(tags__icontains=q)
+        )[:5]
+        return Response(RepairImageSerializer(results, many=True).data)
