@@ -128,6 +128,7 @@ export default function DispatchPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Ticket #</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Asset</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Store</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Issue</th>
@@ -145,6 +146,11 @@ export default function DispatchPage() {
                   className="border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
                   onClick={() => window.location.href = `/dispatch/${t.id}`}
                 >
+                  <td className="px-6 py-4">
+                    <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                      {t.ticket_number || "—"}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 font-medium text-slate-800">{t.asset_name}</td>
                   <td className="px-6 py-4 text-slate-500">{t.store_name}</td>
                   <td className="px-6 py-4 text-slate-500 max-w-xs truncate">
