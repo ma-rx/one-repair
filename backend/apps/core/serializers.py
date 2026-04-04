@@ -4,10 +4,9 @@ from rest_framework import serializers
 
 from .models import (
     Asset, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part, PartRequest,
-    PartsApproval,
-    PartRequestUrgency, PartUsed, PricingConfig, ResolutionCodeEntry,
-    ServiceReport, Store, Ticket, TicketAsset, TimeEntry, UserProfile, WorkImage,
-    SymptomCodeEntry,
+    PartsApproval, PartRequestUrgency, PartUsed, PricingConfig, RepairDocument,
+    ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset, TimeEntry, UserProfile,
+    WorkImage, SymptomCodeEntry,
 )
 
 
@@ -538,6 +537,20 @@ class ResolutionCodeEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = ResolutionCodeEntry
         fields = ["id", "code", "label", "make", "asset_category", "is_active", "sort_order", "created_at", "updated_at"]
+
+
+class RepairDocumentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RepairDocument
+        fields = ["id", "title", "content", "uploaded_by", "uploaded_by_name", "created_at"]
+        read_only_fields = ["uploaded_by"]
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return None
 
 
 class CloseTicketSerializer(serializers.Serializer):

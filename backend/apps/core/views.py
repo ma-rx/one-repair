@@ -18,9 +18,9 @@ from rest_framework.parsers import MultiPartParser
 
 from .models import (
     Asset, AssetStatus, DistrictManager, EquipmentModel, KnowledgeEntry, Organization, Part,
-    PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, ResolutionCodeEntry,
-    ServiceReport, Store, Ticket, TicketAsset, TicketStatus, TimeEntry, UserRole,
-    WorkImage, SymptomCodeEntry,
+    PartRequest, PartsApproval, PartsApprovalStatus, PartUsed, PricingConfig, RepairDocument,
+    ResolutionCodeEntry, ServiceReport, Store, Ticket, TicketAsset, TicketStatus, TimeEntry,
+    UserRole, WorkImage, SymptomCodeEntry,
 )
 from .permissions import IsClientAdmin, IsClientAdminOrManager, IsORSAdmin
 from .serializers import (
@@ -28,8 +28,8 @@ from .serializers import (
     CreateUserSerializer, DistrictManagerSerializer, EquipmentModelSerializer, GenerateInvoiceSerializer,
     KnowledgeEntrySerializer,
     OrganizationSerializer, PartsApprovalSerializer, PartRequestSerializer, PartSerializer,
-    PricingConfigSerializer, ResolutionCodeEntrySerializer, SaveProgressSerializer,
-    ServiceReportSerializer,
+    PricingConfigSerializer, RepairDocumentSerializer, ResolutionCodeEntrySerializer,
+    SaveProgressSerializer, ServiceReportSerializer,
     StoreSerializer, SymptomCodeEntrySerializer, TicketAssetSerializer,
     TicketSerializer, TimeEntrySerializer, UserSerializer, WorkImageSerializer,
 )
@@ -1928,15 +1928,37 @@ class DiagnosticChatView(APIView):
                     if float(k.distance) > 0.45:
                         continue
                     line = f"Knowledge — {k.make} {k.model_number}".strip()
-                    if k.cause_summary:
+                    if k.symptom_description:
+                        line += f": {k.symptom_description}"
+                    elif k.cause_summary:
                         line += f": {k.cause_summary}"
-                    if k.procedure:
-                        line += f" | Procedure: {k.procedure}"
+                    if k.diagnostic_steps:
+                        steps = "; ".join(
+                            f"Step {i+1}: {s.get('action','')} → {s.get('next_action','')}"
+                            for i, s in enumerate(k.diagnostic_steps)
+                            if s.get("action")
+                        )
+                        if steps:
+                            line += f" | Steps: {steps}"
                     if k.parts_commonly_used:
                         line += f" | Common parts: {k.parts_commonly_used}"
-                    if k.pro_tips:
-                        line += f" | Tips: {k.pro_tips}"
                     rag_lines.append(line)
+
+                # Repair documents (Plaud summaries, tech support transcripts)
+                doc_results = (
+                    RepairDocument.objects
+                    .filter(embedding__isnull=False)
+                    .annotate(distance=CosineDistance("embedding", query_vec))
+                    .order_by("distance")[:3]
+                )
+                for doc in doc_results:
+                    if float(doc.distance) > 0.45:
+                        continue
+                    # Truncate long documents to avoid bloating the prompt
+                    snippet = doc.content[:600].strip()
+                    if len(doc.content) > 600:
+                        snippet += "…"
+                    rag_lines.append(f"Support transcript ({doc.title}): {snippet}")
 
         equipment_info = " ".join(filter(None, [make, model_number])) or asset_name or "unknown equipment"
 
@@ -2171,6 +2193,61 @@ class KnowledgeEntryViewSet(viewsets.ModelViewSet):
         entry.is_verified = True
         entry.save(update_fields=["is_verified"])
         return Response(KnowledgeEntrySerializer(entry).data)
+
+
+# ── Repair Documents ───────────────────────────────────────────────────────────
+
+class RepairDocumentViewSet(viewsets.ModelViewSet):
+    serializer_class   = RepairDocumentSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names  = ["get", "post", "delete", "head", "options"]
+
+    def get_queryset(self):
+        return RepairDocument.objects.all()
+
+    def perform_create(self, serializer):
+        doc = serializer.save(uploaded_by=self.request.user)
+        try:
+            from .services.embeddings import get_embedding
+            vec = get_embedding(doc.content, input_type="document")
+            if vec:
+                doc.embedding = vec
+                doc.save(update_fields=["embedding"])
+        except Exception:
+            pass
+
+    @action(detail=False, methods=["post"], url_path="bulk-upload")
+    def bulk_upload(self, request):
+        documents = request.data.get("documents", [])
+        if not documents or not isinstance(documents, list):
+            return Response({"detail": "documents list required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .services.embeddings import get_embedding
+
+        created = []
+        errors  = []
+        for item in documents:
+            title   = (item.get("title") or "Untitled").strip()[:255]
+            content = (item.get("content") or "").strip()
+            if not content:
+                errors.append(f"{title}: empty content, skipped")
+                continue
+            doc = RepairDocument.objects.create(
+                title=title,
+                content=content,
+                uploaded_by=request.user,
+            )
+            try:
+                vec = get_embedding(content, input_type="document")
+                if vec:
+                    doc.embedding = vec
+                    doc.save(update_fields=["embedding"])
+            except Exception:
+                pass
+            created.append(RepairDocumentSerializer(doc).data)
+
+        return Response({"created": len(created), "errors": errors, "documents": created},
+                        status=status.HTTP_201_CREATED)
 
 
 # ── SymptomCodeEntry / ResolutionCodeEntry ─────────────────────────────────────

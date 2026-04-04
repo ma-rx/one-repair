@@ -431,6 +431,16 @@ export const api = {
     context: { asset_name: string; asset_category: string; make: string; model_number: string; store_name: string }
   ): Promise<{ reply: string }> =>
     request("/diagnostic-chat/", { method: "POST", body: JSON.stringify({ messages, context }) }),
+
+  // Repair Documents
+  listRepairDocuments: () => request<RepairDocument[]>("/repair-documents/"),
+  bulkUploadDocuments: (documents: { title: string; content: string }[]) =>
+    request<{ created: number }>("/repair-documents/bulk-upload/", {
+      method: "POST",
+      body: JSON.stringify({ documents }),
+    }),
+  deleteRepairDocument: (id: string) =>
+    request<void>(`/repair-documents/${id}/`, { method: "DELETE" }),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -914,4 +924,13 @@ export interface DiagnosticSearchResult {
   diagnosis: Diagnosis | null;
   tickets: DiagnosticTicketResult[];
   knowledge: DiagnosticKnowledgeResult[];
+}
+
+export interface RepairDocument {
+  id: string;
+  title: string;
+  content: string;
+  uploaded_by: number | null;
+  uploaded_by_name: string | null;
+  created_at: string;
 }

@@ -646,3 +646,19 @@ class KnowledgeEntry(models.Model):
 
     def __str__(self):
         return f"KnowledgeEntry: {self.symptom_description or self.symptom_code or 'Entry'} ({self.asset_category})"
+
+
+class RepairDocument(models.Model):
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title       = models.CharField(max_length=255)
+    content     = models.TextField()
+    uploaded_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="repair_documents")
+    embedding   = VectorField(dimensions=1024, null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title

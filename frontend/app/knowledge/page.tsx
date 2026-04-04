@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import Modal from "@/components/Modal";
-import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part } from "@/lib/api";
+import { api, DiagnosticStep, EquipmentModel, KnowledgeEntry, Part, RepairDocument } from "@/lib/api";
 import { AssetCategoryLabels, KnowledgeDifficultyLabels, SymptomCodeLabels } from "@/types/enums";
 import {
   BookOpen, Plus, Pencil, Loader2, CheckCircle2,
   ShieldCheck, AlertCircle, ChevronDown, X, ArrowUp, ArrowDown, GripVertical,
+  FileText, Upload, Trash2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -205,6 +206,146 @@ function StepBuilder({ steps, onChange }: {
   );
 }
 
+// ── Support Documents tab ─────────────────────────────────────────────────────
+
+function DocumentsTab() {
+  const [docs, setDocs]         = useState<RepairDocument[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]       = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.listRepairDocuments()
+      .then(setDocs)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    setError("");
+
+    try {
+      const documents = await Promise.all(
+        files.map((file) =>
+          new Promise<{ title: string; content: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({
+              title: file.name.replace(/\.txt$/i, ""),
+              content: reader.result as string,
+            });
+            reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+            reader.readAsText(file);
+          })
+        )
+      );
+
+      await api.bulkUploadDocuments(documents);
+      const updated = await api.listRepairDocuments();
+      setDocs(updated);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this document? The AI will no longer be able to reference it.")) return;
+    setDeleting(id);
+    try {
+      await api.deleteRepairDocument(id);
+      setDocs((prev) => prev.filter((d) => d.id !== id));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-sm text-slate-500">
+          Upload Plaud summary transcripts (.txt). The AI diagnostic tool will reference these when techs ask questions in the field.
+        </p>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt"
+            multiple
+            className="hidden"
+            onChange={handleFiles}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            {uploading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
+            ) : (
+              <><Upload className="w-4 h-4" /> Upload .txt Files</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
+          <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20 text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+        </div>
+      ) : docs.length === 0 ? (
+        <div className="text-center py-20 text-slate-400">
+          <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No documents uploaded yet</p>
+          <p className="text-sm mt-1">Upload Plaud summary .txt files to give the AI field knowledge.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {docs.map((doc) => (
+            <div key={doc.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-4">
+              <FileText className="w-5 h-5 text-slate-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {doc.content.length.toLocaleString()} characters
+                  {doc.uploaded_by_name ? ` · Uploaded by ${doc.uploaded_by_name}` : ""}
+                  {" · "}{new Date(doc.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                onClick={() => handleDelete(doc.id)}
+                disabled={deleting === doc.id}
+                className="text-slate-400 hover:text-red-600 transition-colors shrink-0 p-1"
+              >
+                {deleting === doc.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type EntryForm = {
@@ -235,9 +376,13 @@ const emptyForm = (): EntryForm => ({
   pro_tips:            "",
 });
 
+type Tab = "entries" | "documents";
+
 export default function KnowledgePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ORS_ADMIN";
+
+  const [tab, setTab] = useState<Tab>("entries");
 
   const [entries, setEntries]             = useState<KnowledgeEntry[]>([]);
   const [equipmentModels, setEquipmentModels] = useState<EquipmentModel[]>([]);
@@ -346,223 +491,259 @@ export default function KnowledgePage() {
 
   return (
     <DashboardShell>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Knowledge Base</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Diagnostic pathways for AI-assisted field repairs</p>
+          <p className="text-slate-500 text-sm mt-0.5">Diagnostic pathways and support documents for AI-assisted field repairs</p>
         </div>
+        {tab === "entries" && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Entry
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-slate-200">
         <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+          onClick={() => setTab("entries")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            tab === "entries"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
         >
-          <Plus className="w-4 h-4" /> Add Entry
+          <span className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" /> Diagnostic Entries
+          </span>
+        </button>
+        <button
+          onClick={() => setTab("documents")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            tab === "documents"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <FileText className="w-4 h-4" /> Support Documents
+          </span>
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <select
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-        >
-          <option value="">All Equipment Types</option>
-          {ASSET_CATEGORIES.map((c) => (
-            <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
-          ))}
-        </select>
+      {tab === "documents" ? (
+        <DocumentsTab />
+      ) : (
+        <>
+          {/* Filters */}
+          <div className="flex items-center gap-3 mb-5 flex-wrap">
+            <select
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+            >
+              <option value="">All Equipment Types</option>
+              {ASSET_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{AssetCategoryLabels[c] ?? c}</option>
+              ))}
+            </select>
 
-        <select
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={filterSymptom}
-          onChange={(e) => setFilterSymptom(e.target.value)}
-        >
-          <option value="">All Symptom Categories</option>
-          {SYMPTOM_CODES.map((c) => (
-            <option key={c} value={c}>{SymptomCodeLabels[c] ?? c}</option>
-          ))}
-        </select>
+            <select
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filterSymptom}
+              onChange={(e) => setFilterSymptom(e.target.value)}
+            >
+              <option value="">All Symptom Categories</option>
+              {SYMPTOM_CODES.map((c) => (
+                <option key={c} value={c}>{SymptomCodeLabels[c] ?? c}</option>
+              ))}
+            </select>
 
-        {(filterCategory || filterSymptom) && (
-          <button onClick={() => { setFilterCategory(""); setFilterSymptom(""); }}
-            className="text-sm text-slate-400 hover:text-slate-600">
-            Clear filters
-          </button>
-        )}
+            {(filterCategory || filterSymptom) && (
+              <button onClick={() => { setFilterCategory(""); setFilterSymptom(""); }}
+                className="text-sm text-slate-400 hover:text-slate-600">
+                Clear filters
+              </button>
+            )}
 
-        <span className="text-slate-400 text-sm ml-auto">
-          {entries.length} entr{entries.length !== 1 ? "ies" : "y"}
-        </span>
-      </div>
+            <span className="text-slate-400 text-sm ml-auto">
+              {entries.length} entr{entries.length !== 1 ? "ies" : "y"}
+            </span>
+          </div>
 
-      <div className="flex gap-6">
-        {/* List */}
-        <div className="flex-1 min-w-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-20 text-slate-400">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
-            </div>
-          ) : error ? (
-            <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
-              <AlertCircle className="w-4 h-4 shrink-0" /> {error}
-            </div>
-          ) : entries.length === 0 ? (
-            <div className="text-center py-20 text-slate-400">
-              <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">No entries yet</p>
-              <p className="text-sm mt-1">Add the first knowledge base entry to get started.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  onClick={() => setSelected(selected?.id === entry.id ? null : entry)}
-                  className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${
-                    selected?.id === entry.id
-                      ? "border-blue-400 ring-1 ring-blue-200"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                        <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                          {AssetCategoryLabels[entry.asset_category] ?? entry.asset_category}
-                        </span>
-                        {(entry.make || entry.model_number) && (
-                          <span className="text-xs text-slate-400">
-                            {[entry.make, entry.model_number].filter(Boolean).join(" · ")}
-                          </span>
-                        )}
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${difficultyStyle[entry.difficulty] ?? "bg-slate-100 text-slate-600"}`}>
-                          {KnowledgeDifficultyLabels[entry.difficulty] ?? entry.difficulty}
-                        </span>
-                        {entry.is_verified && (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                            <ShieldCheck className="w-3.5 h-3.5" /> Verified
-                          </span>
-                        )}
-                      </div>
+          <div className="flex gap-6">
+            {/* List */}
+            <div className="flex-1 min-w-0">
+              {loading ? (
+                <div className="flex items-center justify-center py-20 text-slate-400">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+                </div>
+              ) : entries.length === 0 ? (
+                <div className="text-center py-20 text-slate-400">
+                  <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">No entries yet</p>
+                  <p className="text-sm mt-1">Add the first knowledge base entry to get started.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {entries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      onClick={() => setSelected(selected?.id === entry.id ? null : entry)}
+                      className={`bg-white rounded-xl border p-4 cursor-pointer transition-all ${
+                        selected?.id === entry.id
+                          ? "border-blue-400 ring-1 ring-blue-200"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                            <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                              {AssetCategoryLabels[entry.asset_category] ?? entry.asset_category}
+                            </span>
+                            {(entry.make || entry.model_number) && (
+                              <span className="text-xs text-slate-400">
+                                {[entry.make, entry.model_number].filter(Boolean).join(" · ")}
+                              </span>
+                            )}
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded ${difficultyStyle[entry.difficulty] ?? "bg-slate-100 text-slate-600"}`}>
+                              {KnowledgeDifficultyLabels[entry.difficulty] ?? entry.difficulty}
+                            </span>
+                            {entry.is_verified && (
+                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                                <ShieldCheck className="w-3.5 h-3.5" /> Verified
+                              </span>
+                            )}
+                          </div>
 
-                      {entry.symptom_description ? (
-                        <p className="text-sm font-medium text-slate-800 line-clamp-2">{entry.symptom_description}</p>
-                      ) : entry.symptom_code ? (
-                        <p className="text-sm font-medium text-slate-800">{SymptomCodeLabels[entry.symptom_code] ?? entry.symptom_code}</p>
-                      ) : null}
+                          {entry.symptom_description ? (
+                            <p className="text-sm font-medium text-slate-800 line-clamp-2">{entry.symptom_description}</p>
+                          ) : entry.symptom_code ? (
+                            <p className="text-sm font-medium text-slate-800">{SymptomCodeLabels[entry.symptom_code] ?? entry.symptom_code}</p>
+                          ) : null}
 
-                      <div className="flex items-center gap-3 mt-1.5">
-                        {entry.diagnostic_steps?.length > 0 && (
-                          <span className="text-xs text-slate-400 flex items-center gap-1">
-                            <GripVertical className="w-3 h-3" />
-                            {entry.diagnostic_steps.length} diagnostic step{entry.diagnostic_steps.length !== 1 ? "s" : ""}
-                          </span>
-                        )}
-                        {entry.cause_summary && (
-                          <p className="text-xs text-slate-400 line-clamp-1">{entry.cause_summary}</p>
-                        )}
+                          <div className="flex items-center gap-3 mt-1.5">
+                            {entry.diagnostic_steps?.length > 0 && (
+                              <span className="text-xs text-slate-400 flex items-center gap-1">
+                                <GripVertical className="w-3 h-3" />
+                                {entry.diagnostic_steps.length} diagnostic step{entry.diagnostic_steps.length !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                            {entry.cause_summary && (
+                              <p className="text-xs text-slate-400 line-clamp-1">{entry.cause_summary}</p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEdit(entry); }}
+                          className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openEdit(entry); }}
-                      className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Detail panel */}
-        {selected && (
-          <div className="w-96 shrink-0">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-4 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                      {AssetCategoryLabels[selected.asset_category] ?? selected.asset_category}
-                    </span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${difficultyStyle[selected.difficulty] ?? ""}`}>
-                      {KnowledgeDifficultyLabels[selected.difficulty] ?? selected.difficulty}
-                    </span>
-                  </div>
-                  {selected.symptom_description && (
-                    <p className="font-semibold text-slate-800 text-sm">{selected.symptom_description}</p>
-                  )}
-                  {(selected.make || selected.model_number) && (
-                    <p className="text-xs text-slate-400 mt-0.5">{[selected.make, selected.model_number].filter(Boolean).join(" · ")}</p>
-                  )}
-                </div>
-                {selected.is_verified ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded-full shrink-0">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Verified
-                  </span>
-                ) : isAdmin ? (
-                  <button
-                    onClick={() => handleVerify(selected)}
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full transition-colors shrink-0"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Verify
-                  </button>
-                ) : null}
-              </div>
-
-              {selected.cause_summary && (
-                <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Root Cause</p>
-                  <p className="text-sm text-slate-700">{selected.cause_summary}</p>
-                </section>
               )}
+            </div>
 
-              {selected.diagnostic_steps?.length > 0 && (
-                <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Diagnostic Steps</p>
-                  <div className="space-y-3">
-                    {selected.diagnostic_steps.map((step, i) => (
-                      <div key={i} className="border-l-2 border-blue-200 pl-3">
-                        <p className="text-xs font-semibold text-slate-500 mb-0.5">Step {i + 1}</p>
-                        <p className="text-sm text-slate-800 font-medium">{step.action}</p>
-                        {step.finding && (
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            <span className="font-medium text-amber-600">If:</span> {step.finding}
-                          </p>
-                        )}
-                        {step.next_action && (
-                          <p className="text-xs text-slate-600 mt-0.5">
-                            <span className="font-medium text-blue-600">Then:</span> {step.next_action}
-                          </p>
-                        )}
+            {/* Detail panel */}
+            {selected && (
+              <div className="w-96 shrink-0">
+                <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-4 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                          {AssetCategoryLabels[selected.asset_category] ?? selected.asset_category}
+                        </span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${difficultyStyle[selected.difficulty] ?? ""}`}>
+                          {KnowledgeDifficultyLabels[selected.difficulty] ?? selected.difficulty}
+                        </span>
                       </div>
-                    ))}
+                      {selected.symptom_description && (
+                        <p className="font-semibold text-slate-800 text-sm">{selected.symptom_description}</p>
+                      )}
+                      {(selected.make || selected.model_number) && (
+                        <p className="text-xs text-slate-400 mt-0.5">{[selected.make, selected.model_number].filter(Boolean).join(" · ")}</p>
+                      )}
+                    </div>
+                    {selected.is_verified ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded-full shrink-0">
+                        <ShieldCheck className="w-3.5 h-3.5" /> Verified
+                      </span>
+                    ) : isAdmin ? (
+                      <button
+                        onClick={() => handleVerify(selected)}
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full transition-colors shrink-0"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Verify
+                      </button>
+                    ) : null}
                   </div>
-                </section>
-              )}
 
-              {selected.parts_commonly_used && (
-                <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Parts Commonly Used</p>
-                  <p className="text-sm text-slate-700">{selected.parts_commonly_used}</p>
-                </section>
-              )}
+                  {selected.cause_summary && (
+                    <section>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Root Cause</p>
+                      <p className="text-sm text-slate-700">{selected.cause_summary}</p>
+                    </section>
+                  )}
 
-              {selected.pro_tips && (
-                <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Pro Tips</p>
-                  <p className="text-sm text-amber-700 bg-amber-50 rounded-lg p-3 whitespace-pre-wrap">{selected.pro_tips}</p>
-                </section>
-              )}
+                  {selected.diagnostic_steps?.length > 0 && (
+                    <section>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Diagnostic Steps</p>
+                      <div className="space-y-3">
+                        {selected.diagnostic_steps.map((step, i) => (
+                          <div key={i} className="border-l-2 border-blue-200 pl-3">
+                            <p className="text-xs font-semibold text-slate-500 mb-0.5">Step {i + 1}</p>
+                            <p className="text-sm text-slate-800 font-medium">{step.action}</p>
+                            {step.finding && (
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                <span className="font-medium text-amber-600">If:</span> {step.finding}
+                              </p>
+                            )}
+                            {step.next_action && (
+                              <p className="text-xs text-slate-600 mt-0.5">
+                                <span className="font-medium text-blue-600">Then:</span> {step.next_action}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
 
-              <p className="text-xs text-slate-400 pt-1 border-t border-slate-100">
-                Added by {selected.contributed_by_name ?? "Unknown"} · {new Date(selected.created_at).toLocaleDateString()}
-              </p>
-            </div>
+                  {selected.parts_commonly_used && (
+                    <section>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Parts Commonly Used</p>
+                      <p className="text-sm text-slate-700">{selected.parts_commonly_used}</p>
+                    </section>
+                  )}
+
+                  {selected.pro_tips && (
+                    <section>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Pro Tips</p>
+                      <p className="text-sm text-amber-700 bg-amber-50 rounded-lg p-3 whitespace-pre-wrap">{selected.pro_tips}</p>
+                    </section>
+                  )}
+
+                  <p className="text-xs text-slate-400 pt-1 border-t border-slate-100">
+                    Added by {selected.contributed_by_name ?? "Unknown"} · {new Date(selected.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Modal */}
       <Modal
