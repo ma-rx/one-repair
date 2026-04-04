@@ -259,6 +259,8 @@ export default function TechWorkPage() {
   const [partLines, setPartLines]     = useState<PartLine[]>([]);
   const [neededLines, setNeededLines] = useState<PartNeededLine[]>([]);
   const [submitting, setSubmitting]   = useState(false);
+  const [showNoPartsPrompt, setShowNoPartsPrompt] = useState(false);
+  const [noPartsReason, setNoPartsReason]         = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -386,7 +388,7 @@ export default function TechWorkPage() {
     }
   }
 
-  async function handleMarkComplete() {
+  async function handleMarkComplete(overrideNoPartsReason?: string) {
     if (timeStatus?.is_clocked_in) {
       setError("You are currently clocked in. Please clock out before marking complete.");
       return;
@@ -397,6 +399,14 @@ export default function TechWorkPage() {
     }
     const alreadyComplete = ticket?.status === "COMPLETED" || ticket?.status === "CLOSED";
     const hasParts = neededLines.some((l) => l.mode === "existing" ? !!l.part_id : !!l.part_name.trim());
+    const hasPartsUsed = partLines.some((l) => l.part_id && l.quantity > 0);
+
+    // If no parts used and not already flagged with a reason, show the prompt
+    if (!hasPartsUsed && !hasParts && !alreadyComplete && !overrideNoPartsReason) {
+      setShowNoPartsPrompt(true);
+      return;
+    }
+
     const confirmMsg = alreadyComplete
       ? "Update the service report for this completed job?"
       : hasParts
@@ -425,13 +435,16 @@ export default function TechWorkPage() {
         };
       });
     try {
+      const combinedNotes = overrideNoPartsReason
+        ? `${techNotes ? techNotes + "\n\n" : ""}No parts used — ${overrideNoPartsReason}`
+        : techNotes;
       await api.saveProgress(id, {
         resolution_code: "OTHER",
         labor_cost: null,
         parts_used: partLines.filter((l) => l.part_id && l.quantity > 0),
         parts_needed,
-        tech_notes: techNotes,
-        formatted_report: reportAccepted ? formattedReport : techNotes,
+        tech_notes: combinedNotes,
+        formatted_report: reportAccepted ? formattedReport : combinedNotes,
         manager_on_site: managerOnSite,
         manager_signature: managerSignature,
       });
@@ -817,6 +830,51 @@ export default function TechWorkPage() {
           </div>
         )}
       </div>
+
+      {/* No parts prompt */}
+      {showNoPartsPrompt && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+          <div className="bg-white w-full max-w-md rounded-t-2xl px-6 pt-6 pb-10 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-bold text-slate-800">No parts added</p>
+                <p className="text-slate-500 text-sm">Did you forget to add parts used?</p>
+              </div>
+            </div>
+            <textarea
+              rows={3}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"
+              placeholder="Reason no parts were used (e.g. cleaned filter, adjusted settings, no fault found…)"
+              value={noPartsReason}
+              onChange={(e) => setNoPartsReason(e.target.value)}
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowNoPartsPrompt(false); setNoPartsReason(""); }}
+                className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Back — Add Parts
+              </button>
+              <button
+                onClick={() => {
+                  if (!noPartsReason.trim()) return;
+                  setShowNoPartsPrompt(false);
+                  handleMarkComplete(noPartsReason.trim());
+                }}
+                disabled={!noPartsReason.trim() || submitting}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Submit Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
