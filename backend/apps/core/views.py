@@ -1019,11 +1019,21 @@ class PartsApprovalViewSet(viewsets.ModelViewSet):
                 pr.part.name if pr.part else pr.part_name
                 for pr in pa.part_requests.all()
             )
+            tech_notes = ""
+            latest_report = orig.service_reports.order_by("-created_at").first()
+            if latest_report and latest_report.tech_notes:
+                tech_notes = latest_report.tech_notes
+
+            lines = ["Follow-up: install parts when delivered."]
+            lines.append(f"Parts ordered: {part_names}")
+            if tech_notes:
+                lines.append(f"Tech notes from prior visit: {tech_notes}")
+
             new_ticket = Ticket.objects.create(
                 store=orig.store,
                 asset=orig.asset,
                 asset_description=orig.asset_description,
-                description=f"Parts on order — install when delivered. Parts: {part_names}",
+                description="\n".join(lines),
                 priority=orig.priority,
                 status=TicketStatus.OPEN,
                 opened_by=request.user,
