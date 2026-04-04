@@ -1864,6 +1864,35 @@ Be direct and practical. Steps should be actionable field instructions."""
         return Response({"diagnosis": diagnosis, "tickets": tickets_out, "knowledge": knowledge_out})
 
 
+def _annotate_image_terms(reply: str) -> str:
+    """Wrap RepairImage title/tag matches in [[...]] so the frontend can make them tappable."""
+    import re as _re
+    if not reply:
+        return reply
+    try:
+        images = RepairImage.objects.values_list("title", "tags")
+        for title, tags in images:
+            candidates = [title] + (tags or [])
+            for term in candidates:
+                if not term or len(term) < 3:
+                    continue
+                # Skip if already wrapped anywhere in the reply
+                if f"[[{term.lower()}]]" in reply.lower():
+                    continue
+                if _re.search(_re.escape(term), reply, _re.IGNORECASE):
+                    reply = _re.sub(
+                        r'(?<!\[)(?<!\[\[)\b' + _re.escape(term) + r'\b(?!\])(?!\]\])',
+                        f"[[{term}]]",
+                        reply,
+                        count=1,
+                        flags=_re.IGNORECASE,
+                    )
+                    break  # one wrap per image
+    except Exception as e:
+        logger.warning("_annotate_image_terms failed: %s", e)
+    return reply
+
+
 # ── Diagnostic Chat (conversational AI) ───────────────────────────────────────
 
 class DiagnosticChatView(APIView):
@@ -2041,7 +2070,9 @@ Guidelines:
                 system=system_prompt,
                 messages=valid_messages,
             )
-            return Response({"reply": response.content[0].text.strip()})
+            reply = response.content[0].text.strip()
+            reply = _annotate_image_terms(reply)
+            return Response({"reply": reply})
         except Exception as exc:
             logging.getLogger(__name__).error("DiagnosticChat error: %s", exc)
             return Response({"detail": "AI assistant unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
