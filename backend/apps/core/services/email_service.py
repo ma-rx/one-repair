@@ -60,7 +60,7 @@ def send_invoice_email(to_email: str, service_report, pdf_bytes: bytes) -> bool:
         "attachments": [
             {
                 "filename": f"{invoice_number}.pdf",
-                "content": list(pdf_bytes),
+                "content": base64.b64encode(pdf_bytes).decode("utf-8"),
             }
         ],
     }
@@ -70,4 +70,4 @@ def send_invoice_email(to_email: str, service_report, pdf_bytes: bytes) -> bool:
         return True
     except Exception as exc:
         logger.error("Resend failed for service report %s: %s", service_report.id, exc)
-        return False
+        raise

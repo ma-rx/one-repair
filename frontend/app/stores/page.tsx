@@ -11,7 +11,7 @@ import { MapPin, Plus, Pencil, CheckCircle2, XCircle, Loader2, AlertCircle } fro
 const EMPTY: Partial<Store> = {
   name: "", organization: "", address_line1: "", address_line2: "",
   city: "", state: "", zip_code: "", country: "US", phone: "", email: "", hours: "",
-  district_manager: null, is_active: true,
+  is_active: true,
 };
 
 export default function StoresPage() {
@@ -33,6 +33,7 @@ export default function StoresPage() {
   const [dmModalOpen, setDmModalOpen]     = useState(false);
   const [editingDM, setEditingDM]         = useState<DistrictManager | null>(null);
   const [dmForm, setDmForm]               = useState<Partial<DistrictManager>>({ name: "", phone: "", email: "", organization: "" });
+  const [dmStoreIds, setDmStoreIds]       = useState<string[]>([]);
   const [dmSaving, setDmSaving]           = useState(false);
   const [dmFormError, setDmFormError]     = useState<string | null>(null);
 
@@ -65,8 +66,7 @@ export default function StoresPage() {
       address_line1: store.address_line1, address_line2: store.address_line2,
       city: store.city, state: store.state, zip_code: store.zip_code,
       country: store.country, phone: store.phone, email: store.email,
-      hours: store.hours, district_manager: store.district_manager,
-      is_active: store.is_active,
+      hours: store.hours, is_active: store.is_active,
     });
     setFormError(null);
     setModalOpen(true);
@@ -95,6 +95,7 @@ export default function StoresPage() {
   function openCreateDM() {
     setEditingDM(null);
     setDmForm({ name: "", phone: "", email: "", organization: isORS ? "" : (user?.organization?.id ?? "") });
+    setDmStoreIds([]);
     setDmFormError(null);
     setDmModalOpen(true);
   }
@@ -102,6 +103,7 @@ export default function StoresPage() {
   function openEditDM(dm: DistrictManager) {
     setEditingDM(dm);
     setDmForm({ name: dm.name, phone: dm.phone, email: dm.email, organization: dm.organization });
+    setDmStoreIds(stores.filter((s) => s.district_manager === dm.id).map((s) => s.id));
     setDmFormError(null);
     setDmModalOpen(true);
   }
@@ -111,13 +113,31 @@ export default function StoresPage() {
     setDmSaving(true);
     setDmFormError(null);
     try {
+      let dm: DistrictManager;
       if (editingDM) {
-        const updated = await api.updateDistrictManager(editingDM.id, dmForm);
-        setDMs((prev) => prev.map((d) => d.id === updated.id ? updated : d));
+        dm = await api.updateDistrictManager(editingDM.id, dmForm);
+        setDMs((prev) => prev.map((d) => d.id === dm.id ? dm : d));
       } else {
-        const created = await api.createDistrictManager(dmForm);
-        setDMs((prev) => [...prev, created]);
+        dm = await api.createDistrictManager(dmForm);
+        setDMs((prev) => [...prev, dm]);
       }
+
+      // Sync store assignments: add/remove district_manager on affected stores
+      const prevStoreIds = stores.filter((s) => s.district_manager === dm.id).map((s) => s.id);
+      const toAdd    = dmStoreIds.filter((id) => !prevStoreIds.includes(id));
+      const toRemove = prevStoreIds.filter((id) => !dmStoreIds.includes(id));
+
+      const updates = await Promise.all([
+        ...toAdd.map((id) => api.updateStore(id, { district_manager: dm.id })),
+        ...toRemove.map((id) => api.updateStore(id, { district_manager: null })),
+      ]);
+      if (updates.length > 0) {
+        setStores((prev) => {
+          const map = new Map(updates.map((s) => [s.id, s]));
+          return prev.map((s) => map.get(s.id) ?? s);
+        });
+      }
+
       setDmModalOpen(false);
     } catch (err: any) {
       setDmFormError(err.message || "Failed to save.");
@@ -256,23 +276,30 @@ export default function StoresPage() {
                   {isORS && <th className="text-left px-6 py-3 text-slate-500 font-medium">Organization</th>}
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Phone</th>
                   <th className="text-left px-6 py-3 text-slate-500 font-medium">Email</th>
+                  <th className="text-left px-6 py-3 text-slate-500 font-medium">Stores</th>
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {districtManagers.map((dm) => (
+                {districtManagers.map((dm) => {
+                  const dmStores = stores.filter((s) => s.district_manager === dm.id);
+                  return (
                   <tr key={dm.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-800">{dm.name}</td>
                     {isORS && <td className="px-6 py-4 text-slate-500">{orgs.find((o) => o.id === dm.organization)?.name ?? "—"}</td>}
                     <td className="px-6 py-4 text-slate-500">{dm.phone || "—"}</td>
                     <td className="px-6 py-4 text-slate-500">{dm.email || "—"}</td>
+                    <td className="px-6 py-4 text-slate-500 text-xs">
+                      {dmStores.length === 0 ? <span className="text-slate-300">None</span> : dmStores.map((s) => s.name).join(", ")}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button onClick={() => openEditDM(dm)} className="text-slate-400 hover:text-blue-600 transition-colors">
                         <Pencil className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -373,23 +400,6 @@ export default function StoresPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">District Manager</label>
-            <select
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={(form.district_manager as string) ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, district_manager: e.target.value || null }))}
-            >
-              <option value="">None</option>
-              {districtManagers
-                .filter((dm) => !form.organization || dm.organization === form.organization)
-                .map((dm) => (
-                  <option key={dm.id} value={dm.id}>{dm.name}{dm.phone ? ` — ${dm.phone}` : ""}</option>
-                ))
-              }
-            </select>
-          </div>
-
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -478,6 +488,34 @@ export default function StoresPage() {
               />
             </div>
           </div>
+
+          {/* Store assignments */}
+          {(() => {
+            const orgId = dmForm.organization || (editingDM?.organization ?? "");
+            const eligible = stores.filter((s) => !orgId || s.organization === orgId);
+            if (eligible.length === 0) return null;
+            return (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Assigned Stores</label>
+                <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                  {eligible.map((s) => (
+                    <label key={s.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded accent-blue-600"
+                        checked={dmStoreIds.includes(s.id)}
+                        onChange={(e) => setDmStoreIds((prev) =>
+                          e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
+                        )}
+                      />
+                      <span className="text-sm text-slate-700">{s.name}</span>
+                      {s.city && <span className="text-xs text-slate-400 ml-auto">{s.city}, {s.state}</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setDmModalOpen(false)}

@@ -606,10 +606,14 @@ class TicketViewSet(viewsets.ModelViewSet):
 
         invoice_email = data.get("invoice_email", "")
         if invoice_email and service_report.ticket.asset:
-            pdf_bytes = generate_invoice_pdf(service_report)
-            sent = send_invoice_email(invoice_email, service_report, pdf_bytes)
-            service_report.invoice_sent = sent
-            service_report.save(update_fields=["invoice_sent"])
+            try:
+                pdf_bytes = generate_invoice_pdf(service_report)
+                send_invoice_email(invoice_email, service_report, pdf_bytes)
+                service_report.invoice_sent = True
+                service_report.save(update_fields=["invoice_sent"])
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).error("Invoice email failed on close: %s", exc)
 
         return Response(
             ServiceReportSerializer(service_report).data,
@@ -842,15 +846,20 @@ class TicketViewSet(viewsets.ModelViewSet):
                     ta.asset.save(update_fields=["status", "updated_at"])
 
         # Generate and optionally send PDF
-        try:
-            pdf_bytes = generate_invoice_pdf(report)
-            email = data.get("invoice_email", "")
-            if email:
+        pdf_bytes = generate_invoice_pdf(report)
+        email = data.get("invoice_email", "")
+        if email:
+            try:
                 send_invoice_email(email, report, pdf_bytes)
                 report.invoice_sent = True
                 report.save(update_fields=["invoice_sent"])
-        except Exception:
-            pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).error("Invoice email failed: %s", exc)
+                return Response(
+                    {"detail": f"Invoice saved but email failed to send: {exc}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
         # Generate embedding for AI retrieval (non-blocking)
         try:
