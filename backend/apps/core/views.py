@@ -997,7 +997,6 @@ class TicketViewSet(viewsets.ModelViewSet):
                 _stripe.api_key = stripe_key
                 frontend_url = getattr(settings, "FRONTEND_URL", "")
                 amount_cents = max(1, int(report.grand_total * 100))
-                import time as _time
                 session = _stripe.checkout.Session.create(
                     payment_method_types=["card"],
                     line_items=[{
@@ -1009,7 +1008,6 @@ class TicketViewSet(viewsets.ModelViewSet):
                         "quantity": 1,
                     }],
                     mode="payment",
-                    expires_at=int(_time.time()) + (30 * 24 * 60 * 60),  # 30 days
                     metadata={"service_report_id": str(report.id), "ticket_ids": str(ticket.id)},
                     success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
                     cancel_url=f"{frontend_url}/portal/invoices" if frontend_url else "https://onerepairsolutions.com",
@@ -1397,7 +1395,6 @@ class ServiceReportViewSet(viewsets.ModelViewSet):
     def pay(self, request, pk=None):
         """Generate a fresh Stripe Checkout session for a single invoice."""
         import stripe as _stripe
-        import time as _time
         report = self.get_object()
         ticket = report.ticket
 
@@ -1428,7 +1425,6 @@ class ServiceReportViewSet(viewsets.ModelViewSet):
                     "quantity": 1,
                 }],
                 mode="payment",
-                expires_at=int(_time.time()) + (30 * 24 * 60 * 60),
                 metadata={"ticket_ids": str(ticket.id)},
                 success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
                 cancel_url=f"{frontend_url}/portal/invoices/{report.id}" if frontend_url else "https://onerepairsolutions.com",
@@ -1447,7 +1443,6 @@ class MultiPayView(APIView):
     def post(self, request):
         """Create a single Stripe Checkout session for multiple invoices."""
         import stripe as _stripe
-        import time as _time
 
         report_ids = request.data.get("report_ids", [])
         if not report_ids:
@@ -1513,7 +1508,6 @@ class MultiPayView(APIView):
                 payment_method_types=["card"],
                 line_items=line_items,
                 mode="payment",
-                expires_at=int(_time.time()) + (30 * 24 * 60 * 60),
                 metadata={"ticket_ids": ticket_ids_csv},
                 success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
                 cancel_url=f"{frontend_url}/portal/invoices" if frontend_url else "https://onerepairsolutions.com",
