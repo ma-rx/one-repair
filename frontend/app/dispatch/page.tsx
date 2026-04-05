@@ -337,12 +337,20 @@ export default function DispatchPage() {
                           <UserCheck className="w-3.5 h-3.5" /> Reassign
                         </Link>
                       )}
-                      {t.status === "COMPLETED" && t.has_service_report && (
+                      {t.status === "COMPLETED" && t.has_service_report && !t.invoice_sent && (
                         <Link
                           href={`/dispatch/${t.id}/invoice`}
                           className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
                           <Receipt className="w-3.5 h-3.5" /> Invoice
+                        </Link>
+                      )}
+                      {t.status === "COMPLETED" && t.invoice_sent && (
+                        <Link
+                          href={`/dispatch/${t.id}/invoice`}
+                          className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Receipt className="w-3.5 h-3.5" /> Resend
                         </Link>
                       )}
                     </div>

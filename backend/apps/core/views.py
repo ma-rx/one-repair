@@ -1062,10 +1062,34 @@ class TicketViewSet(viewsets.ModelViewSet):
         if not sent_to:
             return Response({"detail": f"Failed to send invoice emails: {last_error}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # ── Upload PDF to Supabase storage ─────────────────────────────────────
+        stored_pdf_url = ""
+        try:
+            supabase_url = env("SUPABASE_URL", default="")
+            service_key  = env("SUPABASE_SERVICE_KEY", default="")
+            if supabase_url and service_key:
+                pdf_path = f"{report.id}.pdf"
+                upload_resp = http_requests.post(
+                    f"{supabase_url}/storage/v1/object/invoices/{pdf_path}",
+                    data=pdf_bytes,
+                    headers={
+                        "Authorization": f"Bearer {service_key}",
+                        "Content-Type": "application/pdf",
+                        "x-upsert": "true",
+                    },
+                )
+                if upload_resp.status_code in (200, 201):
+                    stored_pdf_url = f"{supabase_url}/storage/v1/object/public/invoices/{pdf_path}"
+                else:
+                    logger.warning("PDF upload to Supabase failed: %s %s", upload_resp.status_code, upload_resp.text)
+        except Exception as exc:
+            logger.warning("PDF upload failed: %s", exc)
+
         report.invoice_sent       = True
         report.stripe_session_id  = stripe_session_id
         report.stripe_payment_url = payment_url
-        report.save(update_fields=["invoice_sent", "stripe_session_id", "stripe_payment_url", "updated_at"])
+        report.pdf_url            = stored_pdf_url
+        report.save(update_fields=["invoice_sent", "stripe_session_id", "stripe_payment_url", "pdf_url", "updated_at"])
 
         ticket.status    = TicketStatus.COMPLETED
         ticket.save(update_fields=["status", "updated_at"])

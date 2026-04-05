@@ -251,15 +251,31 @@ class WorkImageSerializer(serializers.ModelSerializer):
 # ── ServiceReport ─────────────────────────────────────────────────────────────
 
 class ServiceReportSerializer(serializers.ModelSerializer):
-    parts_used    = PartUsedSerializer(many=True, read_only=True)
-    parts_total   = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    sales_tax     = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    grand_total   = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    ticket_status = serializers.SerializerMethodField()
-    ticket_number = serializers.SerializerMethodField()
-    org_name      = serializers.SerializerMethodField()
-    store_name    = serializers.SerializerMethodField()
-    asset_name    = serializers.SerializerMethodField()
+    parts_used           = PartUsedSerializer(many=True, read_only=True)
+    parts_total          = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    sales_tax            = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    grand_total          = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    ticket_status        = serializers.SerializerMethodField()
+    ticket_number        = serializers.SerializerMethodField()
+    org_name             = serializers.SerializerMethodField()
+    store_name           = serializers.SerializerMethodField()
+    store_address        = serializers.SerializerMethodField()
+    asset_name           = serializers.SerializerMethodField()
+    service_date         = serializers.SerializerMethodField()
+    due_date             = serializers.SerializerMethodField()
+    payment_terms_label  = serializers.SerializerMethodField()
+
+    def _get_store(self, obj):
+        try:
+            t = obj.ticket
+            if t.store_id:
+                return t.store
+            if t.asset_id:
+                return t.asset.store
+            ta = t.ticket_assets.select_related("asset__store__organization").first()
+            return ta.asset.store if ta and ta.asset_id else None
+        except Exception:
+            return None
 
     def get_ticket_status(self, obj):
         return obj.ticket.status if obj.ticket_id else None
@@ -268,24 +284,22 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         return obj.ticket.ticket_number if obj.ticket_id else None
 
     def get_org_name(self, obj):
+        store = self._get_store(obj)
         try:
-            store = obj.ticket.asset.store if obj.ticket.asset_id else None
-            if not store:
-                ta = obj.ticket.ticket_assets.select_related("asset__store__organization").first()
-                store = ta.asset.store if ta and ta.asset_id else None
             return store.organization.name if store and store.organization_id else None
         except Exception:
             return None
 
     def get_store_name(self, obj):
-        try:
-            store = obj.ticket.asset.store if obj.ticket.asset_id else None
-            if not store:
-                ta = obj.ticket.ticket_assets.select_related("asset__store").first()
-                store = ta.asset.store if ta and ta.asset_id else None
-            return store.name if store else None
-        except Exception:
+        store = self._get_store(obj)
+        return store.name if store else None
+
+    def get_store_address(self, obj):
+        store = self._get_store(obj)
+        if not store:
             return None
+        parts = [store.address_line1, store.city, store.state, store.zip_code]
+        return ", ".join(p for p in parts if p) or None
 
     def get_asset_name(self, obj):
         try:
@@ -298,15 +312,54 @@ class ServiceReportSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
+    def get_service_date(self, obj):
+        try:
+            d = obj.ticket.completed_at or obj.ticket.created_at
+            return d.date().isoformat() if d else None
+        except Exception:
+            return None
+
+    def get_due_date(self, obj):
+        from datetime import timedelta
+        try:
+            store = self._get_store(obj)
+            if not store or not store.organization_id:
+                return None
+            org = store.organization
+            terms = getattr(org, "payment_terms", None)
+            if not terms:
+                return None
+            days_map = {"DUE_ON_RECEIPT": 0, "NET_15": 15, "NET_30": 30, "NET_45": 45}
+            days = days_map.get(terms)
+            if days is None:
+                return None
+            base = obj.ticket.completed_at or obj.created_at
+            return (base + timedelta(days=days)).date().isoformat()
+        except Exception:
+            return None
+
+    def get_payment_terms_label(self, obj):
+        try:
+            store = self._get_store(obj)
+            if not store or not store.organization_id:
+                return None
+            terms = getattr(store.organization, "payment_terms", None)
+            labels = {"DUE_ON_RECEIPT": "Due on Receipt", "NET_15": "Net 15", "NET_30": "Net 30", "NET_45": "Net 45"}
+            return labels.get(terms)
+        except Exception:
+            return None
+
     class Meta:
         model = ServiceReport
         fields = [
-            "id", "ticket", "ticket_status", "ticket_number", "org_name", "store_name", "asset_name",
+            "id", "ticket", "ticket_status", "ticket_number",
+            "org_name", "store_name", "store_address", "asset_name",
+            "service_date", "due_date", "payment_terms_label",
             "resolution_code", "trip_charge", "labor_cost",
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
             "draft_parts", "extra_line_items", "tax_rate", "sales_tax",
-            "stripe_session_id", "stripe_payment_url",
+            "stripe_session_id", "stripe_payment_url", "pdf_url",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
 

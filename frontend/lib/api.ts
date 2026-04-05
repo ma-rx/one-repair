@@ -193,31 +193,12 @@ export const api = {
     const qs = q.toString();
     return request<ServiceReport[]>(`/service-reports/${qs ? `?${qs}` : ""}`);
   },
-  downloadInvoicePDF: async (id: string) => {
-    const token = getAccessToken();
-    const res = await fetch(`${BASE}/invoices/${id}/pdf/`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error("Download failed.");
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `invoice-${id.slice(0, 8)}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-  },
-  getInvoicePDFBlobUrl: async (id: string): Promise<string> => {
-    const token = getAccessToken();
-    const res = await fetch(`${BASE}/invoices/${id}/pdf/`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error("Failed to load PDF.");
-    const arrayBuffer = await res.arrayBuffer();
-    const blob = new Blob([arrayBuffer], { type: "application/pdf" });
-    return URL.createObjectURL(blob);
+  downloadInvoicePDF: (pdfUrl: string) => {
+    window.open(pdfUrl, "_blank");
   },
   getServiceReport: (id: string) => request<ServiceReport>(`/service-reports/${id}/`),
+  resendInvoice: (ticketId: string) =>
+    request<{ sent_to: string[] }>(`/tickets/${ticketId}/send_invoice/`, { method: "POST", body: JSON.stringify({}) }),
   createPaymentSession: (reportId: string) =>
     request<{ payment_url: string }>(`/service-reports/${reportId}/pay/`, { method: "POST" }),
   createMultiPaySession: (reportIds: string[]) =>
@@ -802,7 +783,11 @@ export interface ServiceReport {
   ticket_number: string | null;
   org_name: string | null;
   store_name: string | null;
+  store_address: string | null;
   asset_name: string | null;
+  service_date: string | null;
+  due_date: string | null;
+  payment_terms_label: string | null;
   resolution_code: string;
   trip_charge: string;
   labor_cost: string;
@@ -820,6 +805,7 @@ export interface ServiceReport {
   invoice_sent: boolean;
   stripe_session_id: string;
   stripe_payment_url: string;
+  pdf_url: string;
   parts_used: PartUsed[];
   created_at: string;
 }

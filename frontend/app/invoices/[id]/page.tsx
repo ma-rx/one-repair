@@ -3,18 +3,18 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import PortalShell from "@/components/PortalShell";
+import DashboardShell from "@/components/DashboardShell";
 import { api, ServiceReport, WorkImage } from "@/lib/api";
-import { Loader2, Download, CreditCard, CheckCircle2, ArrowLeft, User } from "lucide-react";
+import { Loader2, Download, Send, CheckCircle2, ArrowLeft, User } from "lucide-react";
 
-export default function PortalInvoiceDetailPage() {
+export default function OrsInvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
 
-  const [report, setReport]           = useState<ServiceReport | null>(null);
-  const [images, setImages]           = useState<WorkImage[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState("");
-  const [paying, setPaying] = useState(false);
+  const [report, setReport]   = useState<ServiceReport | null>(null);
+  const [images, setImages]   = useState<WorkImage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     api.getServiceReport(id)
@@ -27,25 +27,19 @@ export default function PortalInvoiceDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  async function handlePay() {
+  async function handleResend() {
     if (!report) return;
-    setPaying(true);
+    setResending(true);
     try {
-      const { payment_url } = await api.createPaymentSession(id);
-      window.location.href = payment_url;
+      await api.resendInvoice(report.ticket);
+      const updated = await api.getServiceReport(id);
+      setReport(updated);
+      alert("Invoice resent successfully.");
     } catch (e: unknown) {
-      if (e instanceof Error && e.message.includes("already_paid")) {
-        setReport({ ...report, ticket_status: "PAID" });
-      } else {
-        alert(e instanceof Error ? e.message : "Payment failed.");
-      }
-      setPaying(false);
+      alert(e instanceof Error ? e.message : "Failed to resend invoice.");
+    } finally {
+      setResending(false);
     }
-  }
-
-  function handleDownload() {
-    if (!report?.pdf_url) return;
-    api.downloadInvoicePDF(report.pdf_url);
   }
 
   const isPaid     = report?.ticket_status === "PAID";
@@ -56,13 +50,13 @@ export default function PortalInvoiceDetailPage() {
   const grandTotal = parseFloat(report?.grand_total  || "0");
 
   return (
-    <PortalShell>
+    <DashboardShell>
       <div className="max-w-3xl mx-auto">
 
         {/* Nav + actions */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Link href="/portal/invoices" className="text-slate-400 hover:text-slate-600 transition-colors">
+            <Link href="/invoices" className="text-slate-400 hover:text-slate-600 transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <h1 className="text-xl font-bold text-slate-900">
@@ -76,19 +70,19 @@ export default function PortalInvoiceDetailPage() {
                 <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-700 font-semibold text-sm">
                   <CheckCircle2 className="w-4 h-4" /> Paid
                 </span>
-              ) : (
+              ) : report.invoice_sent ? (
                 <button
-                  onClick={handlePay}
-                  disabled={paying}
+                  onClick={handleResend}
+                  disabled={resending}
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm disabled:opacity-60"
                 >
-                  {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                  {paying ? "Redirecting…" : `Pay $${grandTotal.toFixed(2)}`}
+                  {resending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {resending ? "Resending…" : "Resend Invoice"}
                 </button>
-              )}
+              ) : null}
               {report.pdf_url && (
                 <button
-                  onClick={handleDownload}
+                  onClick={() => api.downloadInvoicePDF(report.pdf_url)}
                   className="flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-4 py-2.5 rounded-xl transition-colors text-sm"
                 >
                   <Download className="w-4 h-4" />
@@ -118,7 +112,9 @@ export default function PortalInvoiceDetailPage() {
                 <p className="text-blue-300 font-mono text-sm mt-1">#{report.ticket_number || id.slice(0, 8).toUpperCase()}</p>
                 {isPaid
                   ? <span className="inline-block mt-2 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Paid</span>
-                  : <span className="inline-block mt-2 px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Payment Due</span>
+                  : report.invoice_sent
+                    ? <span className="inline-block mt-2 px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Payment Due</span>
+                    : <span className="inline-block mt-2 px-3 py-1 bg-slate-600 text-white text-xs font-bold rounded-full uppercase tracking-wide">Not Sent</span>
                 }
               </div>
             </div>
@@ -279,7 +275,7 @@ export default function PortalInvoiceDetailPage() {
 
             {/* Work photos */}
             {images.length > 0 && (
-              <div className="px-8 pb-6 border-t border-slate-100 pt-5">
+              <div className="px-8 pb-8 border-t border-slate-100 pt-5">
                 <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-3">Work Photos</p>
                 <div className="grid grid-cols-3 gap-3">
                   {images.map((img) => (
@@ -296,22 +292,9 @@ export default function PortalInvoiceDetailPage() {
               </div>
             )}
 
-            {/* Pay CTA */}
-            {!isPaid && (
-              <div className="px-8 pb-8 pt-2 border-t border-slate-100">
-                <button
-                  onClick={handlePay}
-                  disabled={paying}
-                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition-colors text-sm disabled:opacity-60"
-                >
-                  {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                  {paying ? "Redirecting to payment…" : `Pay Now — $${grandTotal.toFixed(2)}`}
-                </button>
-              </div>
-            )}
           </div>
         ) : null}
       </div>
-    </PortalShell>
+    </DashboardShell>
   );
 }

@@ -6,6 +6,7 @@ import Link from "next/link";
 import PortalShell from "@/components/PortalShell";
 import { api, ServiceReport } from "@/lib/api";
 import { FileText, Download, Loader2, CreditCard, CheckCircle2 } from "lucide-react";
+// Loader2 used for pay button spinner
 
 export default function PortalInvoicesPage() {
   const router       = useRouter();
@@ -14,7 +15,6 @@ export default function PortalInvoicesPage() {
   const [reports, setReports]     = useState<ServiceReport[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
-  const [downloading, setDownloading] = useState<string | null>(null);
   const [selected, setSelected]   = useState<Set<string>>(new Set());
   const [paying, setPaying]       = useState(false);
   const [flashPaid, setFlashPaid] = useState(searchParams.get("paid") === "1");
@@ -33,16 +33,9 @@ export default function PortalInvoicesPage() {
     }
   }, [flashPaid]);
 
-  async function handleDownload(e: React.MouseEvent, id: string) {
+  function handleDownload(e: React.MouseEvent, pdfUrl: string) {
     e.stopPropagation();
-    setDownloading(id);
-    try {
-      await api.downloadInvoicePDF(id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "PDF download failed.");
-    } finally {
-      setDownloading(null);
-    }
+    api.downloadInvoicePDF(pdfUrl);
   }
 
   function toggleSelect(e: React.MouseEvent, id: string) {
@@ -191,14 +184,17 @@ export default function PortalInvoicesPage() {
                     <td className="px-4 py-4 text-right font-semibold text-slate-800">${parseFloat(r.grand_total || "0").toFixed(2)}</td>
                     <td className="px-4 py-4">{paymentBadge(r)}</td>
                     <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => handleDownload(e, r.id)}
-                        disabled={downloading === r.id}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {downloading === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        PDF
-                      </button>
+                      {r.pdf_url ? (
+                        <button
+                          onClick={(e) => handleDownload(e, r.pdf_url)}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          PDF
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 );

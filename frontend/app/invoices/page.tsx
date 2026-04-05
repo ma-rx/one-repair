@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import DashboardShell from "@/components/DashboardShell";
 import { api, ServiceReport } from "@/lib/api";
-import { FileText, Download, Loader2, DollarSign, Clock, CheckCircle2, Send } from "lucide-react";
+import { FileText, Download, DollarSign, Clock, CheckCircle2, Send } from "lucide-react";
 
 type FilterStatus = "all" | "sent" | "paid" | "pending" | "unsent";
 
@@ -13,7 +13,6 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<FilterStatus>("all");
-  const [downloading, setDownloading] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -23,15 +22,9 @@ export default function InvoicesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleDownload(id: string) {
-    setDownloading(id);
-    try {
-      await api.downloadInvoicePDF(id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "PDF download failed.");
-    } finally {
-      setDownloading(null);
-    }
+  function handleDownload(r: ServiceReport) {
+    if (!r.pdf_url) return;
+    api.downloadInvoicePDF(r.pdf_url);
   }
 
   const allSent    = reports.filter((r) => r.invoice_sent);
@@ -158,7 +151,7 @@ export default function InvoicesPage() {
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="px-5 py-3">
                     <Link
-                      href={`/dispatch/${r.ticket}/invoice`}
+                      href={`/invoices/${r.id}`}
                       className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
                     >
                       {r.ticket_number || r.id.slice(0, 8).toUpperCase()}
@@ -175,16 +168,17 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-5 py-3">{paymentBadge(r)}</td>
                   <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => handleDownload(r.id)}
-                      disabled={downloading === r.id}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {downloading === r.id
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <Download className="w-3.5 h-3.5" />}
-                      PDF
-                    </button>
+                    {r.pdf_url ? (
+                      <button
+                        onClick={() => handleDownload(r)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        PDF
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
