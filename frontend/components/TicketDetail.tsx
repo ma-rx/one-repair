@@ -212,12 +212,6 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
                   <p className="text-slate-700 whitespace-pre-line">{r.formatted_report}</p>
                 </div>
               )}
-              {r.tech_notes && (
-                <div>
-                  <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Tech Notes</p>
-                  <p className="text-slate-600 whitespace-pre-line text-sm">{r.tech_notes}</p>
-                </div>
-              )}
               {(r.parts_used?.length > 0 || r.draft_parts?.length > 0) && (
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-2">Parts Used</p>

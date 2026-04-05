@@ -271,6 +271,26 @@ export default function TechWorkPage() {
     ])
       .then(([t, ps, ts, imgs]) => {
         setTicket(t); setParts(ps); setTimeStatus(ts); setImages(imgs);
+
+        // Pre-populate form from saved service report
+        const report = t.service_reports?.[0];
+        if (report) {
+          if (report.tech_notes)      setTechNotes(report.tech_notes);
+          if (report.formatted_report) { setFormattedReport(report.formatted_report); setReportAccepted(true); }
+          if (report.manager_on_site)  setManagerOnSite(report.manager_on_site);
+          if (report.manager_signature) setManagerSignature(report.manager_signature);
+          if ((report.draft_parts ?? []).length > 0) {
+            setPartLines(report.draft_parts.map((dp) => ({
+              part_id: dp.part_id,
+              quantity: dp.quantity,
+            })));
+          } else if ((report.parts_used ?? []).length > 0) {
+            setPartLines(report.parts_used.map((pu) => ({
+              part_id: pu.part,
+              quantity: pu.quantity,
+            })));
+          }
+        }
       })
       .catch(() => setError("Failed to load ticket data."))
       .finally(() => setLoading(false));
