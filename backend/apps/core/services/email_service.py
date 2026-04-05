@@ -17,6 +17,7 @@ def send_invoice_email(
     payment_url: str = "",
     ors_settings=None,
     work_image_urls: list = None,
+    button_label: str = "",
 ) -> bool:
     resend.api_key = settings.RESEND_API_KEY
 
@@ -37,10 +38,11 @@ def send_invoice_email(
 
     pay_button = ""
     if payment_url:
+        label = button_label or f"Pay Now — ${service_report.grand_total:.2f}"
         pay_button = f"""
         <div style="text-align: center; margin: 24px 0;">
           <a href="{payment_url}" style="background: #2563eb; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">
-            Pay Now — ${service_report.grand_total:.2f}
+            {label}
           </a>
         </div>
         """

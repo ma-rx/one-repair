@@ -987,35 +987,44 @@ class TicketViewSet(viewsets.ModelViewSet):
 
         ors_settings = PricingConfig.objects.first()
 
-        # ── Optional Stripe Checkout ───────────────────────────────────────────
+        # ── Payment URL: portal link for orgs with portal users, Stripe otherwise ─
         payment_url       = ""
         stripe_session_id = ""
-        stripe_key = getattr(settings, "STRIPE_SECRET_KEY", "")
-        if stripe_key:
-            try:
-                import stripe as _stripe
-                _stripe.api_key = stripe_key
-                frontend_url = getattr(settings, "FRONTEND_URL", "")
-                amount_cents = max(1, int(report.grand_total * 100))
-                session = _stripe.checkout.Session.create(
-                    payment_method_types=["card"],
-                    line_items=[{
-                        "price_data": {
-                            "currency": "usd",
-                            "product_data": {"name": f"Service Invoice — Ticket {ticket.ticket_number or str(ticket.id)[:8]}"},
-                            "unit_amount": amount_cents,
-                        },
-                        "quantity": 1,
-                    }],
-                    mode="payment",
-                    metadata={"service_report_id": str(report.id), "ticket_ids": str(ticket.id)},
-                    success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
-                    cancel_url=f"{frontend_url}/portal/invoices" if frontend_url else "https://onerepairsolutions.com",
-                )
-                payment_url       = session.url
-                stripe_session_id = session.id
-            except Exception as exc:
-                logger.warning("Stripe session creation failed: %s", exc)
+        frontend_url = getattr(settings, "FRONTEND_URL", "")
+
+        has_portal_users = User.objects.filter(
+            profile__organization=org,
+            profile__role__in=[UserRole.CLIENT_ADMIN, UserRole.CLIENT_MANAGER],
+        ).exists()
+
+        if has_portal_users and frontend_url:
+            payment_url = f"{frontend_url}/portal/invoices/{report.id}"
+        else:
+            stripe_key = getattr(settings, "STRIPE_SECRET_KEY", "")
+            if stripe_key:
+                try:
+                    import stripe as _stripe
+                    _stripe.api_key = stripe_key
+                    amount_cents = max(1, int(report.grand_total * 100))
+                    session = _stripe.checkout.Session.create(
+                        payment_method_types=["card"],
+                        line_items=[{
+                            "price_data": {
+                                "currency": "usd",
+                                "product_data": {"name": f"Service Invoice — Ticket {ticket.ticket_number or str(ticket.id)[:8]}"},
+                                "unit_amount": amount_cents,
+                            },
+                            "quantity": 1,
+                        }],
+                        mode="payment",
+                        metadata={"service_report_id": str(report.id), "ticket_ids": str(ticket.id)},
+                        success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
+                        cancel_url=f"{frontend_url}/portal/invoices" if frontend_url else "https://onerepairsolutions.com",
+                    )
+                    payment_url       = session.url
+                    stripe_session_id = session.id
+                except Exception as exc:
+                    logger.warning("Stripe session creation failed: %s", exc)
 
         # ── Generate PDF & send ────────────────────────────────────────────────
         try:
@@ -1028,6 +1037,12 @@ class TicketViewSet(viewsets.ModelViewSet):
             WorkImage.objects.filter(ticket=ticket).values_list("url", flat=True)
         )
 
+        email_button_label = (
+            f"View & Pay Invoice — ${report.grand_total:.2f}"
+            if has_portal_users
+            else f"Pay Now — ${report.grand_total:.2f}"
+        )
+
         sent_to = []
         last_error = ""
         for email in invoice_emails:
@@ -1037,6 +1052,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                     payment_url=payment_url,
                     ors_settings=ors_settings,
                     work_image_urls=work_image_urls,
+                    button_label=email_button_label,
                 )
                 sent_to.append(email)
             except Exception as exc:
@@ -1367,6 +1383,7 @@ class ServiceReportViewSet(viewsets.ModelViewSet):
             qs = (
                 ServiceReport.objects
                 .filter(
+                    Q(ticket__store__organization=org) |
                     Q(ticket__asset__store__organization=org) |
                     Q(ticket__ticket_assets__asset__store__organization=org)
                 )
@@ -2587,9 +2604,10 @@ class InvoicePDFView(APIView):
             org = getattr(profile, "organization", None)
             if not org:
                 return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-            # Check via both legacy single-asset and multi-asset paths
+            # Check via store FK, legacy single-asset, and multi-asset paths
             from django.db.models import Q as _Q
             accessible = ServiceReport.objects.filter(
+                _Q(pk=pk, ticket__store__organization=org) |
                 _Q(pk=pk, ticket__asset__store__organization=org) |
                 _Q(pk=pk, ticket__ticket_assets__asset__store__organization=org)
             ).exists()
