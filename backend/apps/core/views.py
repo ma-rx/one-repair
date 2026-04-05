@@ -968,6 +968,10 @@ class TicketViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
 
+        # Clear stale prefetch cache so parts_total sees newly created PartUsed records
+        if hasattr(report, '_prefetched_objects_cache'):
+            report._prefetched_objects_cache.pop('parts_used', None)
+
         # ── Build email list ───────────────────────────────────────────────────
         invoice_emails = list(org.invoice_emails or [])
         extra_emails   = request.data.get("extra_emails", [])

@@ -21,10 +21,16 @@ function getStatusDisplay(status: string, partsApprovalStatus: string | null): {
     IN_PROGRESS:   "bg-blue-100 text-blue-700",
     PENDING_PARTS: "bg-amber-100 text-amber-700",
     RESOLVED:      "bg-green-100 text-green-700",
+    COMPLETED:     "bg-amber-100 text-amber-700",
     CLOSED:        "bg-slate-100 text-slate-500",
+    PAID:          "bg-emerald-100 text-emerald-700",
     CANCELLED:     "bg-slate-100 text-slate-400",
   };
-  return { label: status.replace(/_/g, " "), style: style[status] ?? "" };
+  const labelMap: Record<string, string> = {
+    COMPLETED: "Payment Pending",
+    PAID:      "Paid",
+  };
+  return { label: labelMap[status] ?? status.replace(/_/g, " "), style: style[status] ?? "" };
 }
 
 export default function PortalTicketsPage() {
@@ -58,7 +64,7 @@ export default function PortalTicketsPage() {
 
       {/* Filter */}
       <div className="mb-4 flex gap-2 flex-wrap">
-        {["", "OPEN", "DISPATCHED", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "CLOSED"].map((s) => (
+        {["", "OPEN", "DISPATCHED", "IN_PROGRESS", "PENDING_PARTS", "RESOLVED", "COMPLETED", "PAID", "CLOSED"].map((s) => (
           <button
             key={s}
             onClick={() => { setFilter(s); setLoading(true); }}
@@ -68,7 +74,7 @@ export default function PortalTicketsPage() {
                 : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
-            {s === "" ? "All" : s.replace(/_/g, " ")}
+            {s === "" ? "All" : s === "COMPLETED" ? "Payment Pending" : s === "PAID" ? "Paid" : s.replace(/_/g, " ")}
           </button>
         ))}
       </div>
