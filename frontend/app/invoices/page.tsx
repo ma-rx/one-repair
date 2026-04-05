@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import DashboardShell from "@/components/DashboardShell";
 import { api, ServiceReport } from "@/lib/api";
-import { FileText, Download, DollarSign, Clock, CheckCircle2, Send } from "lucide-react";
+import { FileText, Download, Loader2, DollarSign, Clock, CheckCircle2, Send } from "lucide-react";
 
 type FilterStatus = "all" | "sent" | "paid" | "pending" | "unsent";
 
