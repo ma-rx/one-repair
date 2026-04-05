@@ -207,11 +207,12 @@ class PartSerializer(serializers.ModelSerializer):
 
 class PartUsedSerializer(serializers.ModelSerializer):
     part_name = serializers.CharField(source="part.name", read_only=True)
+    part_sku  = serializers.CharField(source="part.sku",  read_only=True)
     line_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = PartUsed
-        fields = ["id", "part", "part_name", "quantity", "unit_price_at_time", "line_total"]
+        fields = ["id", "part", "part_name", "part_sku", "quantity", "unit_price_at_time", "line_total"]
 
 
 class PartUsedInputSerializer(serializers.Serializer):

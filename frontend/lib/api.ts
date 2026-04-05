@@ -213,6 +213,7 @@ export const api = {
     formatted_report?: string;
     extra_line_items?: Array<{ name: string; sku?: string; quantity: number; unit_price: number }>;
     parts_used?: Array<{ id: string; quantity: number; unit_price: number }>;
+    new_inventory_parts?: Array<{ part_id: string; quantity: number; unit_price: number }>;
   }) =>
     request<{ sent_to: string[]; payment_url: string; ticket: Ticket }>(
       `/tickets/${ticketId}/send-invoice/`,
@@ -792,6 +793,7 @@ export interface PartUsed {
   id: string;
   part: string;
   part_name: string;
+  part_sku: string;
   quantity: number;
   unit_price_at_time: string;
   line_total: string;

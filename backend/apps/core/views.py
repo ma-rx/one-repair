@@ -927,6 +927,24 @@ class TicketViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
 
+        # Add new inventory parts (added on invoice page) — deduct stock but never block
+        if "new_inventory_parts" in overrides:
+            from .models import Part as PartModel, PartUsed as PartUsedModel
+            for p in overrides["new_inventory_parts"]:
+                try:
+                    part = PartModel.objects.get(id=p["part_id"])
+                    unit_price = Decimal(str(p.get("unit_price", part.selling_price)))
+                    PartUsedModel.objects.create(
+                        service_report=report,
+                        part=part,
+                        quantity=int(p["quantity"]),
+                        unit_price_at_time=unit_price,
+                    )
+                    part.quantity_on_hand = max(0, part.quantity_on_hand - int(p["quantity"]))
+                    part.save(update_fields=["quantity_on_hand", "updated_at"])
+                except Exception:
+                    pass
+
         # ── Build email list ───────────────────────────────────────────────────
         invoice_emails = list(org.invoice_emails or [])
         extra_emails   = request.data.get("extra_emails", [])

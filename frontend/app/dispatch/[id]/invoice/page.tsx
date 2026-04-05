@@ -1,59 +1,123 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DashboardShell from "@/components/DashboardShell";
-import { api, Ticket } from "@/lib/api";
+import { api, Part, Ticket } from "@/lib/api";
 import {
   ArrowLeft, Receipt, Send, Loader2, CheckCircle2,
-  Mail, AlertCircle, Plus, X, Eye, Pencil, Trash2,
+  Mail, AlertCircle, Plus, X, Eye, Trash2, ChevronDown,
 } from "lucide-react";
 
 type Step = "edit" | "preview";
 
 type PartLine = {
   id?: string;       // existing PartUsed id
+  part_id?: string;  // inventory Part id (new, to deduct stock)
   part_name: string;
   sku: string;
   quantity: number;
   unit_price: number;
 };
 
-const PAYMENT_TERMS_LABELS: Record<string, string> = {
-  DUE_ON_RECEIPT: "Due on Receipt",
-  NET_15: "Net 15",
-  NET_30: "Net 30",
-  NET_45: "Net 45",
-};
+// ── Parts search combobox ─────────────────────────────────────────────────────
+function PartsCombobox({
+  parts,
+  onSelect,
+}: {
+  parts: Part[];
+  onSelect: (part: Part) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen]     = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = search.length > 0
+    ? parts.filter((p) =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku.toLowerCase().includes(search.toLowerCase()) ||
+        p.make.toLowerCase().includes(search.toLowerCase())
+      )
+    : parts.slice(0, 8);
+
+  return (
+    <div ref={ref} className="relative flex-1">
+      <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus-within:ring-2 focus-within:ring-blue-500">
+        <input
+          className="flex-1 outline-none bg-transparent text-slate-800 placeholder-slate-400"
+          placeholder="Search inventory parts…"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+        />
+        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+      </div>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-400">No results</p>
+          ) : (
+            filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                onClick={() => { onSelect(p); setSearch(""); setOpen(false); }}
+              >
+                <p className="font-medium text-slate-800">{p.name}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {p.sku && `SKU: ${p.sku} · `}
+                  stock: {p.quantity_on_hand} · ${p.selling_price}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function InvoicePage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
 
-  const [ticket,   setTicket]   = useState<Ticket | null>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [sending,  setSending]  = useState(false);
-  const [sent,     setSent]     = useState(false);
-  const [error,    setError]    = useState("");
+  const [ticket,     setTicket]     = useState<Ticket | null>(null);
+  const [allParts,   setAllParts]   = useState<Part[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [sending,    setSending]    = useState(false);
+  const [sent,       setSent]       = useState(false);
+  const [error,      setError]      = useState("");
   const [paymentUrl, setPaymentUrl] = useState("");
-  const [step, setStep] = useState<Step>("edit");
+  const [step,       setStep]       = useState<Step>("edit");
 
   // Editable invoice fields
   const [laborCost,       setLaborCost]       = useState("0");
   const [taxRate,         setTaxRate]         = useState("0");
   const [formattedReport, setFormattedReport] = useState("");
   const [parts,           setParts]           = useState<PartLine[]>([]);
-  const [newPart,    setNewPart]    = useState<PartLine>({ part_name: "", sku: "", quantity: 1, unit_price: 0 });
+
+  // Add-part row state
+  const [newPart, setNewPart] = useState<PartLine>({ part_name: "", sku: "", quantity: 1, unit_price: 0 });
 
   // Email recipients
   const [extraEmail,  setExtraEmail]  = useState("");
   const [extraEmails, setExtraEmails] = useState<string[]>([]);
 
   useEffect(() => {
-    api.getTicket(id)
-      .then((t) => {
+    Promise.all([api.getTicket(id), api.listParts()])
+      .then(([t, ps]) => {
         setTicket(t);
+        setAllParts(ps);
         const report = t.service_reports?.[0];
         if (report) {
           setLaborCost(report.labor_cost ?? "0");
@@ -61,8 +125,9 @@ export default function InvoicePage() {
           setFormattedReport(report.formatted_report ?? "");
           const invParts: PartLine[] = (report.parts_used ?? []).map((p) => ({
             id: p.id,
+            part_id: p.part,          // inventory Part UUID for reference
             part_name: p.part_name,
-            sku: "",
+            sku: p.part_sku ?? "",
             quantity: p.quantity,
             unit_price: parseFloat(p.unit_price_at_time),
           }));
@@ -80,11 +145,21 @@ export default function InvoicePage() {
   }, [id]);
 
   // Auto-calculated totals
-  const laborNum    = parseFloat(laborCost) || 0;
-  const taxNum      = parseFloat(taxRate) || 0;
-  const partsTotal  = parts.reduce((sum, p) => sum + p.quantity * p.unit_price, 0);
-  const salesTax    = (laborNum + partsTotal) * taxNum / 100;
-  const grandTotal  = laborNum + partsTotal + salesTax;
+  const laborNum   = parseFloat(laborCost) || 0;
+  const taxNum     = parseFloat(taxRate) || 0;
+  const partsTotal = parts.reduce((sum, p) => sum + p.quantity * p.unit_price, 0);
+  const salesTax   = (laborNum + partsTotal) * taxNum / 100;
+  const grandTotal = laborNum + partsTotal + salesTax;
+
+  function selectInventoryPart(part: Part) {
+    setNewPart({
+      part_id: part.id,
+      part_name: part.name,
+      sku: part.sku ?? "",
+      quantity: 1,
+      unit_price: parseFloat(part.selling_price || part.unit_price),
+    });
+  }
 
   function addPart() {
     if (!newPart.part_name.trim()) return;
@@ -107,17 +182,27 @@ export default function InvoicePage() {
   }
 
   function buildOverrides() {
-    const existingParts = parts.filter((p) => p.id).map((p) => ({
-      id: p.id!, quantity: p.quantity, unit_price: p.unit_price,
-    }));
-    const customParts = parts.filter((p) => !p.id).map((p) => ({
-      name: p.part_name, sku: p.sku, quantity: p.quantity, unit_price: p.unit_price,
-    }));
+    // Parts with an existing PartUsed id → update qty/price
+    const existingParts = parts
+      .filter((p) => p.id)
+      .map((p) => ({ id: p.id!, quantity: p.quantity, unit_price: p.unit_price }));
+
+    // Parts with a part_id but no PartUsed id → newly added from inventory (deduct stock)
+    const newInventoryParts = parts
+      .filter((p) => !p.id && p.part_id)
+      .map((p) => ({ part_id: p.part_id!, quantity: p.quantity, unit_price: p.unit_price }));
+
+    // Parts with neither id → custom free-text line items
+    const customParts = parts
+      .filter((p) => !p.id && !p.part_id)
+      .map((p) => ({ name: p.part_name, sku: p.sku, quantity: p.quantity, unit_price: p.unit_price }));
+
     return {
       labor_cost: laborCost,
       tax_rate: taxRate,
       formatted_report: formattedReport,
       parts_used: existingParts,
+      new_inventory_parts: newInventoryParts,
       extra_line_items: customParts,
     };
   }
@@ -207,7 +292,6 @@ export default function InvoicePage() {
 
         {/* Invoice Preview Card */}
         <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6 text-sm">
-          {/* Header */}
           <div className="flex items-start justify-between border-b border-slate-100 pb-5">
             <div>
               <p className="font-bold text-slate-900 text-lg">SERVICE INVOICE</p>
@@ -222,7 +306,6 @@ export default function InvoicePage() {
             </div>
           </div>
 
-          {/* Billed To / Service Location */}
           <div className="grid grid-cols-2 gap-6 text-xs">
             <div>
               <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Billed To</p>
@@ -236,7 +319,6 @@ export default function InvoicePage() {
             </div>
           </div>
 
-          {/* Service Summary */}
           {formattedReport && (
             <div className="text-xs">
               <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Service Summary</p>
@@ -244,33 +326,29 @@ export default function InvoicePage() {
             </div>
           )}
 
-          {/* Line Items */}
           {parts.length > 0 && (
-            <div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-blue-600 text-white">
-                    <th className="text-left px-3 py-2">Part</th>
-                    <th className="text-right px-3 py-2">Qty</th>
-                    <th className="text-right px-3 py-2">Unit Price</th>
-                    <th className="text-right px-3 py-2">Total</th>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-blue-600 text-white">
+                  <th className="text-left px-3 py-2">Part</th>
+                  <th className="text-right px-3 py-2">Qty</th>
+                  <th className="text-right px-3 py-2">Unit Price</th>
+                  <th className="text-right px-3 py-2">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parts.map((p, i) => (
+                  <tr key={i} className={i % 2 === 0 ? "bg-slate-50" : "bg-white"}>
+                    <td className="px-3 py-2 text-slate-700">{p.part_name}</td>
+                    <td className="px-3 py-2 text-right text-slate-600">{p.quantity}</td>
+                    <td className="px-3 py-2 text-right text-slate-600">${p.unit_price.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">${(p.quantity * p.unit_price).toFixed(2)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {parts.map((p, i) => (
-                    <tr key={i} className={i % 2 === 0 ? "bg-slate-50" : "bg-white"}>
-                      <td className="px-3 py-2 text-slate-700">{p.part_name}</td>
-                      <td className="px-3 py-2 text-right text-slate-600">{p.quantity}</td>
-                      <td className="px-3 py-2 text-right text-slate-600">${p.unit_price.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">${(p.quantity * p.unit_price).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           )}
 
-          {/* Totals */}
           <div className="space-y-1 text-xs border-t border-slate-100 pt-4">
             {partsTotal > 0 && (
               <div className="flex justify-between text-slate-600">
@@ -291,17 +369,16 @@ export default function InvoicePage() {
           </div>
         </div>
 
-        {/* Sending to */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 text-sm">
           <div className="flex items-center gap-2 mb-2">
             <Mail className="w-4 h-4 text-slate-400" />
             <p className="font-medium text-slate-700">Sending to</p>
           </div>
-          {[...(orgInvoiceEmails ?? []), ...extraEmails].length === 0 ? (
+          {[...orgInvoiceEmails, ...extraEmails].length === 0 ? (
             <p className="text-amber-600 text-xs">No recipients configured.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {[...(orgInvoiceEmails ?? []), ...extraEmails].map((e) => (
+              {[...orgInvoiceEmails, ...extraEmails].map((e) => (
                 <span key={e} className="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-lg">{e}</span>
               ))}
             </div>
@@ -397,7 +474,9 @@ export default function InvoicePage() {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Service Summary <span className="text-slate-400 font-normal">(appears on invoice)</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Service Summary <span className="text-slate-400 font-normal">(appears on invoice)</span>
+            </label>
             <textarea
               rows={5}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -434,6 +513,8 @@ export default function InvoicePage() {
           {/* Parts */}
           <div>
             <p className="text-sm font-medium text-slate-700 mb-2">Parts & Line Items</p>
+
+            {/* Existing parts table */}
             {parts.length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden mb-3">
                 <table className="w-full text-xs">
@@ -450,11 +531,19 @@ export default function InvoicePage() {
                     {parts.map((p, i) => (
                       <tr key={i} className="border-t border-slate-100">
                         <td className="px-3 py-2">
-                          <input
-                            className="w-full bg-transparent text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
-                            value={p.part_name}
-                            onChange={(e) => updatePart(i, "part_name", e.target.value)}
-                          />
+                          <div className="flex items-center gap-1">
+                            <input
+                              className="w-full bg-transparent text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
+                              value={p.part_name}
+                              onChange={(e) => updatePart(i, "part_name", e.target.value)}
+                            />
+                            {p.id && (
+                              <span className="text-slate-300 text-xs shrink-0" title="From service report">●</span>
+                            )}
+                            {!p.id && p.part_id && (
+                              <span className="text-blue-300 text-xs shrink-0" title="From inventory">●</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-2">
                           <input type="number" min="1"
@@ -485,36 +574,48 @@ export default function InvoicePage() {
               </div>
             )}
 
-            {/* Add new part row */}
-            <div className="grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-5">
-                <input placeholder="Part / item name"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newPart.part_name}
-                  onChange={(e) => setNewPart((p) => ({ ...p, part_name: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && addPart()}
-                />
+            {/* Add part row */}
+            <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2 bg-slate-50">
+              <p className="text-xs text-slate-400 font-medium">Add a part</p>
+              <div className="flex gap-2 items-start">
+                <PartsCombobox parts={allParts} onSelect={selectInventoryPart} />
               </div>
-              <div className="col-span-2">
-                <input type="number" min="1" placeholder="Qty"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newPart.quantity}
-                  onChange={(e) => setNewPart((p) => ({ ...p, quantity: parseInt(e.target.value) || 1 }))}
-                />
+              {/* Show filled name when inventory part selected, or let user type custom */}
+              <div className="grid grid-cols-12 gap-2 items-end">
+                <div className="col-span-5">
+                  <input placeholder="Part / item name (or select above)"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newPart.part_name}
+                    onChange={(e) => setNewPart((p) => ({ ...p, part_name: e.target.value, part_id: undefined }))}
+                    onKeyDown={(e) => e.key === "Enter" && addPart()}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input type="number" min="1" placeholder="Qty"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newPart.quantity}
+                    onChange={(e) => setNewPart((p) => ({ ...p, quantity: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+                <div className="col-span-3">
+                  <input type="number" min="0" step="0.01" placeholder="Unit $"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={newPart.unit_price || ""}
+                    onChange={(e) => setNewPart((p) => ({ ...p, unit_price: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <button onClick={addPart}
+                    className="w-full flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
               </div>
-              <div className="col-span-3">
-                <input type="number" min="0" step="0.01" placeholder="Unit $"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newPart.unit_price || ""}
-                  onChange={(e) => setNewPart((p) => ({ ...p, unit_price: parseFloat(e.target.value) || 0 }))}
-                />
-              </div>
-              <div className="col-span-2">
-                <button onClick={addPart}
-                  className="w-full flex items-center justify-center gap-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">
-                  <Plus className="w-3.5 h-3.5" /> Add
-                </button>
-              </div>
+              {newPart.part_id && (
+                <p className="text-xs text-blue-600">
+                  From inventory · stock will be deducted on send
+                </p>
+              )}
             </div>
           </div>
 
@@ -546,7 +647,7 @@ export default function InvoicePage() {
             <p className="text-sm font-medium text-slate-700">Send To</p>
           </div>
 
-          {orgInvoiceEmails && orgInvoiceEmails.length > 0 && (
+          {orgInvoiceEmails.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {orgInvoiceEmails.map((e) => (
                 <span key={e} className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-lg">{e}</span>
