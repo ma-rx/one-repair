@@ -213,7 +213,8 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) throw new Error("Failed to load PDF.");
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: "application/pdf" });
     return URL.createObjectURL(blob);
   },
   getServiceReport: (id: string) => request<ServiceReport>(`/service-reports/${id}/`),
