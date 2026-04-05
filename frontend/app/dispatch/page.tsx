@@ -7,7 +7,7 @@ import { api, Ticket } from "@/lib/api";
 import { SymptomCodeLabels } from "@/types/enums";
 import {
   ClipboardList, Clock, AlertTriangle, Plus,
-  UserCheck, Loader2, RefreshCw, Brain, Receipt,
+  UserCheck, Loader2, RefreshCw, Brain, Receipt, Trash2, CheckSquare,
 } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
@@ -54,6 +54,9 @@ export default function DispatchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [priorityLoading, setPriorityLoading] = useState<Record<string, boolean>>({});
+  const [bulkMode, setBulkMode]     = useState(false);
+  const [selected, setSelected]     = useState<Set<string>>(new Set());
+  const [deleting, setDeleting]     = useState(false);
 
   function load(status: string) {
     setLoading(true);
@@ -75,6 +78,40 @@ export default function DispatchPage() {
       // silently ignore — user can retry
     } finally {
       setPriorityLoading((prev) => ({ ...prev, [id]: false }));
+    }
+  }
+
+  function toggleBulkMode() {
+    setBulkMode((v) => !v);
+    setSelected(new Set());
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) =>
+      prev.size === tickets.length ? new Set() : new Set(tickets.map((t) => t.id))
+    );
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selected.size} ticket${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all([...selected].map((id) => api.deleteTicket(id)));
+      setTickets((prev) => prev.filter((t) => !selected.has(t.id)));
+      setSelected(new Set());
+      setBulkMode(false);
+    } catch {
+      setError("Some tickets could not be deleted. Refresh and try again.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -129,22 +166,50 @@ export default function DispatchPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1.5 mb-4 flex-wrap">
-        {STATUS_TABS.map((s) => (
-          <button
-            key={s}
-            onClick={() => setTab(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              tab === s
-                ? "bg-blue-600 text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {s === "ALL" ? "All" : s.replace(/_/g, " ")}
-          </button>
-        ))}
+      {/* Tabs + Bulk Edit */}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
+          {STATUS_TABS.map((s) => (
+            <button
+              key={s}
+              onClick={() => { setTab(s); setSelected(new Set()); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                tab === s
+                  ? "bg-blue-600 text-white"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {s === "ALL" ? "All" : s.replace(/_/g, " ")}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={toggleBulkMode}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+            bulkMode
+              ? "bg-slate-800 text-white border-slate-800"
+              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <CheckSquare className="w-3.5 h-3.5" />
+          {bulkMode ? "Cancel" : "Bulk Edit"}
+        </button>
       </div>
+
+      {/* Bulk delete bar */}
+      {bulkMode && selected.size > 0 && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 mb-3">
+          <p className="text-sm text-red-700 font-medium">{selected.size} ticket{selected.size !== 1 ? "s" : ""} selected</p>
+          <button
+            onClick={handleBulkDelete}
+            disabled={deleting}
+            className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            Delete Selected
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -160,6 +225,15 @@ export default function DispatchPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
+                {bulkMode && (
+                  <th className="px-4 py-3">
+                    <input type="checkbox"
+                      className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                      checked={selected.size === tickets.length && tickets.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Ticket #</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Asset</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Store</th>
@@ -176,9 +250,18 @@ export default function DispatchPage() {
               {tickets.map((t) => (
                 <tr
                   key={t.id}
-                  className="border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
-                  onClick={() => window.location.href = `/dispatch/${t.id}`}
+                  className={`border-b border-slate-100 transition-colors ${bulkMode ? (selected.has(t.id) ? "bg-blue-50" : "hover:bg-slate-50") : "hover:bg-slate-50 cursor-pointer"}`}
+                  onClick={() => bulkMode ? toggleSelect(t.id) : (window.location.href = `/dispatch/${t.id}`)}
                 >
+                  {bulkMode && (
+                    <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox"
+                        className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                        checked={selected.has(t.id)}
+                        onChange={() => toggleSelect(t.id)}
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-4">
                     <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
                       {t.ticket_number || "—"}
