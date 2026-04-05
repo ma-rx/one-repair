@@ -97,7 +97,7 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(100, 116, 139)
     pdf.cell(0, 5, f"Invoice #: {ticket.ticket_number or str(ticket.id)[:8].upper()}", ln=True)
-    pdf.cell(0, 5, f"Service Date: {ticket.completed_at.strftime('%B %d, %Y') if ticket.completed_at else service_report.created_at.strftime('%B %d, %Y')}", ln=True)
+    pdf.cell(0, 5, f"Invoice Date: {ticket.completed_at.strftime('%B %d, %Y') if ticket.completed_at else service_report.created_at.strftime('%B %d, %Y')}", ln=True)
     if payment_terms_label:
         pdf.cell(0, 5, f"Payment Terms: {payment_terms_label}", ln=True)
     pdf.ln(6)
@@ -117,13 +117,28 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
         store_addr = ", ".join(p for p in parts if p)
     rows = [
         (org.name if org else "-",       store.name if store else "-"),
-        (store_addr or "-",              f"Asset: {asset_name}"),
-        ("",                             f"Model: {model_number}  Serial: {serial_number}"),
+        (store_addr or "-",              ""),
     ]
     for left, right in rows:
         pdf.cell(col_w, 5, left, ln=False)
         pdf.cell(col_w, 5, right, ln=True)
     pdf.ln(8)
+
+    # ── Asset info ────────────────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(0, 5, "ASSET", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(15, 23, 42)
+    asset_rows = [
+        ("Asset:", _safe(asset_name)),
+        ("Model:", _safe(model_number)),
+        ("Serial:", _safe(serial_number)),
+    ]
+    for label, value in asset_rows:
+        pdf.cell(50, 5, label)
+        pdf.multi_cell(0, 5, value)
+    pdf.ln(4)
 
     # ── Ticket summary ────────────────────────────────────────────────────────
     pdf.set_font("Helvetica", "B", 9)
@@ -143,6 +158,27 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     for label, value in summary_rows:
         pdf.cell(50, 5, label)
         pdf.multi_cell(0, 5, value)
+
+    # Embed manager signature image if present
+    if service_report.manager_signature:
+        try:
+            import base64 as _b64, tempfile, os
+            sig_data = service_report.manager_signature
+            if sig_data.startswith("data:"):
+                # Strip data URI header: data:image/png;base64,<data>
+                header, b64 = sig_data.split(",", 1)
+                ext = header.split("/")[1].split(";")[0] if "/" in header else "png"
+            else:
+                b64, ext = sig_data, "png"
+            img_bytes = _b64.b64decode(b64)
+            with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+                tmp.write(img_bytes)
+                tmp_path = tmp.name
+            pdf.image(tmp_path, x=60, w=60)
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
     pdf.ln(4)
 
     # ── Parts table ───────────────────────────────────────────────────────────

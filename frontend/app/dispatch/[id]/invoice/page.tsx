@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DashboardShell from "@/components/DashboardShell";
-import { api, Part, Ticket } from "@/lib/api";
+import { api, Part, Ticket, WorkImage } from "@/lib/api";
 import {
   ArrowLeft, Receipt, Send, Loader2, CheckCircle2,
-  Mail, AlertCircle, Plus, X, Eye, Trash2, ChevronDown,
+  Mail, AlertCircle, Plus, X, Eye, Trash2, ChevronDown, ImageOff,
 } from "lucide-react";
 
 type Step = "edit" | "preview";
@@ -93,6 +93,7 @@ export default function InvoicePage() {
 
   const [ticket,     setTicket]     = useState<Ticket | null>(null);
   const [allParts,   setAllParts]   = useState<Part[]>([]);
+  const [images,     setImages]     = useState<WorkImage[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [sending,    setSending]    = useState(false);
   const [sent,       setSent]       = useState(false);
@@ -114,10 +115,11 @@ export default function InvoicePage() {
   const [extraEmails, setExtraEmails] = useState<string[]>([]);
 
   useEffect(() => {
-    Promise.all([api.getTicket(id), api.listParts()])
-      .then(([t, ps]) => {
+    Promise.all([api.getTicket(id), api.listParts(), api.getWorkImages(id)])
+      .then(([t, ps, imgs]) => {
         setTicket(t);
         setAllParts(ps);
+        setImages(imgs);
         const report = t.service_reports?.[0];
         if (report) {
           setLaborCost(report.labor_cost ?? "0");
@@ -196,6 +198,15 @@ export default function InvoicePage() {
 
   function removePart(idx: number) {
     setParts((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function deleteImage(imgId: string) {
+    try {
+      await api.deleteWorkImage(imgId);
+      setImages((prev) => prev.filter((img) => img.id !== imgId));
+    } catch {
+      // silently ignore
+    }
   }
 
   function addExtraEmail() {
@@ -504,6 +515,55 @@ export default function InvoicePage() {
             />
           </div>
         </div>
+
+        {/* ── Manager Authorization ── */}
+        {report?.manager_on_site && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+            <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Manager Authorization</p>
+            <p className="text-sm text-slate-700">
+              <span className="font-medium">On site:</span> {report.manager_on_site}
+            </p>
+            {report.manager_signature && (
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Signature</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={report.manager_signature}
+                  alt="Manager signature"
+                  className="max-h-16 border border-slate-200 rounded bg-white p-1"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Work Photos ── */}
+        {images.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+            <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">
+              Work Photos <span className="text-slate-300">({images.length} — will be attached to invoice email)</span>
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {images.map((img) => (
+                <div key={img.id} className="relative group aspect-square">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.url}
+                    alt="Work photo"
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                  <button
+                    onClick={() => deleteImage(img.id)}
+                    className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove photo"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Invoice Fields ── */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">

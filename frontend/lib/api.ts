@@ -771,6 +771,7 @@ export interface Ticket {
 export interface ServiceReport {
   id: string;
   ticket: string;
+  ticket_status: string | null;
   resolution_code: string;
   tech_notes: string;
   formatted_report: string;

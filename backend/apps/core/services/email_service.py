@@ -16,6 +16,7 @@ def send_invoice_email(
     pdf_bytes: bytes,
     payment_url: str = "",
     ors_settings=None,
+    work_image_urls: list = None,
 ) -> bool:
     resend.api_key = settings.RESEND_API_KEY
 
@@ -43,6 +44,21 @@ def send_invoice_email(
           </a>
         </div>
         """
+
+    # Fetch work photos and attach (max 10, skip failures silently)
+    import urllib.request as _urllib
+    photo_attachments = []
+    for idx, url in enumerate((work_image_urls or [])[:10]):
+        try:
+            with _urllib.urlopen(url, timeout=10) as resp:
+                img_bytes = resp.read()
+            ext = url.split("?")[0].rsplit(".", 1)[-1].lower() or "jpg"
+            photo_attachments.append({
+                "filename": f"photo_{idx + 1}.{ext}",
+                "content": base64.b64encode(img_bytes).decode("utf-8"),
+            })
+        except Exception:
+            pass
 
     params = {
         "from": settings.RESEND_FROM_EMAIL,
@@ -84,7 +100,8 @@ def send_invoice_email(
             {
                 "filename": f"{invoice_number}.pdf",
                 "content": base64.b64encode(pdf_bytes).decode("utf-8"),
-            }
+            },
+            *photo_attachments,
         ],
     }
 

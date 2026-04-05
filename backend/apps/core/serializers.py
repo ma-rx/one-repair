@@ -251,15 +251,19 @@ class WorkImageSerializer(serializers.ModelSerializer):
 # ── ServiceReport ─────────────────────────────────────────────────────────────
 
 class ServiceReportSerializer(serializers.ModelSerializer):
-    parts_used = PartUsedSerializer(many=True, read_only=True)
-    parts_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    sales_tax = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    grand_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    parts_used    = PartUsedSerializer(many=True, read_only=True)
+    parts_total   = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    sales_tax     = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    grand_total   = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    ticket_status = serializers.SerializerMethodField()
+
+    def get_ticket_status(self, obj):
+        return obj.ticket.status if obj.ticket_id else None
 
     class Meta:
         model = ServiceReport
         fields = [
-            "id", "ticket", "resolution_code", "labor_cost",
+            "id", "ticket", "ticket_status", "resolution_code", "labor_cost",
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
             "draft_parts", "extra_line_items", "tax_rate", "sales_tax",

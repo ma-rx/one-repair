@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import PortalShell from "@/components/PortalShell";
 import { api, ServiceReport } from "@/lib/api";
-import { ResolutionCodeLabels } from "@/types/enums";
 import { FileText, Download, Loader2 } from "lucide-react";
 
 export default function PortalInvoicesPage() {
@@ -53,12 +52,11 @@ export default function PortalInvoicesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Invoice ID</th>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Resolution</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Invoice</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Parts</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Labor</th>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Total</th>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Email Sent</th>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Status</th>
                 <th className="px-6 py-3 text-right text-slate-500 font-medium">PDF</th>
               </tr>
             </thead>
@@ -66,18 +64,17 @@ export default function PortalInvoicesPage() {
               {reports.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-mono text-slate-500 text-xs">{r.id.slice(0, 8).toUpperCase()}</td>
-                  <td className="px-6 py-4 text-slate-700">
-                    {ResolutionCodeLabels[r.resolution_code] ?? r.resolution_code}
-                  </td>
                   <td className="px-6 py-4 text-slate-600">${parseFloat(r.parts_total).toFixed(2)}</td>
                   <td className="px-6 py-4 text-slate-600">${parseFloat(r.labor_cost).toFixed(2)}</td>
                   <td className="px-6 py-4 font-semibold text-slate-800">${parseFloat(r.grand_total).toFixed(2)}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                      r.invoice_sent ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
-                    }`}>
-                      {r.invoice_sent ? "Sent" : "Not sent"}
-                    </span>
+                    {r.ticket_status === "PAID" ? (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Paid</span>
+                    ) : r.invoice_sent ? (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Payment Pending</span>
+                    ) : (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Not Sent</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <button

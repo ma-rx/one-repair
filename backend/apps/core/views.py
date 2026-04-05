@@ -892,6 +892,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
+        if ticket.status == TicketStatus.PAID:
+            return Response({"detail": "Invoice already paid — cannot re-send."}, status=status.HTTP_400_BAD_REQUEST)
+
         report = ticket.service_reports.prefetch_related("parts_used__part").order_by("-created_at").first()
         if not report:
             return Response({"detail": "No service report found for this ticket."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1004,11 +1007,20 @@ class TicketViewSet(viewsets.ModelViewSet):
             logger.error("PDF generation failed: %s", exc)
             return Response({"detail": f"PDF generation failed: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        work_image_urls = list(
+            WorkImage.objects.filter(ticket=ticket).values_list("url", flat=True)
+        )
+
         sent_to = []
         last_error = ""
         for email in invoice_emails:
             try:
-                send_invoice_email(email, report, pdf_bytes, payment_url=payment_url, ors_settings=ors_settings)
+                send_invoice_email(
+                    email, report, pdf_bytes,
+                    payment_url=payment_url,
+                    ors_settings=ors_settings,
+                    work_image_urls=work_image_urls,
+                )
                 sent_to.append(email)
             except Exception as exc:
                 last_error = str(exc)
@@ -1599,8 +1611,12 @@ class WorkImageView(APIView):
         return Response(WorkImageSerializer(image).data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, pk=None):
+        is_admin = getattr(request.user.profile, "role", None) == UserRole.ORS_ADMIN
         try:
-            image = WorkImage.objects.get(pk=pk, uploaded_by=request.user)
+            if is_admin:
+                image = WorkImage.objects.get(pk=pk)
+            else:
+                image = WorkImage.objects.get(pk=pk, uploaded_by=request.user)
         except WorkImage.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         image.delete()
