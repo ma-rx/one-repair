@@ -59,14 +59,14 @@ export default function Sidebar() {
     ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || "?"
     : "?";
 
-  const [logoUrl, setLogoUrl]         = useState("");
-  const [companyName, setCompanyName] = useState("One Repair");
+  const [logoUrl, setLogoUrl]         = useState(() => localStorage.getItem("ors_logo_url") || "");
+  const [companyName, setCompanyName] = useState(() => localStorage.getItem("ors_company_name") || "One Repair");
 
   useEffect(() => {
     if (user?.role === "ORS_ADMIN") {
       api.getPricing().then((c) => {
-        if (c.logo_url)      setLogoUrl(c.logo_url);
-        if (c.company_name)  setCompanyName(c.company_name);
+        if (c.logo_url)     { setLogoUrl(c.logo_url);         localStorage.setItem("ors_logo_url", c.logo_url); }
+        if (c.company_name) { setCompanyName(c.company_name); localStorage.setItem("ors_company_name", c.company_name); }
       }).catch(() => {});
     }
   }, [user]);
