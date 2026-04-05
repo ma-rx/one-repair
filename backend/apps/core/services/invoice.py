@@ -15,6 +15,8 @@ def _safe(text: str) -> str:
         .replace("\u2014", "-").replace("\u2013", "-") \
         .replace("\u2019", "'").replace("\u2018", "'") \
         .replace("\u201c", '"').replace("\u201d", '"') \
+        .replace("\u2022", "-").replace("\u2023", "-") \
+        .replace("\u25e6", "-").replace("\u2043", "-") \
         .encode("latin-1", errors="replace").decode("latin-1")
 
 
@@ -83,8 +85,6 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
 
     # ── Location label ────────────────────────────────────────────────────────
     location_label = store.name if store else ""
-    if ticket.ticket_number:
-        location_label += f" #{ticket.ticket_number}" if store else ticket.ticket_number
 
     # ── Line items ────────────────────────────────────────────────────────────
     line_items = []   # (description, detail, qty, unit, unit_price, line_total, is_note)
