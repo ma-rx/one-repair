@@ -2476,32 +2476,40 @@ class StripeWebhookView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        import stripe as _stripe
+        import json as _json
+
         webhook_secret = getattr(settings, "STRIPE_WEBHOOK_SECRET", "")
         stripe_key     = getattr(settings, "STRIPE_SECRET_KEY", "")
         if not stripe_key:
             return HttpResponse(status=400)
 
         try:
-            import stripe as _stripe
-            import json as _json
-            _stripe.api_key = stripe_key
             payload    = request.body
             sig_header = request.META.get("HTTP_STRIPE_SIGNATURE", "")
+            _stripe.api_key = stripe_key
             if webhook_secret:
                 event = _stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
             else:
-                # No secret configured — parse raw JSON (no signature verification)
                 event = _json.loads(payload)
         except Exception as exc:
-            logger.warning("Stripe webhook error: %s", exc)
+            logger.warning("Stripe webhook parse error: %s", exc)
             return HttpResponse(status=400)
 
-        event_type = event["type"] if isinstance(event, dict) else event.get("type", "")
-        if event_type == "checkout.session.completed":
-            session   = event["data"]["object"] if isinstance(event, dict) else event["data"]["object"]
-            metadata  = session.get("metadata") or {}
-            ticket_id = metadata.get("ticket_id")
-            if ticket_id:
+        try:
+            # Support both stripe SDK objects (v8 attribute access) and plain dicts
+            if isinstance(event, dict):
+                event_type = event.get("type", "")
+                session    = event.get("data", {}).get("object", {})
+                metadata   = session.get("metadata") or {}
+                ticket_id  = metadata.get("ticket_id")
+            else:
+                event_type = getattr(event, "type", "")
+                session    = event.data.object
+                metadata   = getattr(session, "metadata", None) or {}
+                ticket_id  = metadata.get("ticket_id") if hasattr(metadata, "get") else getattr(metadata, "ticket_id", None)
+
+            if event_type == "checkout.session.completed" and ticket_id:
                 try:
                     t = Ticket.objects.get(pk=ticket_id)
                     t.status = TicketStatus.PAID
@@ -2509,6 +2517,10 @@ class StripeWebhookView(APIView):
                     logger.info("Ticket %s marked PAID via Stripe webhook", ticket_id)
                 except Ticket.DoesNotExist:
                     logger.warning("Stripe webhook: ticket %s not found", ticket_id)
+        except Exception as exc:
+            logger.error("Stripe webhook processing error: %s", exc, exc_info=True)
+            # Still return 200 so Stripe doesn't keep retrying
+            return HttpResponse(status=200)
 
         return HttpResponse(status=200)
 
