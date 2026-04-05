@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import {
-  Wrench,
   ClipboardList,
   Package,
   BarChart3,
@@ -59,13 +58,11 @@ export default function Sidebar() {
     ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || "?"
     : "?";
 
-  const [logoUrl, setLogoUrl]         = useState(() => localStorage.getItem("ors_logo_url") || "");
   const [companyName, setCompanyName] = useState(() => localStorage.getItem("ors_company_name") || "One Repair");
 
   useEffect(() => {
     if (user?.role === "ORS_ADMIN") {
       api.getPricing().then((c) => {
-        if (c.logo_url)     { setLogoUrl(c.logo_url);         localStorage.setItem("ors_logo_url", c.logo_url); }
         if (c.company_name) { setCompanyName(c.company_name); localStorage.setItem("ors_company_name", c.company_name); }
       }).catch(() => {});
     }
@@ -75,14 +72,8 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 flex flex-col z-10">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700/60">
-        {logoUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={logoUrl} alt="Logo" className="h-9 w-9 rounded-lg object-contain bg-white p-0.5" />
-        ) : (
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-500">
-            <Wrench className="w-5 h-5 text-white" />
-          </div>
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
         <div>
           <p className="text-white font-semibold text-sm leading-tight">{companyName.split(" ").slice(0, 2).join(" ")}</p>
           <p className="text-slate-400 text-xs">{companyName.split(" ").slice(2).join(" ") || "Solutions"}</p>
