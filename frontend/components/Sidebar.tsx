@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Package,
   BarChart3,
+  Wrench,
   Settings,
   Bell,
   LogOut,
