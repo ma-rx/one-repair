@@ -7,8 +7,18 @@ import DashboardShell from "@/components/DashboardShell";
 import { api, Ticket } from "@/lib/api";
 import {
   ArrowLeft, Receipt, Send, Loader2, CheckCircle2,
-  Mail, AlertCircle, Plus, X,
+  Mail, AlertCircle, Plus, X, Eye, Pencil, Trash2,
 } from "lucide-react";
+
+type Step = "edit" | "preview";
+
+type PartLine = {
+  id?: string;       // existing PartUsed id
+  part_name: string;
+  sku: string;
+  quantity: number;
+  unit_price: number;
+};
 
 const PAYMENT_TERMS_LABELS: Record<string, string> = {
   DUE_ON_RECEIPT: "Due on Receipt",
@@ -27,200 +37,564 @@ export default function InvoicePage() {
   const [sent,     setSent]     = useState(false);
   const [error,    setError]    = useState("");
   const [paymentUrl, setPaymentUrl] = useState("");
-  const [extraEmail, setExtraEmail] = useState("");
+  const [step, setStep] = useState<Step>("edit");
+
+  // Editable invoice fields
+  const [laborCost,  setLaborCost]  = useState("0");
+  const [taxRate,    setTaxRate]    = useState("0");
+  const [techNotes,  setTechNotes]  = useState("");
+  const [parts,      setParts]      = useState<PartLine[]>([]);
+  const [newPart,    setNewPart]    = useState<PartLine>({ part_name: "", sku: "", quantity: 1, unit_price: 0 });
+
+  // Email recipients
+  const [extraEmail,  setExtraEmail]  = useState("");
   const [extraEmails, setExtraEmails] = useState<string[]>([]);
 
   useEffect(() => {
     api.getTicket(id)
-      .then(setTicket)
+      .then((t) => {
+        setTicket(t);
+        const report = t.service_reports?.[0];
+        if (report) {
+          setLaborCost(report.labor_cost ?? "0");
+          setTaxRate(report.tax_rate ?? "0");
+          setTechNotes(report.tech_notes ?? "");
+          const invParts: PartLine[] = (report.parts_used ?? []).map((p) => ({
+            id: p.id,
+            part_name: p.part_name,
+            sku: "",
+            quantity: p.quantity,
+            unit_price: parseFloat(p.unit_price_at_time),
+          }));
+          const extraParts: PartLine[] = (report.extra_line_items ?? []).map((p) => ({
+            part_name: p.name,
+            sku: p.sku ?? "",
+            quantity: p.quantity,
+            unit_price: p.unit_price,
+          }));
+          setParts([...invParts, ...extraParts]);
+        }
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
 
-  const report = ticket?.service_reports?.[0];
+  // Auto-calculated totals
+  const laborNum    = parseFloat(laborCost) || 0;
+  const taxNum      = parseFloat(taxRate) || 0;
+  const partsTotal  = parts.reduce((sum, p) => sum + p.quantity * p.unit_price, 0);
+  const salesTax    = (laborNum + partsTotal) * taxNum / 100;
+  const grandTotal  = laborNum + partsTotal + salesTax;
+
+  function addPart() {
+    if (!newPart.part_name.trim()) return;
+    setParts((prev) => [...prev, { ...newPart }]);
+    setNewPart({ part_name: "", sku: "", quantity: 1, unit_price: 0 });
+  }
+
+  function updatePart(idx: number, field: keyof PartLine, value: string | number) {
+    setParts((prev) => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p));
+  }
+
+  function removePart(idx: number) {
+    setParts((prev) => prev.filter((_, i) => i !== idx));
+  }
 
   function addExtraEmail() {
     const e = extraEmail.trim();
-    if (e && !extraEmails.includes(e)) {
-      setExtraEmails((prev) => [...prev, e]);
-    }
+    if (e && !extraEmails.includes(e)) setExtraEmails((prev) => [...prev, e]);
     setExtraEmail("");
+  }
+
+  function buildOverrides() {
+    const existingParts = parts.filter((p) => p.id).map((p) => ({
+      id: p.id!, quantity: p.quantity, unit_price: p.unit_price,
+    }));
+    const customParts = parts.filter((p) => !p.id).map((p) => ({
+      name: p.part_name, sku: p.sku, quantity: p.quantity, unit_price: p.unit_price,
+    }));
+    return {
+      labor_cost: laborCost,
+      tax_rate: taxRate,
+      tech_notes: techNotes,
+      parts_used: existingParts,
+      extra_line_items: customParts,
+    };
   }
 
   async function handleSend() {
     setSending(true);
     setError("");
     try {
-      const res = await api.sendInvoice(id, extraEmails);
+      const res = await api.sendInvoice(id, extraEmails, buildOverrides());
       setPaymentUrl(res.payment_url || "");
       setTicket(res.ticket);
       setSent(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to send invoice.");
+      setStep("edit");
     } finally {
       setSending(false);
     }
   }
 
+  const report = ticket?.service_reports?.[0];
+  const orgInvoiceEmails = (ticket as any)?.org_invoice_emails as string[] | undefined;
+
+  if (loading) return (
+    <DashboardShell>
+      <div className="flex items-center justify-center py-20 text-slate-400">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+      </div>
+    </DashboardShell>
+  );
+
+  if (error && !ticket) return (
+    <DashboardShell>
+      <div className="py-12 text-center text-red-500">{error}</div>
+    </DashboardShell>
+  );
+
+  if (!ticket) return null;
+
+  // ── SUCCESS ──────────────────────────────────────────────────────────────────
+  if (sent) return (
+    <DashboardShell>
+      <div className="max-w-xl mx-auto space-y-5 pt-4">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center space-y-3">
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+          <p className="font-bold text-emerald-800 text-lg">Invoice sent!</p>
+          <p className="text-emerald-600 text-sm">PDF invoice emailed to the client.</p>
+          {paymentUrl && (
+            <a href={paymentUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium">
+              View payment link
+            </a>
+          )}
+          <button onClick={() => router.push(`/dispatch/${id}`)}
+            className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium transition-colors">
+            Back to Ticket
+          </button>
+        </div>
+      </div>
+    </DashboardShell>
+  );
+
+  // ── PREVIEW ───────────────────────────────────────────────────────────────────
+  if (step === "preview") return (
+    <DashboardShell>
+      <div className="max-w-2xl mx-auto space-y-5">
+        <button onClick={() => setStep("edit")}
+          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back to Edit
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <Receipt className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Invoice Preview</h1>
+            <p className="text-slate-500 text-sm">Review before sending</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
+          </div>
+        )}
+
+        {/* Invoice Preview Card */}
+        <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6 text-sm">
+          {/* Header */}
+          <div className="flex items-start justify-between border-b border-slate-100 pb-5">
+            <div>
+              <p className="font-bold text-slate-900 text-lg">SERVICE INVOICE</p>
+              <p className="text-slate-500 text-xs mt-1">Invoice # {ticket.ticket_number}</p>
+              {ticket.completed_at && (
+                <p className="text-slate-500 text-xs">Date: {new Date(ticket.completed_at).toLocaleDateString()}</p>
+              )}
+            </div>
+            <div className="text-right text-xs text-slate-500">
+              <p className="font-semibold text-slate-800">One Repair Solutions</p>
+              {ticket.assigned_tech_name && <p>Tech: {ticket.assigned_tech_name}</p>}
+            </div>
+          </div>
+
+          {/* Billed To / Service Location */}
+          <div className="grid grid-cols-2 gap-6 text-xs">
+            <div>
+              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Billed To</p>
+              <p className="font-medium text-slate-800">{ticket.store_name}</p>
+              {ticket.store_address && <p className="text-slate-500">{ticket.store_address}</p>}
+            </div>
+            <div>
+              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Service Location</p>
+              <p className="font-medium text-slate-800">{ticket.asset_name}</p>
+              {ticket.asset_make && <p className="text-slate-500">{ticket.asset_make} {ticket.asset_model_number}</p>}
+            </div>
+          </div>
+
+          {/* Tech Notes */}
+          {techNotes && (
+            <div className="text-xs">
+              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Tech Notes</p>
+              <p className="text-slate-700 whitespace-pre-wrap">{techNotes}</p>
+            </div>
+          )}
+
+          {/* Line Items */}
+          {parts.length > 0 && (
+            <div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-blue-600 text-white">
+                    <th className="text-left px-3 py-2">Part</th>
+                    <th className="text-right px-3 py-2">Qty</th>
+                    <th className="text-right px-3 py-2">Unit Price</th>
+                    <th className="text-right px-3 py-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parts.map((p, i) => (
+                    <tr key={i} className={i % 2 === 0 ? "bg-slate-50" : "bg-white"}>
+                      <td className="px-3 py-2 text-slate-700">{p.part_name}</td>
+                      <td className="px-3 py-2 text-right text-slate-600">{p.quantity}</td>
+                      <td className="px-3 py-2 text-right text-slate-600">${p.unit_price.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">${(p.quantity * p.unit_price).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Totals */}
+          <div className="space-y-1 text-xs border-t border-slate-100 pt-4">
+            {partsTotal > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Parts Subtotal</span><span>${partsTotal.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-slate-600">
+              <span>Labor</span><span>${laborNum.toFixed(2)}</span>
+            </div>
+            {salesTax > 0 && (
+              <div className="flex justify-between text-slate-500">
+                <span>Tax ({taxRate}%)</span><span>${salesTax.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-sm">
+              <span>TOTAL DUE</span><span>${grandTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Sending to */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 text-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <Mail className="w-4 h-4 text-slate-400" />
+            <p className="font-medium text-slate-700">Sending to</p>
+          </div>
+          {[...(orgInvoiceEmails ?? []), ...extraEmails].length === 0 ? (
+            <p className="text-amber-600 text-xs">No recipients configured.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {[...(orgInvoiceEmails ?? []), ...extraEmails].map((e) => (
+                <span key={e} className="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-lg">{e}</span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button onClick={handleSend} disabled={sending}
+          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {sending ? "Sending…" : "Confirm & Send Invoice"}
+        </button>
+      </div>
+    </DashboardShell>
+  );
+
+  // ── EDIT ──────────────────────────────────────────────────────────────────────
   return (
     <DashboardShell>
-      <div className="max-w-xl mx-auto space-y-5">
-        <Link href={`/dispatch/${id}`} className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm transition-colors w-fit">
+      <div className="max-w-2xl mx-auto space-y-5">
+        <Link href={`/dispatch/${id}`}
+          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm transition-colors w-fit">
           <ArrowLeft className="w-4 h-4" /> Back to Ticket
         </Link>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20 text-slate-400">
-            <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <Receipt className="w-5 h-5 text-emerald-600" />
           </div>
-        ) : error && !ticket ? (
-          <div className="py-12 text-center text-red-500">{error}</div>
-        ) : ticket && (
-          <>
-            {/* Header */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                <Receipt className="w-5 h-5 text-emerald-600" />
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Create Invoice</h1>
+            <p className="text-slate-500 text-sm">Ticket {ticket.ticket_number} — {ticket.store_name}</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
+          </div>
+        )}
+
+        {/* ── Ticket Info ── */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Ticket Info</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Ticket #</span>
+              <span className="font-medium text-slate-800">{ticket.ticket_number}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Status</span>
+              <span className="font-medium text-slate-800">{ticket.status}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Store</span>
+              <span className="font-medium text-slate-800">{ticket.store_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Asset</span>
+              <span className="font-medium text-slate-800">{ticket.asset_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Tech</span>
+              <span className="font-medium text-slate-800">{ticket.assigned_tech_name ?? "—"}</span>
+            </div>
+            {ticket.completed_at && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Service Date</span>
+                <span className="font-medium text-slate-800">{new Date(ticket.completed_at).toLocaleDateString()}</span>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-900">Send Invoice</h1>
-                <p className="text-slate-500 text-sm">Ticket {ticket.ticket_number} — {ticket.store_name}</p>
+            )}
+            {ticket.store_address && (
+              <div className="col-span-2 flex justify-between">
+                <span className="text-slate-500">Address</span>
+                <span className="font-medium text-slate-800 text-right">{ticket.store_address}</span>
+              </div>
+            )}
+            {ticket.description && (
+              <div className="col-span-2 flex justify-between">
+                <span className="text-slate-500">Issue</span>
+                <span className="font-medium text-slate-800 text-right">{ticket.description}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Tech Report ── */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Tech Report</p>
+          {report?.resolution_code && (
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Resolution</span>
+              <span className="font-medium text-slate-800">{report.resolution_code}</span>
+            </div>
+          )}
+          {report?.formatted_report && (
+            <div className="text-sm">
+              <p className="text-slate-500 mb-1">Service Summary</p>
+              <p className="text-slate-700 text-xs bg-slate-50 rounded-lg p-3">{report.formatted_report}</p>
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Tech Notes</label>
+            <textarea
+              rows={4}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              value={techNotes}
+              onChange={(e) => setTechNotes(e.target.value)}
+              placeholder="Add or edit tech notes…"
+            />
+          </div>
+        </div>
+
+        {/* ── Invoice Fields ── */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Invoice</p>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Labor Cost ($)</label>
+              <input type="number" min="0" step="0.01"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={laborCost}
+                onChange={(e) => setLaborCost(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Tax Rate (%)</label>
+              <input type="number" min="0" step="0.01" max="100"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={taxRate}
+                onChange={(e) => setTaxRate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Parts */}
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-2">Parts & Line Items</p>
+            {parts.length > 0 && (
+              <div className="border border-slate-200 rounded-lg overflow-hidden mb-3">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Name</th>
+                      <th className="text-right px-3 py-2 text-slate-500 font-medium w-16">Qty</th>
+                      <th className="text-right px-3 py-2 text-slate-500 font-medium w-24">Unit $</th>
+                      <th className="text-right px-3 py-2 text-slate-500 font-medium w-24">Total</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parts.map((p, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="px-3 py-2">
+                          <input
+                            className="w-full bg-transparent text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
+                            value={p.part_name}
+                            onChange={(e) => updatePart(i, "part_name", e.target.value)}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="number" min="1"
+                            className="w-full bg-transparent text-slate-700 text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
+                            value={p.quantity}
+                            onChange={(e) => updatePart(i, "quantity", parseInt(e.target.value) || 1)}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="number" min="0" step="0.01"
+                            className="w-full bg-transparent text-slate-700 text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1"
+                            value={p.unit_price}
+                            onChange={(e) => updatePart(i, "unit_price", parseFloat(e.target.value) || 0)}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          ${(p.quantity * p.unit_price).toFixed(2)}
+                        </td>
+                        <td className="px-2 py-2">
+                          <button onClick={() => removePart(i)} className="text-slate-300 hover:text-red-500">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Add new part row */}
+            <div className="grid grid-cols-12 gap-2 items-end">
+              <div className="col-span-5">
+                <input placeholder="Part / item name"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newPart.part_name}
+                  onChange={(e) => setNewPart((p) => ({ ...p, part_name: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && addPart()}
+                />
+              </div>
+              <div className="col-span-2">
+                <input type="number" min="1" placeholder="Qty"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newPart.quantity}
+                  onChange={(e) => setNewPart((p) => ({ ...p, quantity: parseInt(e.target.value) || 1 }))}
+                />
+              </div>
+              <div className="col-span-3">
+                <input type="number" min="0" step="0.01" placeholder="Unit $"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newPart.unit_price || ""}
+                  onChange={(e) => setNewPart((p) => ({ ...p, unit_price: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+              <div className="col-span-2">
+                <button onClick={addPart}
+                  className="w-full flex items-center justify-center gap-1 border border-slate-300 rounded-lg py-2 text-sm text-slate-600 hover:bg-slate-50">
+                  <Plus className="w-3.5 h-3.5" /> Add
+                </button>
               </div>
             </div>
+          </div>
 
-            {sent ? (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
-                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                <p className="font-semibold text-emerald-800">Invoice sent!</p>
-                <p className="text-emerald-600 text-sm">The PDF invoice has been emailed to the client.</p>
-                {paymentUrl && (
-                  <a href={paymentUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium">
-                    View payment link
-                  </a>
-                )}
-                <button
-                  onClick={() => router.push(`/dispatch/${id}`)}
-                  className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Back to Ticket
+          {/* Totals */}
+          <div className="border-t border-slate-100 pt-3 space-y-1 text-sm">
+            {partsTotal > 0 && (
+              <div className="flex justify-between text-slate-500">
+                <span>Parts Subtotal</span><span>${partsTotal.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-slate-500">
+              <span>Labor</span><span>${laborNum.toFixed(2)}</span>
+            </div>
+            {salesTax > 0 && (
+              <div className="flex justify-between text-slate-400">
+                <span>Tax ({taxRate}%)</span><span>${salesTax.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
+              <span>Total Due</span><span>${grandTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Recipients ── */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-slate-400" />
+            <p className="text-sm font-medium text-slate-700">Send To</p>
+          </div>
+
+          {orgInvoiceEmails && orgInvoiceEmails.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {orgInvoiceEmails.map((e) => (
+                <span key={e} className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-lg">{e}</span>
+              ))}
+            </div>
+          )}
+
+          {orgInvoiceEmails?.length === 0 && extraEmails.length === 0 && (
+            <p className="text-amber-600 text-xs bg-amber-50 rounded-lg px-3 py-2">
+              No invoice emails configured. Add them below or in Organization settings.
+            </p>
+          )}
+
+          <div className="space-y-1.5">
+            {extraEmails.map((e) => (
+              <div key={e} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5 text-sm">
+                <span className="flex-1 text-slate-700">{e}</span>
+                <button onClick={() => setExtraEmails((prev) => prev.filter((x) => x !== e))}>
+                  <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-500" />
                 </button>
               </div>
-            ) : (
-              <>
-                {error && (
-                  <div className="flex items-start gap-2 bg-red-50 text-red-700 rounded-lg px-4 py-3 text-sm">
-                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
-                  </div>
-                )}
+            ))}
+          </div>
 
-                {/* Service summary */}
-                {report && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-                    <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Service Summary</p>
+          <div className="flex gap-2">
+            <input type="email" placeholder="Add recipient email…"
+              value={extraEmail}
+              onChange={(e) => setExtraEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addExtraEmail())}
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button onClick={addExtraEmail}
+              className="flex items-center gap-1 px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+              <Plus className="w-3.5 h-3.5" /> Add
+            </button>
+          </div>
+        </div>
 
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between text-slate-600">
-                        <span>Asset</span>
-                        <span className="font-medium text-slate-800">{ticket.asset_name}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Tech</span>
-                        <span className="font-medium text-slate-800">{ticket.assigned_tech_name ?? "—"}</span>
-                      </div>
-                      {ticket.completed_at && (
-                        <div className="flex justify-between text-slate-600">
-                          <span>Service Date</span>
-                          <span className="font-medium text-slate-800">{new Date(ticket.completed_at).toLocaleDateString()}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Line items */}
-                    <div className="border-t border-slate-100 pt-3 space-y-1 text-sm">
-                      {parseFloat(report.labor_cost) > 0 && (
-                        <div className="flex justify-between text-slate-600">
-                          <span>Labor</span>
-                          <span>${parseFloat(report.labor_cost).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {report.parts_used?.map((p) => (
-                        <div key={p.id} className="flex justify-between text-slate-600">
-                          <span>{p.part_name} × {p.quantity}</span>
-                          <span>${parseFloat(p.line_total).toFixed(2)}</span>
-                        </div>
-                      ))}
-                      {parseFloat(report.sales_tax) > 0 && (
-                        <div className="flex justify-between text-slate-500">
-                          <span>Tax ({report.tax_rate}%)</span>
-                          <span>${parseFloat(report.sales_tax).toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
-                        <span>Total Due</span>
-                        <span>${parseFloat(report.grand_total).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Recipient emails */}
-                <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-slate-400" />
-                    <p className="text-sm font-medium text-slate-700">Send To</p>
-                  </div>
-
-                  {/* Org invoice emails */}
-                  {(ticket as Ticket & { org_invoice_emails?: string[] }).org_invoice_emails?.length === 0 && extraEmails.length === 0 && (
-                    <p className="text-amber-600 text-xs bg-amber-50 rounded-lg px-3 py-2">
-                      No invoice emails configured for this organization. Add them below or in the Organization settings.
-                    </p>
-                  )}
-
-                  {/* Extra emails */}
-                  <div className="space-y-1.5">
-                    {extraEmails.map((e) => (
-                      <div key={e} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5 text-sm">
-                        <span className="flex-1 text-slate-700">{e}</span>
-                        <button type="button" onClick={() => setExtraEmails((prev) => prev.filter((x) => x !== e))}>
-                          <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-500" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      placeholder="Add recipient email…"
-                      value={extraEmail}
-                      onChange={(e) => setExtraEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addExtraEmail())}
-                      className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button type="button" onClick={addExtraEmail}
-                      className="flex items-center gap-1 px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
-                      <Plus className="w-3.5 h-3.5" /> Add
-                    </button>
-                  </div>
-                  <p className="text-slate-400 text-xs">
-                    Invoice will also be sent to emails configured on the organization. Stripe payment link included if configured.
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleSend}
-                  disabled={sending}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  {sending ? "Sending…" : "Send Invoice"}
-                </button>
-              </>
-            )}
-          </>
-        )}
+        <button onClick={() => setStep("preview")}
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-semibold transition-colors">
+          <Eye className="w-4 h-4" /> Preview Invoice
+        </button>
       </div>
     </DashboardShell>
   );

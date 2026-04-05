@@ -510,6 +510,7 @@ class ServiceReport(models.Model):
     manager_on_site      = models.CharField(max_length=255, blank=True, default="")
     manager_signature    = models.TextField(blank=True, default="")  # base64 PNG data URL
     draft_parts          = models.JSONField(default=list)   # [{"part_id": "uuid", "quantity": N}]
+    extra_line_items     = models.JSONField(default=list)   # [{name, sku, quantity, unit_price}]
     tax_rate             = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     stripe_session_id    = models.CharField(max_length=255, blank=True, default="")
     stripe_payment_url   = models.URLField(max_length=2000, blank=True, default="")
@@ -524,7 +525,10 @@ class ServiceReport(models.Model):
 
     @property
     def parts_total(self):
-        return sum(p.line_total for p in self.parts_used.all())
+        from decimal import Decimal
+        inv = sum(p.line_total for p in self.parts_used.all())
+        extra = sum(Decimal(str(i.get("unit_price", 0))) * int(i.get("quantity", 1)) for i in (self.extra_line_items or []))
+        return inv + extra
 
     @property
     def sales_tax(self):

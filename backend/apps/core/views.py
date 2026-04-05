@@ -880,11 +880,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="send-invoice")
     def send_invoice(self, request, pk=None):
-        """
-        Send invoice to the org's invoice_emails.
-        Optionally creates a Stripe Checkout Session for online payment.
-        Sets ticket status to CLOSED.
-        """
+        from decimal import Decimal
         ticket = self.get_object()
         if getattr(request.user.profile, "role", None) != UserRole.ORS_ADMIN:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
@@ -898,22 +894,53 @@ class TicketViewSet(viewsets.ModelViewSet):
         if not org:
             return Response({"detail": "Ticket has no organization."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ── Apply overrides and save to service report ─────────────────────────
+        overrides = request.data.get("overrides", {})
+        save_fields = []
+        if "labor_cost" in overrides:
+            report.labor_cost = Decimal(str(overrides["labor_cost"]))
+            save_fields.append("labor_cost")
+        if "tax_rate" in overrides:
+            report.tax_rate = Decimal(str(overrides["tax_rate"]))
+            save_fields.append("tax_rate")
+        if "tech_notes" in overrides:
+            report.tech_notes = overrides["tech_notes"]
+            save_fields.append("tech_notes")
+        if "extra_line_items" in overrides:
+            report.extra_line_items = overrides["extra_line_items"]
+            save_fields.append("extra_line_items")
+        if save_fields:
+            save_fields.append("updated_at")
+            report.save(update_fields=save_fields)
+
+        # Update existing parts quantities/prices
+        if "parts_used" in overrides:
+            for p in overrides["parts_used"]:
+                try:
+                    pu = report.parts_used.get(id=p["id"])
+                    pu.quantity = int(p["quantity"])
+                    pu.unit_price_at_time = Decimal(str(p["unit_price"]))
+                    pu.save(update_fields=["quantity", "unit_price_at_time"])
+                except Exception:
+                    pass
+
+        # ── Build email list ───────────────────────────────────────────────────
         invoice_emails = list(org.invoice_emails or [])
         extra_emails   = request.data.get("extra_emails", [])
         if isinstance(extra_emails, list):
             invoice_emails.extend(e for e in extra_emails if e)
-        invoice_emails = list(dict.fromkeys(invoice_emails))  # deduplicate
+        invoice_emails = list(dict.fromkeys(invoice_emails))
 
         if not invoice_emails:
             return Response(
-                {"detail": "No invoice emails configured for this organization. Add them in the organization settings."},
+                {"detail": "No invoice emails configured. Add them in Organization settings or above."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         ors_settings = PricingConfig.objects.first()
 
-        # Optional Stripe Checkout Session
-        payment_url      = ""
+        # ── Optional Stripe Checkout ───────────────────────────────────────────
+        payment_url       = ""
         stripe_session_id = ""
         stripe_key = getattr(settings, "STRIPE_SECRET_KEY", "")
         if stripe_key:
@@ -927,9 +954,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                     line_items=[{
                         "price_data": {
                             "currency": "usd",
-                            "product_data": {
-                                "name": f"Service Invoice — Ticket {ticket.ticket_number or str(ticket.id)[:8]}",
-                            },
+                            "product_data": {"name": f"Service Invoice — Ticket {ticket.ticket_number or str(ticket.id)[:8]}"},
                             "unit_amount": amount_cents,
                         },
                         "quantity": 1,
@@ -944,20 +969,27 @@ class TicketViewSet(viewsets.ModelViewSet):
             except Exception as exc:
                 logger.warning("Stripe session creation failed: %s", exc)
 
-        pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings, payment_url=payment_url)
+        # ── Generate PDF & send ────────────────────────────────────────────────
+        try:
+            pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings, payment_url=payment_url)
+        except Exception as exc:
+            logger.error("PDF generation failed: %s", exc)
+            return Response({"detail": f"PDF generation failed: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         sent_to = []
+        last_error = ""
         for email in invoice_emails:
             try:
                 send_invoice_email(email, report, pdf_bytes, payment_url=payment_url, ors_settings=ors_settings)
                 sent_to.append(email)
             except Exception as exc:
+                last_error = str(exc)
                 logger.error("Failed to send invoice email to %s: %s", email, exc)
 
         if not sent_to:
-            return Response({"detail": "Failed to send invoice emails."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"detail": f"Failed to send invoice emails: {last_error}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        report.invoice_sent      = True
+        report.invoice_sent       = True
         report.stripe_session_id  = stripe_session_id
         report.stripe_payment_url = payment_url
         report.save(update_fields=["invoice_sent", "stripe_session_id", "stripe_payment_url", "updated_at"])

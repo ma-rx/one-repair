@@ -138,8 +138,18 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     pdf.ln(4)
 
     # ── Parts table ───────────────────────────────────────────────────────────
-    parts = list(service_report.parts_used.select_related("part").all())
-    if parts:
+    inv_parts = list(service_report.parts_used.select_related("part").all())
+    extra_parts = service_report.extra_line_items or []
+    all_parts = (
+        [{"name": pu.part.name if pu.part else "—", "sku": (pu.part.sku or "—") if pu.part else "—",
+          "qty": pu.quantity, "unit_price": float(pu.unit_price_at_time), "line_total": float(pu.line_total)}
+         for pu in inv_parts] +
+        [{"name": p.get("name", "—"), "sku": p.get("sku", "—"),
+          "qty": int(p.get("quantity", 1)), "unit_price": float(p.get("unit_price", 0)),
+          "line_total": float(p.get("unit_price", 0)) * int(p.get("quantity", 1))}
+         for p in extra_parts]
+    )
+    if all_parts:
         pdf.set_font("Helvetica", "B", 9)
         pdf.set_text_color(255, 255, 255)
         pdf.set_fill_color(37, 99, 235)
@@ -151,16 +161,14 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
 
         pdf.set_font("Helvetica", "", 9)
         fill = False
-        for pu in parts:
+        for p in all_parts:
             pdf.set_text_color(15, 23, 42)
             pdf.set_fill_color(241, 245, 249)
-            name = pu.part.name if pu.part else pu.part_name if hasattr(pu, "part_name") else "—"
-            sku  = (pu.part.sku or "—") if pu.part else "—"
-            pdf.cell(80, 6, name, fill=fill, ln=False)
-            pdf.cell(25, 6, sku, fill=fill, ln=False)
-            pdf.cell(20, 6, str(pu.quantity), fill=fill, ln=False)
-            pdf.cell(30, 6, f"${pu.unit_price_at_time:.2f}", fill=fill, ln=False)
-            pdf.cell(35, 6, f"${pu.line_total:.2f}", fill=fill, ln=True)
+            pdf.cell(80, 6, p["name"], fill=fill, ln=False)
+            pdf.cell(25, 6, p["sku"], fill=fill, ln=False)
+            pdf.cell(20, 6, str(p["qty"]), fill=fill, ln=False)
+            pdf.cell(30, 6, f"${p['unit_price']:.2f}", fill=fill, ln=False)
+            pdf.cell(35, 6, f"${p['line_total']:.2f}", fill=fill, ln=True)
             fill = not fill
         pdf.ln(4)
 

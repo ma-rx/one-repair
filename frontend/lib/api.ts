@@ -207,10 +207,16 @@ export const api = {
     request<PricingConfig>("/pricing/", { method: "PATCH", body: JSON.stringify(body) }),
 
   // Invoice
-  sendInvoice: (ticketId: string, extraEmails: string[] = []) =>
+  sendInvoice: (ticketId: string, extraEmails: string[] = [], overrides?: {
+    labor_cost?: string;
+    tax_rate?: string;
+    tech_notes?: string;
+    extra_line_items?: Array<{ name: string; sku?: string; quantity: number; unit_price: number }>;
+    parts_used?: Array<{ id: string; quantity: number; unit_price: number }>;
+  }) =>
     request<{ sent_to: string[]; payment_url: string; ticket: Ticket }>(
       `/tickets/${ticketId}/send-invoice/`,
-      { method: "POST", body: JSON.stringify({ extra_emails: extraEmails }) },
+      { method: "POST", body: JSON.stringify({ extra_emails: extraEmails, overrides: overrides ?? {} }) },
     ),
 
   // Time tracking
@@ -770,6 +776,7 @@ export interface ServiceReport {
   labor_cost: string;
   invoice_email: string;
   draft_parts: Array<{ part_id: string; quantity: number }>;
+  extra_line_items: Array<{ name: string; sku?: string; quantity: number; unit_price: number }>;
   tax_rate: string;
   sales_tax: string;
   parts_total: string;

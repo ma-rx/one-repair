@@ -261,7 +261,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
             "id", "ticket", "resolution_code", "labor_cost",
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
-            "draft_parts", "tax_rate", "sales_tax",
+            "draft_parts", "extra_line_items", "tax_rate", "sales_tax",
             "stripe_session_id", "stripe_payment_url",
             "parts_used", "parts_total", "grand_total", "created_at",
         ]
