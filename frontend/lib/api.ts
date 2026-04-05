@@ -207,6 +207,23 @@ export const api = {
     a.click();
     URL.revokeObjectURL(url);
   },
+  getInvoicePDFBlobUrl: async (id: string): Promise<string> => {
+    const token = getAccessToken();
+    const res = await fetch(`${BASE}/invoices/${id}/pdf/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Failed to load PDF.");
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
+  getServiceReport: (id: string) => request<ServiceReport>(`/service-reports/${id}/`),
+  createPaymentSession: (reportId: string) =>
+    request<{ payment_url: string }>(`/service-reports/${reportId}/pay/`, { method: "POST" }),
+  createMultiPaySession: (reportIds: string[]) =>
+    request<{ payment_url: string }>("/payments/multi/", {
+      method: "POST",
+      body: JSON.stringify({ report_ids: reportIds }),
+    }),
 
   // Pricing config / ORS Settings
   getPricing: () => request<PricingConfig>("/pricing/"),

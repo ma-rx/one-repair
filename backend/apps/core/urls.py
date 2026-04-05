@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AssetViewSet, BulkImportTicketsView, ClientKPIView, DiagnosticChatView, DiagnosticSearchView,
     DistrictManagerViewSet, EquipmentModelViewSet, FormatReportView,
-    InvoicePDFView, KPIView, KnowledgeEntryViewSet, OrganizationViewSet,
+    InvoicePDFView, KPIView, KnowledgeEntryViewSet, MultiPayView, OrganizationViewSet,
     PartsApprovalViewSet, PartRequestViewSet, PartViewSet, PricingConfigView, RepairDocumentViewSet,
     RepairImageViewSet, ResolutionCodeEntryViewSet, ServiceReportViewSet, StoreViewSet, SuggestCodesView,
     SymptomCodeEntryViewSet, TicketViewSet, TimeEntryView, UserViewSet,
@@ -33,6 +33,7 @@ urlpatterns = router.urls + [
     path("kpis/", KPIView.as_view()),
     path("client-kpis/", ClientKPIView.as_view()),
     path("invoices/<uuid:pk>/pdf/", InvoicePDFView.as_view()),
+    path("payments/multi/", MultiPayView.as_view()),
     path("pricing/", PricingConfigView.as_view()),
     path("time-entries/", TimeEntryView.as_view()),
     path("work-images/", WorkImageView.as_view()),

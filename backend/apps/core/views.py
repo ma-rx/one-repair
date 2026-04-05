@@ -997,6 +997,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                 _stripe.api_key = stripe_key
                 frontend_url = getattr(settings, "FRONTEND_URL", "")
                 amount_cents = max(1, int(report.grand_total * 100))
+                import time as _time
                 session = _stripe.checkout.Session.create(
                     payment_method_types=["card"],
                     line_items=[{
@@ -1008,9 +1009,10 @@ class TicketViewSet(viewsets.ModelViewSet):
                         "quantity": 1,
                     }],
                     mode="payment",
-                    metadata={"service_report_id": str(report.id), "ticket_id": str(ticket.id)},
-                    success_url=f"{frontend_url}/dispatch/{ticket.id}?invoice_paid=1" if frontend_url else "https://onerepairsolutions.com",
-                    cancel_url=f"{frontend_url}/dispatch/{ticket.id}/invoice" if frontend_url else "https://onerepairsolutions.com",
+                    expires_at=int(_time.time()) + (30 * 24 * 60 * 60),  # 30 days
+                    metadata={"service_report_id": str(report.id), "ticket_ids": str(ticket.id)},
+                    success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
+                    cancel_url=f"{frontend_url}/portal/invoices" if frontend_url else "https://onerepairsolutions.com",
                 )
                 payment_url       = session.url
                 stripe_session_id = session.id
@@ -1390,6 +1392,136 @@ class ServiceReportViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="pay")
+    def pay(self, request, pk=None):
+        """Generate a fresh Stripe Checkout session for a single invoice."""
+        import stripe as _stripe
+        import time as _time
+        report = self.get_object()
+        ticket = report.ticket
+
+        # Hard guard — never charge a paid ticket
+        if ticket.status == TicketStatus.PAID:
+            return Response({"detail": "already_paid"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not report.invoice_sent:
+            return Response({"detail": "Invoice has not been sent yet."}, status=status.HTTP_400_BAD_REQUEST)
+
+        stripe_key   = getattr(settings, "STRIPE_SECRET_KEY", "")
+        frontend_url = getattr(settings, "FRONTEND_URL", "")
+        if not stripe_key:
+            return Response({"detail": "Payments not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            _stripe.api_key  = stripe_key
+            amount_cents     = max(1, int(report.grand_total * 100))
+            invoice_label    = ticket.ticket_number or str(ticket.id)[:8].upper()
+            session = _stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[{
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": f"Service Invoice — {invoice_label}"},
+                        "unit_amount": amount_cents,
+                    },
+                    "quantity": 1,
+                }],
+                mode="payment",
+                expires_at=int(_time.time()) + (30 * 24 * 60 * 60),
+                metadata={"ticket_ids": str(ticket.id)},
+                success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
+                cancel_url=f"{frontend_url}/portal/invoices/{report.id}" if frontend_url else "https://onerepairsolutions.com",
+            )
+            return Response({"payment_url": session.url})
+        except Exception as exc:
+            logger.error("Stripe session creation failed: %s", exc)
+            return Response({"detail": "Failed to create payment session."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ── Multi-Invoice Payment ──────────────────────────────────────────────────────
+
+class MultiPayView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Create a single Stripe Checkout session for multiple invoices."""
+        import stripe as _stripe
+        import time as _time
+
+        report_ids = request.data.get("report_ids", [])
+        if not report_ids:
+            return Response({"detail": "No invoices selected."}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile = getattr(request.user, "profile", None)
+
+        # Fetch and validate reports
+        reports = list(
+            ServiceReport.objects
+            .select_related("ticket")
+            .filter(pk__in=report_ids, invoice_sent=True)
+            .exclude(ticket__status=TicketStatus.PAID)
+        )
+
+        if not reports:
+            return Response({"detail": "No payable invoices found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Scope check — client users can only pay their own org's invoices
+        if profile and profile.role != UserRole.ORS_ADMIN:
+            org = getattr(profile, "organization", None)
+            for r in reports:
+                ticket = r.ticket
+                ticket_org = None
+                if ticket.asset_id:
+                    try:
+                        ticket_org = ticket.asset.store.organization
+                    except Exception:
+                        pass
+                if not ticket_org:
+                    ta = ticket.ticket_assets.select_related("asset__store__organization").first()
+                    if ta and ta.asset_id:
+                        try:
+                            ticket_org = ta.asset.store.organization
+                        except Exception:
+                            pass
+                if not org or ticket_org != org:
+                    return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        stripe_key   = getattr(settings, "STRIPE_SECRET_KEY", "")
+        frontend_url = getattr(settings, "FRONTEND_URL", "")
+        if not stripe_key:
+            return Response({"detail": "Payments not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            _stripe.api_key = stripe_key
+            line_items = []
+            for r in reports:
+                ticket       = r.ticket
+                label        = ticket.ticket_number or str(ticket.id)[:8].upper()
+                amount_cents = max(1, int(r.grand_total * 100))
+                line_items.append({
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": f"Service Invoice — {label}"},
+                        "unit_amount": amount_cents,
+                    },
+                    "quantity": 1,
+                })
+
+            ticket_ids_csv = ",".join(str(r.ticket_id) for r in reports)
+            session = _stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=line_items,
+                mode="payment",
+                expires_at=int(_time.time()) + (30 * 24 * 60 * 60),
+                metadata={"ticket_ids": ticket_ids_csv},
+                success_url=f"{frontend_url}/portal/invoices?paid=1" if frontend_url else "https://onerepairsolutions.com",
+                cancel_url=f"{frontend_url}/portal/invoices" if frontend_url else "https://onerepairsolutions.com",
+            )
+            return Response({"payment_url": session.url})
+        except Exception as exc:
+            logger.error("Multi-pay Stripe session failed: %s", exc)
+            return Response({"detail": "Failed to create payment session."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
@@ -2517,27 +2649,33 @@ class StripeWebhookView(APIView):
         try:
             # Support both stripe SDK objects (v8 attribute access) and plain dicts
             if isinstance(event, dict):
-                event_type = event.get("type", "")
-                session    = event.get("data", {}).get("object", {})
-                metadata   = session.get("metadata") or {}
-                ticket_id  = metadata.get("ticket_id")
+                event_type    = event.get("type", "")
+                session       = event.get("data", {}).get("object", {})
+                metadata      = session.get("metadata") or {}
+                ticket_ids_raw = metadata.get("ticket_ids") or metadata.get("ticket_id") or ""
             else:
-                event_type = getattr(event, "type", "")
-                session    = event.data.object
-                metadata   = getattr(session, "metadata", None) or {}
-                ticket_id  = metadata.get("ticket_id") if hasattr(metadata, "get") else getattr(metadata, "ticket_id", None)
+                event_type    = getattr(event, "type", "")
+                session       = event.data.object
+                metadata      = getattr(session, "metadata", None) or {}
+                if hasattr(metadata, "get"):
+                    ticket_ids_raw = metadata.get("ticket_ids") or metadata.get("ticket_id") or ""
+                else:
+                    ticket_ids_raw = getattr(metadata, "ticket_ids", None) or getattr(metadata, "ticket_id", None) or ""
 
-            if event_type == "checkout.session.completed" and ticket_id:
-                try:
-                    t = Ticket.objects.get(pk=ticket_id)
-                    t.status = TicketStatus.PAID
-                    t.save(update_fields=["status", "updated_at"])
-                    logger.info("Ticket %s marked PAID via Stripe webhook", ticket_id)
-                except Ticket.DoesNotExist:
-                    logger.warning("Stripe webhook: ticket %s not found", ticket_id)
+            if event_type == "checkout.session.completed" and ticket_ids_raw:
+                # ticket_ids_raw may be a single UUID or comma-separated list
+                ticket_ids = [tid.strip() for tid in str(ticket_ids_raw).split(",") if tid.strip()]
+                for ticket_id in ticket_ids:
+                    try:
+                        t = Ticket.objects.get(pk=ticket_id)
+                        if t.status != TicketStatus.PAID:
+                            t.status = TicketStatus.PAID
+                            t.save(update_fields=["status", "updated_at"])
+                            logger.info("Ticket %s marked PAID via Stripe webhook", ticket_id)
+                    except Ticket.DoesNotExist:
+                        logger.warning("Stripe webhook: ticket %s not found", ticket_id)
         except Exception as exc:
             logger.error("Stripe webhook processing error: %s", exc, exc_info=True)
-            # Still return 200 so Stripe doesn't keep retrying
             return HttpResponse(status=200)
 
         return HttpResponse(status=200)
