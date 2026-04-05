@@ -906,6 +906,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         if "tech_notes" in overrides:
             report.tech_notes = overrides["tech_notes"]
             save_fields.append("tech_notes")
+        if "formatted_report" in overrides:
+            report.formatted_report = overrides["formatted_report"]
+            save_fields.append("formatted_report")
         if "extra_line_items" in overrides:
             report.extra_line_items = overrides["extra_line_items"]
             save_fields.append("extra_line_items")

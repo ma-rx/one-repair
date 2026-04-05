@@ -210,7 +210,7 @@ export const api = {
   sendInvoice: (ticketId: string, extraEmails: string[] = [], overrides?: {
     labor_cost?: string;
     tax_rate?: string;
-    tech_notes?: string;
+    formatted_report?: string;
     extra_line_items?: Array<{ name: string; sku?: string; quantity: number; unit_price: number }>;
     parts_used?: Array<{ id: string; quantity: number; unit_price: number }>;
   }) =>
@@ -762,6 +762,7 @@ export interface Ticket {
   total_labor_minutes: number;
   completed_at: string | null;
   service_reports: ServiceReport[];
+  org_invoice_emails: string[];
   created_at: string;
 }
 

@@ -40,10 +40,10 @@ export default function InvoicePage() {
   const [step, setStep] = useState<Step>("edit");
 
   // Editable invoice fields
-  const [laborCost,  setLaborCost]  = useState("0");
-  const [taxRate,    setTaxRate]    = useState("0");
-  const [techNotes,  setTechNotes]  = useState("");
-  const [parts,      setParts]      = useState<PartLine[]>([]);
+  const [laborCost,       setLaborCost]       = useState("0");
+  const [taxRate,         setTaxRate]         = useState("0");
+  const [formattedReport, setFormattedReport] = useState("");
+  const [parts,           setParts]           = useState<PartLine[]>([]);
   const [newPart,    setNewPart]    = useState<PartLine>({ part_name: "", sku: "", quantity: 1, unit_price: 0 });
 
   // Email recipients
@@ -58,7 +58,7 @@ export default function InvoicePage() {
         if (report) {
           setLaborCost(report.labor_cost ?? "0");
           setTaxRate(report.tax_rate ?? "0");
-          setTechNotes(report.tech_notes ?? "");
+          setFormattedReport(report.formatted_report ?? "");
           const invParts: PartLine[] = (report.parts_used ?? []).map((p) => ({
             id: p.id,
             part_name: p.part_name,
@@ -116,7 +116,7 @@ export default function InvoicePage() {
     return {
       labor_cost: laborCost,
       tax_rate: taxRate,
-      tech_notes: techNotes,
+      formatted_report: formattedReport,
       parts_used: existingParts,
       extra_line_items: customParts,
     };
@@ -139,7 +139,7 @@ export default function InvoicePage() {
   }
 
   const report = ticket?.service_reports?.[0];
-  const orgInvoiceEmails = (ticket as any)?.org_invoice_emails as string[] | undefined;
+  const orgInvoiceEmails = ticket?.org_invoice_emails ?? [];
 
   if (loading) return (
     <DashboardShell>
@@ -236,11 +236,11 @@ export default function InvoicePage() {
             </div>
           </div>
 
-          {/* Tech Notes */}
-          {techNotes && (
+          {/* Service Summary */}
+          {formattedReport && (
             <div className="text-xs">
-              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Tech Notes</p>
-              <p className="text-slate-700 whitespace-pre-wrap">{techNotes}</p>
+              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Service Summary</p>
+              <p className="text-slate-700 whitespace-pre-wrap">{formattedReport}</p>
             </div>
           )}
 
@@ -396,20 +396,14 @@ export default function InvoicePage() {
               <span className="font-medium text-slate-800">{report.resolution_code}</span>
             </div>
           )}
-          {report?.formatted_report && (
-            <div className="text-sm">
-              <p className="text-slate-500 mb-1">Service Summary</p>
-              <p className="text-slate-700 text-xs bg-slate-50 rounded-lg p-3">{report.formatted_report}</p>
-            </div>
-          )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Tech Notes</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Service Summary <span className="text-slate-400 font-normal">(appears on invoice)</span></label>
             <textarea
-              rows={4}
+              rows={5}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              value={techNotes}
-              onChange={(e) => setTechNotes(e.target.value)}
-              placeholder="Add or edit tech notes…"
+              value={formattedReport}
+              onChange={(e) => setFormattedReport(e.target.value)}
+              placeholder="Describe the work performed…"
             />
           </div>
         </div>
@@ -560,7 +554,7 @@ export default function InvoicePage() {
             </div>
           )}
 
-          {orgInvoiceEmails?.length === 0 && extraEmails.length === 0 && (
+          {orgInvoiceEmails.length === 0 && extraEmails.length === 0 && (
             <p className="text-amber-600 text-xs bg-amber-50 rounded-lg px-3 py-2">
               No invoice emails configured. Add them below or in Organization settings.
             </p>

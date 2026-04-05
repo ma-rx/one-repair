@@ -302,6 +302,7 @@ class TicketSerializer(serializers.ModelSerializer):
     parts_approval_status        = serializers.SerializerMethodField()
     has_service_report           = serializers.SerializerMethodField()
     total_labor_minutes          = serializers.SerializerMethodField()
+    org_invoice_emails           = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -316,7 +317,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "sla_due_at", "completed_at", "closed_at",
             "assets", "needs_coding", "parts_approval_status",
             "has_service_report", "total_labor_minutes",
-            "service_reports", "created_at", "updated_at",
+            "service_reports", "org_invoice_emails", "created_at", "updated_at",
         ]
 
     def _get_store(self, obj):
@@ -401,6 +402,11 @@ class TicketSerializer(serializers.ModelSerializer):
             s=models.Sum("total_minutes")
         )["s"]
         return total or 0
+
+    def get_org_invoice_emails(self, obj):
+        store = obj.store or (obj.asset.store if obj.asset else None)
+        org = store.organization if store else None
+        return list(org.invoice_emails or []) if org else []
 
 
 # ── PartRequest ───────────────────────────────────────────────────────────────
