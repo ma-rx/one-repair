@@ -208,16 +208,26 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
                   <p className="text-slate-600 whitespace-pre-line text-sm">{r.tech_notes}</p>
                 </div>
               )}
-              {r.parts_used?.length > 0 && (
+              {(r.parts_used?.length > 0 || r.draft_parts?.length > 0) && (
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-2">Parts Used</p>
                   <div className="space-y-1">
-                    {r.parts_used.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between text-sm">
-                        <span className="text-slate-700">{p.part_name} × {p.quantity}</span>
-                        <span className="text-slate-500">${p.line_total}</span>
-                      </div>
-                    ))}
+                    {r.parts_used?.length > 0
+                      ? r.parts_used.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-700">{p.part_name} × {p.quantity}</span>
+                            <span className="text-slate-500">${p.line_total}</span>
+                          </div>
+                        ))
+                      : r.draft_parts?.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-700">{p.part_name ?? "Part"} × {p.quantity}</span>
+                            {p.unit_price && (
+                              <span className="text-slate-500">${(parseFloat(p.unit_price) * p.quantity).toFixed(2)}</span>
+                            )}
+                          </div>
+                        ))
+                    }
                   </div>
                 </div>
               )}

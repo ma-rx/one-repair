@@ -123,21 +123,42 @@ export default function InvoicePage() {
           setLaborCost(report.labor_cost ?? "0");
           setTaxRate(report.tax_rate ?? "0");
           setFormattedReport(report.formatted_report ?? "");
-          const invParts: PartLine[] = (report.parts_used ?? []).map((p) => ({
-            id: p.id,
-            part_id: p.part,          // inventory Part UUID for reference
-            part_name: p.part_name,
-            sku: p.part_sku ?? "",
-            quantity: p.quantity,
-            unit_price: parseFloat(p.unit_price_at_time),
-          }));
+
+          // Prefer proper PartUsed records; fall back to draft_parts when the tech
+          // used save-progress (which never creates PartUsed records).
+          let lineParts: PartLine[];
+          if ((report.parts_used ?? []).length > 0) {
+            lineParts = report.parts_used.map((p) => ({
+              id: p.id,
+              part_id: p.part,
+              part_name: p.part_name,
+              sku: p.part_sku ?? "",
+              quantity: p.quantity,
+              unit_price: parseFloat(p.unit_price_at_time),
+            }));
+          } else if ((report.draft_parts ?? []).length > 0) {
+            // draft_parts now include name/sku/price from the backend
+            lineParts = report.draft_parts.map((dp) => {
+              const inv = ps.find((p) => p.id === dp.part_id);
+              return {
+                part_id: dp.part_id,
+                part_name: dp.part_name ?? inv?.name ?? dp.part_id,
+                sku: dp.part_sku ?? inv?.sku ?? "",
+                quantity: dp.quantity,
+                unit_price: parseFloat(dp.unit_price ?? inv?.selling_price ?? inv?.unit_price ?? "0"),
+              };
+            });
+          } else {
+            lineParts = [];
+          }
+
           const extraParts: PartLine[] = (report.extra_line_items ?? []).map((p) => ({
             part_name: p.name,
             sku: p.sku ?? "",
             quantity: p.quantity,
             unit_price: p.unit_price,
           }));
-          setParts([...invParts, ...extraParts]);
+          setParts([...lineParts, ...extraParts]);
         }
       })
       .catch((e) => setError(e.message))

@@ -777,7 +777,7 @@ export interface ServiceReport {
   manager_signature: string;
   labor_cost: string;
   invoice_email: string;
-  draft_parts: Array<{ part_id: string; quantity: number }>;
+  draft_parts: Array<{ part_id: string; quantity: number; part_name?: string; part_sku?: string; unit_price?: string }>;
   extra_line_items: Array<{ name: string; sku?: string; quantity: number; unit_price: number }>;
   tax_rate: string;
   sales_tax: string;

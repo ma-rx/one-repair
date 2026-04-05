@@ -643,11 +643,18 @@ class TicketViewSet(viewsets.ModelViewSet):
         else:
             labor_cost_val = data["labor_cost"]
 
-        # Draft parts as JSON (no inventory deduction yet)
-        draft_parts = [
-            {"part_id": str(pu["part_id"]), "quantity": pu["quantity"]}
-            for pu in data.get("parts_used", [])
-        ]
+        # Draft parts as JSON (no inventory deduction yet) — enrich with name/sku/price
+        draft_parts = []
+        for pu in data.get("parts_used", []):
+            entry = {"part_id": str(pu["part_id"]), "quantity": pu["quantity"]}
+            try:
+                part_obj = Part.objects.get(pk=pu["part_id"])
+                entry["part_name"] = part_obj.name
+                entry["part_sku"]  = part_obj.sku or ""
+                entry["unit_price"] = str(part_obj.selling_price)
+            except Part.DoesNotExist:
+                pass
+            draft_parts.append(entry)
 
         with transaction.atomic():
             # Create or update service report
