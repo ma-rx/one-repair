@@ -74,7 +74,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700/60">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
+        <img src="/icon-192.png" alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
         <div>
           <p className="text-white font-semibold text-sm leading-tight">{companyName.split(" ").slice(0, 2).join(" ")}</p>
           <p className="text-slate-400 text-xs">{companyName.split(" ").slice(2).join(" ") || "Solutions"}</p>
