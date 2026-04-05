@@ -2454,11 +2454,30 @@ class InvoicePDFView(APIView):
         profile = getattr(request.user, "profile", None)
         if profile and profile.role != UserRole.ORS_ADMIN:
             org = getattr(profile, "organization", None)
-            if not org or report.ticket.asset.store.organization != org:
+            # Support both legacy single-asset and multi-asset tickets
+            ticket = report.ticket
+            ticket_org = None
+            if ticket.asset_id:
+                try:
+                    ticket_org = ticket.asset.store.organization
+                except Exception:
+                    pass
+            if not ticket_org:
+                ta = ticket.ticket_assets.select_related("asset__store__organization").first()
+                if ta and ta.asset_id:
+                    try:
+                        ticket_org = ta.asset.store.organization
+                    except Exception:
+                        pass
+            if not org or ticket_org != org:
                 return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         ors_settings = PricingConfig.objects.first()
-        pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings, payment_url=report.stripe_payment_url or "")
+        try:
+            pdf_bytes = generate_invoice_pdf(report, ors_settings=ors_settings, payment_url=report.stripe_payment_url or "")
+        except Exception as exc:
+            logger.error("PDF download generation failed for report %s: %s", pk, exc, exc_info=True)
+            return Response({"detail": f"PDF generation failed: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="invoice-{str(report.id)[:8]}.pdf"'
         return response
