@@ -4,8 +4,8 @@
   "description": "Field Service Management",
   "start_url": "/dispatch",
   "display": "standalone",
-  "background_color": "#1e3a5f",
-  "theme_color": "#1e3a5f",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
   "icons": [
     {
       "src": "/icon-192.png",
