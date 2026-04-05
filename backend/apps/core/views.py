@@ -2580,22 +2580,15 @@ class InvoicePDFView(APIView):
         profile = getattr(request.user, "profile", None)
         if profile and profile.role != UserRole.ORS_ADMIN:
             org = getattr(profile, "organization", None)
-            # Support both legacy single-asset and multi-asset tickets
-            ticket = report.ticket
-            ticket_org = None
-            if ticket.asset_id:
-                try:
-                    ticket_org = ticket.asset.store.organization
-                except Exception:
-                    pass
-            if not ticket_org:
-                ta = ticket.ticket_assets.select_related("asset__store__organization").first()
-                if ta and ta.asset_id:
-                    try:
-                        ticket_org = ta.asset.store.organization
-                    except Exception:
-                        pass
-            if not org or ticket_org != org:
+            if not org:
+                return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+            # Check via both legacy single-asset and multi-asset paths
+            from django.db.models import Q as _Q
+            accessible = ServiceReport.objects.filter(
+                _Q(pk=pk, ticket__asset__store__organization=org) |
+                _Q(pk=pk, ticket__ticket_assets__asset__store__organization=org)
+            ).exists()
+            if not accessible:
                 return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         ors_settings = PricingConfig.objects.first()

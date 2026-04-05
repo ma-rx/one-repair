@@ -4,21 +4,26 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import PortalShell from "@/components/PortalShell";
-import { api, ServiceReport } from "@/lib/api";
-import { Loader2, Download, CreditCard, CheckCircle2, ArrowLeft } from "lucide-react";
+import { api, ServiceReport, WorkImage } from "@/lib/api";
+import { Loader2, Download, CreditCard, CheckCircle2, ArrowLeft, User } from "lucide-react";
 
 export default function PortalInvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
 
-  const [report, setReport]         = useState<ServiceReport | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState("");
-  const [paying, setPaying]         = useState(false);
+  const [report, setReport]           = useState<ServiceReport | null>(null);
+  const [images, setImages]           = useState<WorkImage[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState("");
+  const [paying, setPaying]           = useState(false);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     api.getServiceReport(id)
-      .then(setReport)
+      .then((r) => {
+        setReport(r);
+        return api.getWorkImages(r.ticket);
+      })
+      .then(setImages)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
@@ -44,13 +49,12 @@ export default function PortalInvoiceDetailPage() {
     try { await api.downloadInvoicePDF(id); } catch { /* ignore */ } finally { setDownloading(false); }
   }
 
-  const isPaid = report?.ticket_status === "PAID";
-
-  const tripCharge  = parseFloat(report?.trip_charge  || "0");
-  const laborCost   = parseFloat(report?.labor_cost   || "0");
-  const partsTotal  = parseFloat(report?.parts_total  || "0");
-  const salesTax    = parseFloat(report?.sales_tax    || "0");
-  const grandTotal  = parseFloat(report?.grand_total  || "0");
+  const isPaid     = report?.ticket_status === "PAID";
+  const tripCharge = parseFloat(report?.trip_charge  || "0");
+  const laborCost  = parseFloat(report?.labor_cost   || "0");
+  const partsTotal = parseFloat(report?.parts_total  || "0");
+  const salesTax   = parseFloat(report?.sales_tax    || "0");
+  const grandTotal = parseFloat(report?.grand_total  || "0");
 
   return (
     <PortalShell>
@@ -104,7 +108,7 @@ export default function PortalInvoiceDetailPage() {
         ) : report ? (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
 
-            {/* Invoice header */}
+            {/* Header */}
             <div className="bg-slate-800 px-8 py-6 flex items-start justify-between">
               <div>
                 <p className="text-white font-bold text-lg">One Repair Solutions</p>
@@ -113,15 +117,14 @@ export default function PortalInvoiceDetailPage() {
               <div className="text-right">
                 <p className="text-white font-bold text-xl">INVOICE</p>
                 <p className="text-blue-300 font-mono text-sm mt-1">#{report.ticket_number || id.slice(0, 8).toUpperCase()}</p>
-                {isPaid ? (
-                  <span className="inline-block mt-2 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Paid</span>
-                ) : (
-                  <span className="inline-block mt-2 px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Payment Due</span>
-                )}
+                {isPaid
+                  ? <span className="inline-block mt-2 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Paid</span>
+                  : <span className="inline-block mt-2 px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">Payment Due</span>
+                }
               </div>
             </div>
 
-            {/* Invoice meta */}
+            {/* Meta */}
             <div className="px-8 py-5 border-b border-slate-100 grid grid-cols-3 gap-6 text-sm">
               <div>
                 <p className="text-slate-400 text-xs font-medium uppercase tracking-wide mb-1">Invoice Date</p>
@@ -220,9 +223,54 @@ export default function PortalInvoiceDetailPage() {
               </div>
             )}
 
+            {/* Manager authorization */}
+            {(report.manager_on_site || report.manager_signature) && (
+              <div className="px-8 pb-6 border-t border-slate-100 pt-5">
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-3">Authorization</p>
+                <div className="flex items-start gap-6">
+                  {report.manager_on_site && (
+                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <User className="w-4 h-4 text-slate-400" />
+                      <span>{report.manager_on_site}</span>
+                    </div>
+                  )}
+                  {report.manager_signature && (
+                    <div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={report.manager_signature}
+                        alt="Manager signature"
+                        className="h-12 border-b border-slate-300 pb-1"
+                      />
+                      <p className="text-xs text-slate-400 mt-1">Signature</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Work photos */}
+            {images.length > 0 && (
+              <div className="px-8 pb-6 border-t border-slate-100 pt-5">
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-3">Work Photos</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {images.map((img) => (
+                    <a key={img.id} href={img.url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt="Work photo"
+                        className="w-full h-32 object-cover rounded-lg border border-slate-200 hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Pay CTA */}
             {!isPaid && (
-              <div className="px-8 pb-8 pt-2">
+              <div className="px-8 pb-8 pt-2 border-t border-slate-100">
                 <button
                   onClick={handlePay}
                   disabled={paying}
