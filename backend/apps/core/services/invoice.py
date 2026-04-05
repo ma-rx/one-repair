@@ -45,11 +45,25 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
         asset_name = ticket.asset_description or "—"
         model_number = serial_number = "—"
 
+    logo_url = (ors_settings and ors_settings.logo_url) or ""
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
     # ── Header ───────────────────────────────────────────────────────────────
+    if logo_url:
+        try:
+            import urllib.request, tempfile, os
+            ext = logo_url.split(".")[-1].split("?")[0].lower() or "png"
+            with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+                urllib.request.urlretrieve(logo_url, tmp.name)
+                pdf.image(tmp.name, x=10, y=10, h=14)
+                os.unlink(tmp.name)
+            pdf.ln(16)
+        except Exception:
+            pass
+
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 10, company_name, ln=True)

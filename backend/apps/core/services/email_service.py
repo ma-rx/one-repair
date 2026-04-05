@@ -21,6 +21,7 @@ def send_invoice_email(
 
     ticket   = service_report.ticket
     company_name = (ors_settings and ors_settings.company_name) or "One Repair Solutions"
+    logo_url     = (ors_settings and ors_settings.logo_url) or ""
 
     # Best asset name
     first_ta = ticket.ticket_assets.select_related("asset").first()
@@ -49,9 +50,12 @@ def send_invoice_email(
         "subject": f"Service Invoice {invoice_number} — {asset_name}",
         "html": f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
-          <div style="background: #1e3a5f; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">{company_name}</h1>
-            <p style="color: #93c5fd; margin: 4px 0 0; font-size: 13px;">Field Service Management</p>
+          <div style="background: #1e3a5f; padding: 24px 32px; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 16px;">
+            {"" if not logo_url else f'<img src="{logo_url}" alt="Logo" style="height: 40px; width: 40px; border-radius: 6px; object-fit: contain; background: white; padding: 2px;" />'}
+            <div>
+              <h1 style="color: white; margin: 0; font-size: 20px;">{company_name}</h1>
+              <p style="color: #93c5fd; margin: 4px 0 0; font-size: 13px;">Field Service Management</p>
+            </div>
           </div>
           <div style="background: #f8fafc; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
             <h2 style="font-size: 16px; color: #0f172a; margin-top: 0;">Your service invoice is ready</h2>
