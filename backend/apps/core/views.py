@@ -2483,21 +2483,24 @@ class StripeWebhookView(APIView):
 
         try:
             import stripe as _stripe
+            import json as _json
             _stripe.api_key = stripe_key
-            payload   = request.body
+            payload    = request.body
             sig_header = request.META.get("HTTP_STRIPE_SIGNATURE", "")
             if webhook_secret:
                 event = _stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
             else:
-                import json
-                event = _stripe.Event.construct_from(json.loads(payload), stripe_key)
+                # No secret configured — parse raw JSON (no signature verification)
+                event = _json.loads(payload)
         except Exception as exc:
             logger.warning("Stripe webhook error: %s", exc)
             return HttpResponse(status=400)
 
-        if event["type"] == "checkout.session.completed":
-            session  = event["data"]["object"]
-            ticket_id = session.get("metadata", {}).get("ticket_id")
+        event_type = event["type"] if isinstance(event, dict) else event.get("type", "")
+        if event_type == "checkout.session.completed":
+            session   = event["data"]["object"] if isinstance(event, dict) else event["data"]["object"]
+            metadata  = session.get("metadata") or {}
+            ticket_id = metadata.get("ticket_id")
             if ticket_id:
                 try:
                     t = Ticket.objects.get(pk=ticket_id)
