@@ -121,12 +121,14 @@ function NewTicketForm() {
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !ticketId) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length || !ticketId) return;
     setUploadingImg(true);
     try {
-      const img = await api.uploadWorkImage(ticketId, file);
-      setImages((prev) => [...prev, img]);
+      for (const file of files) {
+        const img = await api.uploadWorkImage(ticketId, file);
+        setImages((prev) => [...prev, img]);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -390,7 +392,7 @@ function NewTicketForm() {
                   {uploadingImg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Add Photo
                 </button>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
               </div>
 
               {images.length === 0 ? (

@@ -301,12 +301,14 @@ export default function TechWorkPage() {
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
     setUploadingImg(true);
     try {
-      const img = await api.uploadWorkImage(id, file);
-      setImages((prev) => [...prev, img]);
+      for (const file of files) {
+        const img = await api.uploadWorkImage(id, file);
+        setImages((prev) => [...prev, img]);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
@@ -575,7 +577,7 @@ export default function TechWorkPage() {
                   className="flex items-center gap-1.5 text-blue-600 text-sm font-medium hover:text-blue-700 disabled:opacity-50">
                   {uploadingImg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add Photo
                 </button>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
               </div>
               {images.length === 0 ? (
                 <div className="border-2 border-dashed border-slate-200 rounded-lg py-8 text-center text-slate-400 cursor-pointer hover:border-blue-300 transition-colors" onClick={() => fileInputRef.current?.click()}>
