@@ -36,7 +36,13 @@ export default function PortalInvoicesPage() {
   async function handleDownload(e: React.MouseEvent, id: string) {
     e.stopPropagation();
     setDownloading(id);
-    try { await api.downloadInvoicePDF(id); } catch { /* ignore */ } finally { setDownloading(null); }
+    try {
+      await api.downloadInvoicePDF(id);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "PDF download failed.");
+    } finally {
+      setDownloading(null);
+    }
   }
 
   function toggleSelect(e: React.MouseEvent, id: string) {

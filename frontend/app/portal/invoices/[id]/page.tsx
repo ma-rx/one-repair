@@ -46,7 +46,13 @@ export default function PortalInvoiceDetailPage() {
 
   async function handleDownload() {
     setDownloading(true);
-    try { await api.downloadInvoicePDF(id); } catch { /* ignore */ } finally { setDownloading(false); }
+    try {
+      await api.downloadInvoicePDF(id);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "PDF download failed.");
+    } finally {
+      setDownloading(false);
+    }
   }
 
   const isPaid     = report?.ticket_status === "PAID";

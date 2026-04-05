@@ -25,7 +25,13 @@ export default function InvoicesPage() {
 
   async function handleDownload(id: string) {
     setDownloading(id);
-    try { await api.downloadInvoicePDF(id); } catch { /* ignore */ } finally { setDownloading(null); }
+    try {
+      await api.downloadInvoicePDF(id);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "PDF download failed.");
+    } finally {
+      setDownloading(null);
+    }
   }
 
   const allSent    = reports.filter((r) => r.invoice_sent);
