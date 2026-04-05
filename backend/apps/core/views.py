@@ -1065,6 +1065,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         # ── Upload PDF to Supabase storage ─────────────────────────────────────
         stored_pdf_url = ""
         try:
+            from decouple import config as env
             supabase_url = env("SUPABASE_URL", default="")
             service_key  = env("SUPABASE_SERVICE_KEY", default="")
             if supabase_url and service_key:
