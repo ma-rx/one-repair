@@ -130,14 +130,16 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     pdf.cell(0, 5, "ASSET", ln=True)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(15, 23, 42)
+    # label col = 50mm, value col = 140mm (190mm epw - 50mm label)
+    _lw, _vw = 50, 140
     asset_rows = [
         ("Asset:", _safe(asset_name)),
         ("Model:", _safe(model_number)),
         ("Serial:", _safe(serial_number)),
     ]
     for label, value in asset_rows:
-        pdf.cell(50, 5, label)
-        pdf.multi_cell(0, 5, value)
+        pdf.cell(_lw, 5, label, ln=False)
+        pdf.multi_cell(_vw, 5, value)
     pdf.ln(4)
 
     # ── Ticket summary ────────────────────────────────────────────────────────
@@ -156,8 +158,8 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     if service_report.manager_on_site:
         summary_rows.append(("Authorized by:", _safe(service_report.manager_on_site)))
     for label, value in summary_rows:
-        pdf.cell(50, 5, label)
-        pdf.multi_cell(0, 5, value)
+        pdf.cell(_lw, 5, label, ln=False)
+        pdf.multi_cell(_vw, 5, value)
 
     # Embed manager signature image if present
     if service_report.manager_signature:
