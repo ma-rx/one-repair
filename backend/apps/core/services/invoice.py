@@ -129,9 +129,9 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
         ("Technician:", tech.get_full_name() if tech else "—"),
     ]
     if service_report.formatted_report:
-        summary_rows.append(("Summary:", service_report.formatted_report[:120]))
-    if service_report.tech_notes:
-        summary_rows.append(("Notes:", service_report.tech_notes[:120]))
+        summary_rows.append(("Summary:", service_report.formatted_report[:200]))
+    if service_report.manager_on_site:
+        summary_rows.append(("Authorized by:", service_report.manager_on_site))
     for label, value in summary_rows:
         pdf.cell(50, 5, label)
         pdf.multi_cell(0, 5, value)

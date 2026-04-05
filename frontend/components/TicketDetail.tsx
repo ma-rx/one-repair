@@ -175,6 +175,13 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
               </p>
             </div>
           )}
+
+          {ticket.asset_make && (
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Make / Model</p>
+              <p className="text-slate-700">{ticket.asset_make} {ticket.asset_model_number}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -199,8 +206,19 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
           <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Service Report</p>
           {ticket.service_reports.map((r) => (
             <div key={r.id} className="space-y-3 text-sm">
+              {r.resolution_code && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 uppercase tracking-wide font-medium">Resolution:</span>
+                  <span className="text-slate-700 text-xs font-medium bg-slate-100 px-2 py-0.5 rounded-full">
+                    {r.resolution_code.replace(/_/g, " ")}
+                  </span>
+                </div>
+              )}
               {r.formatted_report && (
-                <p className="text-slate-700 whitespace-pre-line">{r.formatted_report}</p>
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Service Summary</p>
+                  <p className="text-slate-700 whitespace-pre-line">{r.formatted_report}</p>
+                </div>
               )}
               {r.tech_notes && (
                 <div>
@@ -229,6 +247,25 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
                         ))
                     }
                   </div>
+                </div>
+              )}
+              {r.manager_on_site && (
+                <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                  <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Manager Authorization</p>
+                  <p className="text-slate-700 text-sm">
+                    <span className="font-medium">On site:</span> {r.manager_on_site}
+                  </p>
+                  {r.manager_signature && (
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Signature</p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={r.manager_signature}
+                        alt="Manager signature"
+                        className="max-h-16 border border-slate-200 rounded bg-white p-1"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-4 text-slate-500 text-xs pt-2 border-t border-slate-100">
