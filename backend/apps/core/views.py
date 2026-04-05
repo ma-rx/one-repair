@@ -1513,18 +1513,17 @@ class MultiPayView(APIView):
             for r in reports:
                 ticket = r.ticket
                 ticket_org = None
-                if ticket.asset_id:
-                    try:
+                try:
+                    if ticket.store_id:
+                        ticket_org = ticket.store.organization
+                    elif ticket.asset_id:
                         ticket_org = ticket.asset.store.organization
-                    except Exception:
-                        pass
-                if not ticket_org:
-                    ta = ticket.ticket_assets.select_related("asset__store__organization").first()
-                    if ta and ta.asset_id:
-                        try:
+                    else:
+                        ta = ticket.ticket_assets.select_related("asset__store__organization").first()
+                        if ta and ta.asset_id:
                             ticket_org = ta.asset.store.organization
-                        except Exception:
-                            pass
+                except Exception:
+                    pass
                 if not org or ticket_org != org:
                     return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
