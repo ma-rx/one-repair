@@ -186,6 +186,13 @@ export const api = {
 
   // Invoices
   listInvoices: () => request<ServiceReport[]>("/service-reports/"),
+  listAllInvoices: (params?: { invoice_sent?: boolean; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.invoice_sent !== undefined) q.set("invoice_sent", String(params.invoice_sent));
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return request<ServiceReport[]>(`/service-reports/${qs ? `?${qs}` : ""}`);
+  },
   downloadInvoicePDF: async (id: string) => {
     const token = getAccessToken();
     const res = await fetch(`${BASE}/invoices/${id}/pdf/`, {
@@ -773,6 +780,10 @@ export interface ServiceReport {
   id: string;
   ticket: string;
   ticket_status: string | null;
+  ticket_number: string | null;
+  org_name: string | null;
+  store_name: string | null;
+  asset_name: string | null;
   resolution_code: string;
   trip_charge: string;
   labor_cost: string;
@@ -791,6 +802,7 @@ export interface ServiceReport {
   stripe_session_id: string;
   stripe_payment_url: string;
   parts_used: PartUsed[];
+  created_at: string;
 }
 
 export interface PartUsed {

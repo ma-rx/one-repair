@@ -256,14 +256,53 @@ class ServiceReportSerializer(serializers.ModelSerializer):
     sales_tax     = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     grand_total   = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     ticket_status = serializers.SerializerMethodField()
+    ticket_number = serializers.SerializerMethodField()
+    org_name      = serializers.SerializerMethodField()
+    store_name    = serializers.SerializerMethodField()
+    asset_name    = serializers.SerializerMethodField()
 
     def get_ticket_status(self, obj):
         return obj.ticket.status if obj.ticket_id else None
 
+    def get_ticket_number(self, obj):
+        return obj.ticket.ticket_number if obj.ticket_id else None
+
+    def get_org_name(self, obj):
+        try:
+            store = obj.ticket.asset.store if obj.ticket.asset_id else None
+            if not store:
+                ta = obj.ticket.ticket_assets.select_related("asset__store__organization").first()
+                store = ta.asset.store if ta and ta.asset_id else None
+            return store.organization.name if store and store.organization_id else None
+        except Exception:
+            return None
+
+    def get_store_name(self, obj):
+        try:
+            store = obj.ticket.asset.store if obj.ticket.asset_id else None
+            if not store:
+                ta = obj.ticket.ticket_assets.select_related("asset__store").first()
+                store = ta.asset.store if ta and ta.asset_id else None
+            return store.name if store else None
+        except Exception:
+            return None
+
+    def get_asset_name(self, obj):
+        try:
+            if obj.ticket.asset_id:
+                return obj.ticket.asset.name
+            ta = obj.ticket.ticket_assets.select_related("asset").first()
+            if ta:
+                return ta.asset.name if ta.asset_id else (ta.asset_description or None)
+            return obj.ticket.asset_description or None
+        except Exception:
+            return None
+
     class Meta:
         model = ServiceReport
         fields = [
-            "id", "ticket", "ticket_status", "resolution_code", "trip_charge", "labor_cost",
+            "id", "ticket", "ticket_status", "ticket_number", "org_name", "store_name", "asset_name",
+            "resolution_code", "trip_charge", "labor_cost",
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
             "draft_parts", "extra_line_items", "tax_rate", "sales_tax",

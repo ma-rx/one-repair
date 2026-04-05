@@ -1355,21 +1355,31 @@ class ServiceReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        params = self.request.query_params
         if hasattr(user, "profile") and user.profile.role == UserRole.ORS_ADMIN:
-            return (
+            qs = (
                 ServiceReport.objects
-                .prefetch_related("parts_used__part")
+                .prefetch_related("parts_used__part", "ticket__ticket_assets__asset__store__organization")
                 .select_related("ticket__asset__store__organization")
-                .all()
+                .order_by("-created_at")
             )
         elif hasattr(user, "profile") and user.profile.organization:
-            return (
+            qs = (
                 ServiceReport.objects
                 .filter(ticket__asset__store__organization=user.profile.organization)
-                .prefetch_related("parts_used__part")
+                .prefetch_related("parts_used__part", "ticket__ticket_assets__asset__store__organization")
                 .select_related("ticket__asset__store__organization")
+                .order_by("-created_at")
             )
-        return ServiceReport.objects.none()
+        else:
+            return ServiceReport.objects.none()
+        if params.get("invoice_sent") == "true":
+            qs = qs.filter(invoice_sent=True)
+        elif params.get("invoice_sent") == "false":
+            qs = qs.filter(invoice_sent=False)
+        if params.get("status"):
+            qs = qs.filter(ticket__status=params["status"])
+        return qs
 
     def partial_update(self, request, *args, **kwargs):
         report = self.get_object()
