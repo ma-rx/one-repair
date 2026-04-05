@@ -91,7 +91,7 @@ function NewTicketForm() {
     try {
       const firstRow = assetRows[0];
       const isTech = user?.role === "TECH";
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const d = new Date(); const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
       const ticket = await api.createTicket({
         ...(firstRow.assetId !== OTHER_ASSET ? { asset: firstRow.assetId } : {}),
         ...(firstRow.assetId === OTHER_ASSET ? { asset_description: firstRow.customAsset.trim(), store: storeId } : {}),
