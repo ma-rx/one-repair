@@ -488,12 +488,6 @@ export default function InvoicePage() {
         {/* ── Tech Report ── */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Tech Report</p>
-          {report?.resolution_code && (
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Resolution</span>
-              <span className="font-medium text-slate-800">{report.resolution_code}</span>
-            </div>
-          )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Service Summary <span className="text-slate-400 font-normal">(appears on invoice)</span>

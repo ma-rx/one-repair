@@ -206,14 +206,6 @@ export default function TicketDetail({ ticket, images, backHref, backLabel = "Ba
           <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Service Report</p>
           {ticket.service_reports.map((r) => (
             <div key={r.id} className="space-y-3 text-sm">
-              {r.resolution_code && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 uppercase tracking-wide font-medium">Resolution:</span>
-                  <span className="text-slate-700 text-xs font-medium bg-slate-100 px-2 py-0.5 rounded-full">
-                    {r.resolution_code.replace(/_/g, " ")}
-                  </span>
-                </div>
-              )}
               {r.formatted_report && (
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-wide font-medium mb-1">Service Summary</p>
