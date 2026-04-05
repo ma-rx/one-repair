@@ -1051,9 +1051,8 @@ class TicketViewSet(viewsets.ModelViewSet):
         report.stripe_payment_url = payment_url
         report.save(update_fields=["invoice_sent", "stripe_session_id", "stripe_payment_url", "updated_at"])
 
-        ticket.status    = TicketStatus.CLOSED
-        ticket.closed_at = timezone.now()
-        ticket.save(update_fields=["status", "closed_at", "updated_at"])
+        ticket.status    = TicketStatus.COMPLETED
+        ticket.save(update_fields=["status", "updated_at"])
 
         return Response({
             "sent_to": sent_to,

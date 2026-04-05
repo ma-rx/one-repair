@@ -15,11 +15,16 @@ const statusStyle: Record<string, string> = {
   DISPATCHED:    "bg-purple-100 text-purple-700",
   IN_PROGRESS:   "bg-blue-100 text-blue-700",
   PENDING_PARTS: "bg-amber-100 text-amber-700",
-  COMPLETED:     "bg-green-100 text-green-700",
+  COMPLETED:     "bg-amber-100 text-amber-700",
   RESOLVED:      "bg-green-100 text-green-700",
   CLOSED:        "bg-slate-100 text-slate-500",
   PAID:          "bg-emerald-100 text-emerald-700",
   CANCELLED:     "bg-slate-100 text-slate-400",
+};
+
+const statusLabel: Record<string, string> = {
+  COMPLETED: "Payment Pending",
+  PAID:      "Paid",
 };
 
 // When PENDING_PARTS, override display based on parts approval progress
@@ -30,7 +35,7 @@ function getStatusDisplay(status: string, partsApprovalStatus: string | null): {
     if (partsApprovalStatus === "APPROVED")  return { label: "Parts Approved",  style: "bg-emerald-100 text-emerald-700" };
     if (partsApprovalStatus === "SENT_TO_CLIENT") return { label: "Pending Client", style: "bg-purple-100 text-purple-700" };
   }
-  return { label: status.replace(/_/g, " "), style: statusStyle[status] ?? "" };
+  return { label: statusLabel[status] ?? status.replace(/_/g, " "), style: statusStyle[status] ?? "" };
 }
 
 const priorityDot: Record<string, string> = {
