@@ -22,20 +22,21 @@ const statusStyle: Record<string, string> = {
   CANCELLED:     "bg-slate-100 text-slate-400",
 };
 
-const statusLabel: Record<string, string> = {
-  COMPLETED: "Payment Pending",
-  PAID:      "Paid",
-};
-
 // When PENDING_PARTS, override display based on parts approval progress
-function getStatusDisplay(status: string, partsApprovalStatus: string | null): { label: string; style: string } {
+function getStatusDisplay(status: string, partsApprovalStatus: string | null, invoiceSent?: boolean): { label: string; style: string } {
   if (status === "PENDING_PARTS") {
-    if (partsApprovalStatus === "ORDERED")   return { label: "Parts Ordered",   style: "bg-cyan-100 text-cyan-700" };
-    if (partsApprovalStatus === "DELIVERED") return { label: "Parts Delivered", style: "bg-green-100 text-green-700" };
-    if (partsApprovalStatus === "APPROVED")  return { label: "Parts Approved",  style: "bg-emerald-100 text-emerald-700" };
-    if (partsApprovalStatus === "SENT_TO_CLIENT") return { label: "Pending Client", style: "bg-purple-100 text-purple-700" };
+    if (partsApprovalStatus === "ORDERED")        return { label: "Parts Ordered",   style: "bg-cyan-100 text-cyan-700" };
+    if (partsApprovalStatus === "DELIVERED")      return { label: "Parts Delivered", style: "bg-green-100 text-green-700" };
+    if (partsApprovalStatus === "APPROVED")       return { label: "Parts Approved",  style: "bg-emerald-100 text-emerald-700" };
+    if (partsApprovalStatus === "SENT_TO_CLIENT") return { label: "Pending Client",  style: "bg-purple-100 text-purple-700" };
   }
-  return { label: statusLabel[status] ?? status.replace(/_/g, " "), style: statusStyle[status] ?? "" };
+  if (status === "COMPLETED") {
+    return invoiceSent
+      ? { label: "Payment Pending", style: "bg-amber-100 text-amber-700" }
+      : { label: "Completed",       style: "bg-green-100 text-green-700" };
+  }
+  if (status === "PAID") return { label: "Paid", style: "bg-emerald-100 text-emerald-700" };
+  return { label: status.replace(/_/g, " "), style: statusStyle[status] ?? "" };
 }
 
 const priorityDot: Record<string, string> = {
@@ -297,7 +298,7 @@ export default function DispatchPage() {
                   </td>
                   <td className="px-6 py-4">
                     {(() => {
-                      const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null);
+                      const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null, t.invoice_sent);
                       return (
                         <div className="flex flex-col gap-1 items-start">
                           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${style}`}>

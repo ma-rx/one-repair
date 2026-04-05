@@ -7,7 +7,7 @@ import { api, Ticket } from "@/lib/api";
 import { SymptomCodeLabels } from "@/types/enums";
 import { Plus, Loader2 } from "lucide-react";
 
-function getStatusDisplay(status: string, partsApprovalStatus: string | null): { label: string; style: string } {
+function getStatusDisplay(status: string, partsApprovalStatus: string | null, invoiceSent?: boolean): { label: string; style: string } {
   if (status === "PENDING_PARTS") {
     if (partsApprovalStatus === "ORDERED")        return { label: "Parts Ordered",   style: "bg-cyan-100 text-cyan-700" };
     if (partsApprovalStatus === "DELIVERED")      return { label: "Parts Delivered", style: "bg-green-100 text-green-700" };
@@ -15,22 +15,22 @@ function getStatusDisplay(status: string, partsApprovalStatus: string | null): {
     if (partsApprovalStatus === "SENT_TO_CLIENT") return { label: "Pending Approval", style: "bg-purple-100 text-purple-700" };
     if (partsApprovalStatus === "DENIED")         return { label: "Parts Denied",    style: "bg-red-100 text-red-700" };
   }
+  if (status === "COMPLETED") {
+    return invoiceSent
+      ? { label: "Payment Pending", style: "bg-amber-100 text-amber-700" }
+      : { label: "Completed",       style: "bg-green-100 text-green-700" };
+  }
+  if (status === "PAID") return { label: "Paid", style: "bg-emerald-100 text-emerald-700" };
   const style: Record<string, string> = {
     OPEN:          "bg-red-100 text-red-700",
     DISPATCHED:    "bg-purple-100 text-purple-700",
     IN_PROGRESS:   "bg-blue-100 text-blue-700",
     PENDING_PARTS: "bg-amber-100 text-amber-700",
     RESOLVED:      "bg-green-100 text-green-700",
-    COMPLETED:     "bg-amber-100 text-amber-700",
     CLOSED:        "bg-slate-100 text-slate-500",
-    PAID:          "bg-emerald-100 text-emerald-700",
     CANCELLED:     "bg-slate-100 text-slate-400",
   };
-  const labelMap: Record<string, string> = {
-    COMPLETED: "Payment Pending",
-    PAID:      "Paid",
-  };
-  return { label: labelMap[status] ?? status.replace(/_/g, " "), style: style[status] ?? "" };
+  return { label: status.replace(/_/g, " "), style: style[status] ?? "" };
 }
 
 export default function PortalTicketsPage() {
@@ -122,7 +122,7 @@ export default function PortalTicketsPage() {
                   </td>
                   <td className="px-6 py-4">
                     {(() => {
-                      const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null);
+                      const { label, style } = getStatusDisplay(t.status, t.parts_approval_status ?? null, t.invoice_sent);
                       return (
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${style}`}>
                           {label}

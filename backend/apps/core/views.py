@@ -1363,9 +1363,14 @@ class ServiceReportViewSet(viewsets.ModelViewSet):
                 .order_by("-created_at")
             )
         elif hasattr(user, "profile") and user.profile.organization:
+            org = user.profile.organization
             qs = (
                 ServiceReport.objects
-                .filter(ticket__asset__store__organization=user.profile.organization)
+                .filter(
+                    Q(ticket__asset__store__organization=org) |
+                    Q(ticket__ticket_assets__asset__store__organization=org)
+                )
+                .distinct()
                 .prefetch_related("parts_used__part", "ticket__ticket_assets__asset__store__organization")
                 .select_related("ticket__asset__store__organization")
                 .order_by("-created_at")

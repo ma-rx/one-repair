@@ -786,6 +786,7 @@ export interface Ticket {
   needs_coding: boolean;
   parts_approval_status: string | null;
   has_service_report: boolean;
+  invoice_sent: boolean;
   total_labor_minutes: number;
   completed_at: string | null;
   service_reports: ServiceReport[];

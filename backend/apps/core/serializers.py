@@ -348,6 +348,7 @@ class TicketSerializer(serializers.ModelSerializer):
     total_labor_minutes          = serializers.SerializerMethodField()
     org_invoice_emails           = serializers.SerializerMethodField()
     default_tax_rate             = serializers.SerializerMethodField()
+    invoice_sent                 = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -363,6 +364,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "assets", "needs_coding", "parts_approval_status",
             "has_service_report", "total_labor_minutes",
             "service_reports", "org_invoice_emails", "default_tax_rate",
+            "invoice_sent",
             "created_at", "updated_at",
         ]
 
@@ -462,6 +464,10 @@ class TicketSerializer(serializers.ModelSerializer):
         if pricing and pricing.tax_rate:
             return str(pricing.tax_rate)
         return "0"
+
+    def get_invoice_sent(self, obj):
+        report = obj.service_reports.first()
+        return report.invoice_sent if report else False
 
 
 # ── PartRequest ───────────────────────────────────────────────────────────────
