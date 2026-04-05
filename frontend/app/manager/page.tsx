@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, Ticket, Asset, WorkImage } from "@/lib/api";
-import { LogOut, Plus, Loader2, X, Wrench, Camera, CheckCircle2, Trash2 } from "lucide-react";
+import { LogOut, Plus, Loader2, X, Camera, CheckCircle2, Trash2 } from "lucide-react";
 
 const statusStyle: Record<string, string> = {
   OPEN:          "bg-red-100 text-red-700",
@@ -145,9 +145,8 @@ export default function ManagerPage() {
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center">
-            <Wrench className="w-5 h-5 text-white" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="Logo" className="w-9 h-9 rounded-lg" />
           <div>
             <p className="font-semibold text-slate-800 text-sm">{user?.store?.name ?? "My Store"}</p>
             <p className="text-slate-400 text-xs">Store Manager View</p>

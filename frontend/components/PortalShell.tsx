@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Wrench,
   ClipboardList,
   MapPin,
   Cpu,
@@ -36,9 +35,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 flex flex-col z-10">
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700/60">
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-500">
-            <Wrench className="w-5 h-5 text-white" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="Logo" className="w-9 h-9 rounded-lg" />
           <div>
             <p className="text-white font-semibold text-sm leading-tight">One Repair</p>
             <p className="text-slate-400 text-xs">{user?.organization?.name ?? "Client Portal"}</p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, PricingConfig } from "@/lib/api";
-import { CheckCircle2, DollarSign, Loader2, Wrench } from "lucide-react";
+import { CheckCircle2, DollarSign, Loader2 } from "lucide-react";
 
 export default function PricingPage() {
   const [config, setConfig]   = useState<PricingConfig | null>(null);
@@ -52,9 +52,8 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center">
-          <Wrench className="w-5 h-5 text-white" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="Logo" className="w-9 h-9 rounded-lg" />
         <div>
           <p className="font-semibold text-slate-800 text-sm">Pricing Configuration</p>
           <p className="text-slate-400 text-xs">Labor rates applied to all service reports</p>

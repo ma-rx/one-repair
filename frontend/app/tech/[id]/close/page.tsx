@@ -8,7 +8,7 @@ import {
 import { SymptomCodeLabels, AssetCategoryLabels } from "@/types/enums";
 import {
   AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Clock,
-  Loader2, Plus, RefreshCw, Trash2, Wrench, X, Sparkles,
+  Loader2, Plus, RefreshCw, Trash2, X, Sparkles,
 } from "lucide-react";
 
 interface PartLine { part_id: string; quantity: number }
@@ -471,9 +471,8 @@ export default function TechWorkPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center">
-          <Wrench className="w-5 h-5 text-white" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="Logo" className="w-9 h-9 rounded-lg" />
         <div>
           <p className="font-semibold text-slate-800 text-sm">Work Order</p>
           <p className="text-slate-400 text-xs">Submit service report</p>
