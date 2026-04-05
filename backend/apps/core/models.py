@@ -502,6 +502,7 @@ class ServiceReport(models.Model):
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name="service_reports"
     )
     resolution_code  = models.CharField(max_length=50, choices=ResolutionCode.choices)
+    trip_charge      = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     labor_cost       = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     invoice_sent     = models.BooleanField(default=False)
     invoice_email    = models.EmailField(blank=True)
@@ -533,11 +534,11 @@ class ServiceReport(models.Model):
     @property
     def sales_tax(self):
         from decimal import Decimal
-        return (self.labor_cost + self.parts_total) * self.tax_rate / Decimal("100")
+        return self.parts_total * self.tax_rate / Decimal("100")
 
     @property
     def grand_total(self):
-        return self.labor_cost + self.parts_total + self.sales_tax
+        return self.trip_charge + self.labor_cost + self.parts_total + self.sales_tax
 
 
 class PartUsed(models.Model):

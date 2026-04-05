@@ -208,6 +208,7 @@ export const api = {
 
   // Invoice
   sendInvoice: (ticketId: string, extraEmails: string[] = [], overrides?: {
+    trip_charge?: string;
     labor_cost?: string;
     tax_rate?: string;
     formatted_report?: string;
@@ -773,11 +774,12 @@ export interface ServiceReport {
   ticket: string;
   ticket_status: string | null;
   resolution_code: string;
+  trip_charge: string;
+  labor_cost: string;
   tech_notes: string;
   formatted_report: string;
   manager_on_site: string;
   manager_signature: string;
-  labor_cost: string;
   invoice_email: string;
   draft_parts: Array<{ part_id: string; quantity: number; part_name?: string; part_sku?: string; unit_price?: string }>;
   extra_line_items: Array<{ name: string; sku?: string; quantity: number; unit_price: number }>;

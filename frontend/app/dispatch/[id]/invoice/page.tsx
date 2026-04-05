@@ -102,6 +102,7 @@ export default function InvoicePage() {
   const [step,       setStep]       = useState<Step>("edit");
 
   // Editable invoice fields
+  const [tripCharge,      setTripCharge]      = useState("0");
   const [laborCost,       setLaborCost]       = useState("0");
   const [taxRate,         setTaxRate]         = useState("0");
   const [formattedReport, setFormattedReport] = useState("");
@@ -122,6 +123,7 @@ export default function InvoicePage() {
         setImages(imgs);
         const report = t.service_reports?.[0];
         if (report) {
+          setTripCharge(report.trip_charge ?? "0");
           setLaborCost(report.labor_cost ?? "0");
           // Use saved tax rate if already set, otherwise fall back to store/global default
           const savedTax = parseFloat(report.tax_rate ?? "0");
@@ -170,11 +172,12 @@ export default function InvoicePage() {
   }, [id]);
 
   // Auto-calculated totals
+  const tripNum    = parseFloat(tripCharge) || 0;
   const laborNum   = parseFloat(laborCost) || 0;
   const taxNum     = parseFloat(taxRate) || 0;
   const partsTotal = parts.reduce((sum, p) => sum + p.quantity * p.unit_price, 0);
-  const salesTax   = (laborNum + partsTotal) * taxNum / 100;
-  const grandTotal = laborNum + partsTotal + salesTax;
+  const salesTax   = partsTotal * taxNum / 100;   // tax on parts only
+  const grandTotal = tripNum + laborNum + partsTotal + salesTax;
 
   function selectInventoryPart(part: Part) {
     setNewPart({
@@ -232,6 +235,7 @@ export default function InvoicePage() {
       .map((p) => ({ name: p.part_name, sku: p.sku, quantity: p.quantity, unit_price: p.unit_price }));
 
     return {
+      trip_charge: tripCharge,
       labor_cost: laborCost,
       tax_rate: taxRate,
       formatted_report: formattedReport,
@@ -350,14 +354,32 @@ export default function InvoicePage() {
               <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Service Location</p>
               <p className="font-medium text-slate-800">{ticket.store_name}</p>
               {ticket.store_address && <p className="text-slate-500">{ticket.store_address}</p>}
-              <p className="text-slate-500 mt-1">Asset: {ticket.asset_name}</p>
             </div>
           </div>
+
+          {ticket.asset_name && (
+            <div className="text-xs">
+              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Asset</p>
+              <p className="font-medium text-slate-800">{ticket.asset_name}</p>
+              {ticket.asset_make && <p className="text-slate-500">{ticket.asset_make} {ticket.asset_model_number}</p>}
+            </div>
+          )}
 
           {formattedReport && (
             <div className="text-xs">
               <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Service Summary</p>
               <p className="text-slate-700 whitespace-pre-wrap">{formattedReport}</p>
+            </div>
+          )}
+
+          {report?.manager_on_site && (
+            <div className="text-xs border-t border-slate-100 pt-4">
+              <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Manager Authorization</p>
+              <p className="text-slate-700">{report.manager_on_site}</p>
+              {report.manager_signature && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={report.manager_signature} alt="Signature" className="mt-1 max-h-10 border border-slate-200 rounded bg-white p-0.5" />
+              )}
             </div>
           )}
 
@@ -390,12 +412,17 @@ export default function InvoicePage() {
                 <span>Parts Subtotal</span><span>${partsTotal.toFixed(2)}</span>
               </div>
             )}
+            {tripNum > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Trip Charge</span><span>${tripNum.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-slate-600">
               <span>Labor</span><span>${laborNum.toFixed(2)}</span>
             </div>
             {salesTax > 0 && (
               <div className="flex justify-between text-slate-500">
-                <span>Tax ({taxRate}%)</span><span>${salesTax.toFixed(2)}</span>
+                <span>Tax ({taxRate}% on parts)</span><span>${salesTax.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-sm">
@@ -569,9 +596,17 @@ export default function InvoicePage() {
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
           <p className="text-xs text-slate-400 uppercase tracking-wide font-medium">Invoice</p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Labor Cost ($)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Trip Charge ($)</label>
+              <input type="number" min="0" step="0.01"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={tripCharge}
+                onChange={(e) => setTripCharge(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Labor ($)</label>
               <input type="number" min="0" step="0.01"
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={laborCost}
@@ -579,7 +614,7 @@ export default function InvoicePage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Tax Rate (%)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Tax Rate (% parts)</label>
               <input type="number" min="0" step="0.01" max="100"
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={taxRate}
@@ -704,12 +739,17 @@ export default function InvoicePage() {
                 <span>Parts Subtotal</span><span>${partsTotal.toFixed(2)}</span>
               </div>
             )}
+            {tripNum > 0 && (
+              <div className="flex justify-between text-slate-500">
+                <span>Trip Charge</span><span>${tripNum.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-slate-500">
               <span>Labor</span><span>${laborNum.toFixed(2)}</span>
             </div>
             {salesTax > 0 && (
               <div className="flex justify-between text-slate-400">
-                <span>Tax ({taxRate}%)</span><span>${salesTax.toFixed(2)}</span>
+                <span>Tax ({taxRate}% on parts)</span><span>${salesTax.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">

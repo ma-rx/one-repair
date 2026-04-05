@@ -223,10 +223,13 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     pdf.set_text_color(100, 116, 139)
     pdf.cell(col_label, 5, "Parts Subtotal:", ln=False, align="R")
     pdf.cell(col_val, 5, f"${service_report.parts_total:.2f}", ln=True, align="R")
+    if service_report.trip_charge:
+        pdf.cell(col_label, 5, "Trip Charge:", ln=False, align="R")
+        pdf.cell(col_val, 5, f"${service_report.trip_charge:.2f}", ln=True, align="R")
     pdf.cell(col_label, 5, "Labor:", ln=False, align="R")
     pdf.cell(col_val, 5, f"${service_report.labor_cost:.2f}", ln=True, align="R")
     if service_report.tax_rate:
-        pdf.cell(col_label, 5, f"Sales Tax ({service_report.tax_rate}%):", ln=False, align="R")
+        pdf.cell(col_label, 5, f"Tax ({service_report.tax_rate}% on parts):", ln=False, align="R")
         pdf.cell(col_val, 5, f"${service_report.sales_tax:.2f}", ln=True, align="R")
 
     pdf.set_draw_color(203, 213, 225)

@@ -263,7 +263,7 @@ class ServiceReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = ServiceReport
         fields = [
-            "id", "ticket", "ticket_status", "resolution_code", "labor_cost",
+            "id", "ticket", "ticket_status", "resolution_code", "trip_charge", "labor_cost",
             "invoice_sent", "invoice_email",
             "tech_notes", "formatted_report", "manager_on_site", "manager_signature",
             "draft_parts", "extra_line_items", "tax_rate", "sales_tax",

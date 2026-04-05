@@ -530,15 +530,18 @@ class TicketViewSet(viewsets.ModelViewSet):
             entries = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=False)
             total_minutes = sum(e.total_minutes or 0 for e in entries)
             hours = max(float(pricing.min_hours), total_minutes / 60.0)
-            labor_cost_val = float(pricing.trip_charge) + hours * float(pricing.hourly_rate)
+            trip_charge_val = float(pricing.trip_charge)
+            labor_cost_val  = hours * float(pricing.hourly_rate)
         else:
-            labor_cost_val = data["labor_cost"]
+            trip_charge_val = 0
+            labor_cost_val  = data["labor_cost"]
 
         with transaction.atomic():
             service_report = ServiceReport.objects.create(
                 ticket=ticket,
                 submitted_by=request.user,
                 resolution_code=data["resolution_code"],
+                trip_charge=trip_charge_val,
                 labor_cost=labor_cost_val,
                 invoice_email=data.get("invoice_email", ""),
                 tech_notes=data.get("tech_notes", ""),
@@ -639,9 +642,11 @@ class TicketViewSet(viewsets.ModelViewSet):
             entries = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=False)
             total_minutes = sum(e.total_minutes or 0 for e in entries)
             hours = max(float(pricing.min_hours), total_minutes / 60.0)
-            labor_cost_val = float(pricing.trip_charge) + hours * float(pricing.hourly_rate)
+            trip_charge_val = float(pricing.trip_charge)
+            labor_cost_val  = hours * float(pricing.hourly_rate)
         else:
-            labor_cost_val = data["labor_cost"]
+            trip_charge_val = float(data.get("trip_charge", 0))
+            labor_cost_val  = data["labor_cost"]
 
         # Draft parts as JSON (no inventory deduction yet) — enrich with name/sku/price
         draft_parts = []
@@ -663,6 +668,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                 defaults={
                     "submitted_by": request.user,
                     "resolution_code": data["resolution_code"],
+                    "trip_charge": trip_charge_val,
                     "labor_cost": labor_cost_val,
                     "tech_notes": data.get("tech_notes", ""),
                     "formatted_report": data.get("formatted_report", ""),
@@ -795,9 +801,11 @@ class TicketViewSet(viewsets.ModelViewSet):
             entries = TimeEntry.objects.filter(ticket=ticket, clocked_out_at__isnull=False)
             total_minutes = sum(e.total_minutes or 0 for e in entries)
             hours = max(float(pricing.min_hours), total_minutes / 60.0)
-            labor_cost_val = float(pricing.trip_charge) + hours * float(pricing.hourly_rate)
+            trip_charge_val = float(pricing.trip_charge)
+            labor_cost_val  = hours * float(pricing.hourly_rate)
         else:
-            labor_cost_val = data["labor_cost"]
+            trip_charge_val = float(data.get("trip_charge", 0))
+            labor_cost_val  = data["labor_cost"]
 
         # Use pricing config tax_rate as default if not specified
         if data.get("tax_rate") is None:
@@ -813,6 +821,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                 defaults={
                     "submitted_by": request.user,
                     "resolution_code": data["resolution_code"],
+                    "trip_charge": trip_charge_val,
                     "labor_cost": labor_cost_val,
                     "invoice_email": data.get("invoice_email", ""),
                     "tech_notes": data.get("tech_notes", ""),
@@ -822,6 +831,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             )
             # Update with latest values
             report.resolution_code = data["resolution_code"]
+            report.trip_charge = trip_charge_val
             report.labor_cost = labor_cost_val
             report.invoice_email = data.get("invoice_email", "")
             report.tech_notes = data.get("tech_notes", "")
@@ -907,6 +917,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         # ── Apply overrides and save to service report ─────────────────────────
         overrides = request.data.get("overrides", {})
         save_fields = []
+        if "trip_charge" in overrides:
+            report.trip_charge = Decimal(str(overrides["trip_charge"]))
+            save_fields.append("trip_charge")
         if "labor_cost" in overrides:
             report.labor_cost = Decimal(str(overrides["labor_cost"]))
             save_fields.append("labor_cost")
