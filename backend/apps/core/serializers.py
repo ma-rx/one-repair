@@ -304,6 +304,7 @@ class TicketSerializer(serializers.ModelSerializer):
     has_service_report           = serializers.SerializerMethodField()
     total_labor_minutes          = serializers.SerializerMethodField()
     org_invoice_emails           = serializers.SerializerMethodField()
+    default_tax_rate             = serializers.SerializerMethodField()
 
     class Meta:
         model = Ticket
@@ -318,7 +319,8 @@ class TicketSerializer(serializers.ModelSerializer):
             "sla_due_at", "completed_at", "closed_at",
             "assets", "needs_coding", "parts_approval_status",
             "has_service_report", "total_labor_minutes",
-            "service_reports", "org_invoice_emails", "created_at", "updated_at",
+            "service_reports", "org_invoice_emails", "default_tax_rate",
+            "created_at", "updated_at",
         ]
 
     def _get_store(self, obj):
@@ -408,6 +410,15 @@ class TicketSerializer(serializers.ModelSerializer):
         store = obj.store or (obj.asset.store if obj.asset else None)
         org = store.organization if store else None
         return list(org.invoice_emails or []) if org else []
+
+    def get_default_tax_rate(self, obj):
+        store = obj.store or (obj.asset.store if obj.asset else None)
+        if store and store.tax_rate is not None:
+            return str(store.tax_rate)
+        pricing = PricingConfig.objects.first()
+        if pricing and pricing.tax_rate:
+            return str(pricing.tax_rate)
+        return "0"
 
 
 # ── PartRequest ───────────────────────────────────────────────────────────────

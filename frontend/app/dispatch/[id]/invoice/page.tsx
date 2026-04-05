@@ -121,7 +121,9 @@ export default function InvoicePage() {
         const report = t.service_reports?.[0];
         if (report) {
           setLaborCost(report.labor_cost ?? "0");
-          setTaxRate(report.tax_rate ?? "0");
+          // Use saved tax rate if already set, otherwise fall back to store/global default
+          const savedTax = parseFloat(report.tax_rate ?? "0");
+          setTaxRate(savedTax > 0 ? report.tax_rate : (t.default_tax_rate ?? "0"));
           setFormattedReport(report.formatted_report ?? "");
 
           // Prefer proper PartUsed records; fall back to draft_parts when the tech
@@ -335,8 +337,9 @@ export default function InvoicePage() {
             </div>
             <div>
               <p className="font-semibold text-slate-500 uppercase tracking-wide mb-1">Service Location</p>
-              <p className="font-medium text-slate-800">{ticket.asset_name}</p>
-              {ticket.asset_make && <p className="text-slate-500">{ticket.asset_make} {ticket.asset_model_number}</p>}
+              <p className="font-medium text-slate-800">{ticket.store_name}</p>
+              {ticket.store_address && <p className="text-slate-500">{ticket.store_address}</p>}
+              <p className="text-slate-500 mt-1">Asset: {ticket.asset_name}</p>
             </div>
           </div>
 

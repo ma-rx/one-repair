@@ -764,6 +764,7 @@ export interface Ticket {
   completed_at: string | null;
   service_reports: ServiceReport[];
   org_invoice_emails: string[];
+  default_tax_rate: string;
   created_at: string;
 }
 
