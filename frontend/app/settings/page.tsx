@@ -66,11 +66,15 @@ export default function SettingsPage() {
           headers: {
             apikey: SUPABASE_ANON,
             Authorization: `Bearer ${SUPABASE_ANON}`,
+            "Content-Type": file.type || "image/png",
           },
           body: file,
         },
       );
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Upload failed (${res.status}): ${body}`);
+      }
       const url = `${SUPABASE_URL}/storage/v1/object/public/${LOGO_BUCKET}/${fileName}`;
       setLogoUrl(url);
     } catch (err: unknown) {
