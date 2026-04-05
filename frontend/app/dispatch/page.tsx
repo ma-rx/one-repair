@@ -298,11 +298,6 @@ export default function DispatchPage() {
                           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${style}`}>
                             {label}
                           </span>
-                          {t.needs_coding && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                              <Brain className="w-3 h-3" /> Needs coding
-                            </span>
-                          )}
                         </div>
                       );
                     })()}

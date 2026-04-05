@@ -116,15 +116,24 @@ export default function InvoicePage() {
   const [extraEmails, setExtraEmails] = useState<string[]>([]);
 
   useEffect(() => {
-    Promise.all([api.getTicket(id), api.listParts(), api.getWorkImages(id)])
-      .then(([t, ps, imgs]) => {
+    Promise.all([api.getTicket(id), api.listParts(), api.getWorkImages(id), api.getPricing()])
+      .then(([t, ps, imgs, pricing]) => {
         setTicket(t);
         setAllParts(ps);
         setImages(imgs);
         const report = t.service_reports?.[0];
         if (report) {
-          setTripCharge(report.trip_charge ?? "0");
-          setLaborCost(report.labor_cost ?? "0");
+          const tc = parseFloat(report.trip_charge ?? "0");
+          const lc = parseFloat(report.labor_cost ?? "0");
+          // If both are 0 (e.g. pre-migration combined report or blank test), fall back to pricing defaults
+          if (tc === 0 && lc === 0 && pricing) {
+            setTripCharge(pricing.trip_charge ?? "0");
+            const minHours = parseFloat(pricing.min_hours ?? "1");
+            setLaborCost((minHours * parseFloat(pricing.hourly_rate ?? "0")).toFixed(2));
+          } else {
+            setTripCharge(report.trip_charge ?? "0");
+            setLaborCost(report.labor_cost ?? "0");
+          }
           // Use saved tax rate if already set, otherwise fall back to store/global default
           const savedTax = parseFloat(report.tax_rate ?? "0");
           setTaxRate(savedTax > 0 ? report.tax_rate : (t.default_tax_rate ?? "0"));

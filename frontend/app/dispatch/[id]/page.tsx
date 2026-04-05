@@ -151,16 +151,6 @@ export default function DispatchTicketDetailPage() {
               <div className="flex items-center gap-2 mb-1">
                 <Brain className="w-4 h-4 text-purple-600" />
                 <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">AI Training Data</p>
-                {isClosed && ticket.needs_coding && (
-                  <span className="ml-auto flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                    <AlertCircle className="w-3 h-3" /> Needs coding
-                  </span>
-                )}
-                {isClosed && !ticket.needs_coding && (
-                  <span className="ml-auto flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                    <CheckCircle2 className="w-3 h-3" /> Coded
-                  </span>
-                )}
               </div>
               <p className="text-xs text-slate-400 mb-4">Set symptom and resolution codes per asset. Used to train the diagnostic AI.</p>
 
