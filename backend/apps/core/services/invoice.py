@@ -7,6 +7,14 @@ from decimal import Decimal
 from fpdf import FPDF
 
 
+def _safe(text: str) -> str:
+    """Strip/replace characters outside Latin-1 so Helvetica doesn't crash."""
+    return (text or "").\
+        replace("\u2014", "-").replace("\u2013", "-").replace("\u2019", "'").\
+        replace("\u2018", "'").replace("\u201c", '"').replace("\u201d", '"').\
+        encode("latin-1", errors="replace").decode("latin-1")
+
+
 def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "") -> bytes:
     ticket  = service_report.ticket
     store   = ticket.store
@@ -34,16 +42,16 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     # Best asset name for the ticket
     first_ta = ticket.ticket_assets.select_related("asset").first()
     if first_ta:
-        asset_name    = first_ta.asset.name if first_ta.asset else (first_ta.asset_description or "—")
-        model_number  = first_ta.asset.model_number if first_ta.asset else "—"
-        serial_number = first_ta.asset.serial_number if first_ta.asset else "—"
+        asset_name    = first_ta.asset.name if first_ta.asset else (first_ta.asset_description or "-")
+        model_number  = first_ta.asset.model_number if first_ta.asset else "-"
+        serial_number = first_ta.asset.serial_number if first_ta.asset else "-"
     elif ticket.asset:
         asset_name    = ticket.asset.name
-        model_number  = ticket.asset.model_number or "—"
-        serial_number = ticket.asset.serial_number or "—"
+        model_number  = ticket.asset.model_number or "-"
+        serial_number = ticket.asset.serial_number or "-"
     else:
-        asset_name = ticket.asset_description or "—"
-        model_number = serial_number = "—"
+        asset_name = ticket.asset_description or "-"
+        model_number = serial_number = "-"
 
     logo_url = (ors_settings and ors_settings.logo_url) or ""
 
@@ -108,8 +116,8 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
         parts = [store.address_line1, store.city, store.state, store.zip_code]
         store_addr = ", ".join(p for p in parts if p)
     rows = [
-        (org.name if org else "—",       store.name if store else "—"),
-        (store_addr or "—",              f"Asset: {asset_name}"),
+        (org.name if org else "-",       store.name if store else "-"),
+        (store_addr or "-",              f"Asset: {asset_name}"),
         ("",                             f"Model: {model_number}  Serial: {serial_number}"),
     ]
     for left, right in rows:
@@ -126,12 +134,12 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     tech = ticket.assigned_tech
     summary_rows = [
         ("Ticket #:", ticket.ticket_number or str(ticket.id)[:8].upper()),
-        ("Technician:", tech.get_full_name() if tech else "—"),
+        ("Technician:", tech.get_full_name() if tech else "-"),
     ]
     if service_report.formatted_report:
-        summary_rows.append(("Summary:", service_report.formatted_report[:200]))
+        summary_rows.append(("Summary:", _safe(service_report.formatted_report[:200])))
     if service_report.manager_on_site:
-        summary_rows.append(("Authorized by:", service_report.manager_on_site))
+        summary_rows.append(("Authorized by:", _safe(service_report.manager_on_site)))
     for label, value in summary_rows:
         pdf.cell(50, 5, label)
         pdf.multi_cell(0, 5, value)
@@ -141,10 +149,10 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
     inv_parts = list(service_report.parts_used.select_related("part").all())
     extra_parts = service_report.extra_line_items or []
     all_parts = (
-        [{"name": pu.part.name if pu.part else "—", "sku": (pu.part.sku or "—") if pu.part else "—",
+        [{"name": pu.part.name if pu.part else "-", "sku": (pu.part.sku or "-") if pu.part else "-",
           "qty": pu.quantity, "unit_price": float(pu.unit_price_at_time), "line_total": float(pu.line_total)}
          for pu in inv_parts] +
-        [{"name": p.get("name", "—"), "sku": p.get("sku", "—"),
+        [{"name": p.get("name", "-"), "sku": p.get("sku", "-"),
           "qty": int(p.get("quantity", 1)), "unit_price": float(p.get("unit_price", 0)),
           "line_total": float(p.get("unit_price", 0)) * int(p.get("quantity", 1))}
          for p in extra_parts]
@@ -164,8 +172,8 @@ def generate_invoice_pdf(service_report, ors_settings=None, payment_url: str = "
         for p in all_parts:
             pdf.set_text_color(15, 23, 42)
             pdf.set_fill_color(241, 245, 249)
-            pdf.cell(80, 6, p["name"], fill=fill, ln=False)
-            pdf.cell(25, 6, p["sku"], fill=fill, ln=False)
+            pdf.cell(80, 6, _safe(p["name"]), fill=fill, ln=False)
+            pdf.cell(25, 6, _safe(p["sku"]), fill=fill, ln=False)
             pdf.cell(20, 6, str(p["qty"]), fill=fill, ln=False)
             pdf.cell(30, 6, f"${p['unit_price']:.2f}", fill=fill, ln=False)
             pdf.cell(35, 6, f"${p['line_total']:.2f}", fill=fill, ln=True)
